@@ -1,10 +1,5 @@
-using System;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -61,7 +56,7 @@ internal sealed class ClockRateAdjustInputFramingTests
     /// <param name="undefinedRateAdjust">A signed octet naming no Table 19 member.</param>
     [TestMethod]
     [DataRow((sbyte)4, DisplayName = "4 is one past the fastest step Table 19 lists")]
-    [DataRow((sbyte)(-4), DisplayName = "-4 is one past the slowest step Table 19 lists")]
+    [DataRow((sbyte)-4, DisplayName = "-4 is one past the slowest step Table 19 lists")]
     [DataRow((sbyte)127, DisplayName = "the most positive INT8 is outside Table 19")]
     public void ClockRateAdjustInputWriteParametersThrowsForAStepOutsideTable19(sbyte undefinedRateAdjust)
     {
@@ -230,9 +225,9 @@ internal sealed class ClockRateAdjustInputFramingTests
     /// <param name="rawValue">The raw signed octet Table 19 assigns.</param>
     /// <param name="expectedName">The name Table 19 gives that value.</param>
     [TestMethod]
-    [DataRow((sbyte)(-3), nameof(TpmClockAdjustConstants.TPM_CLOCK_COARSE_SLOWER), DisplayName = "-3 names the coarse slower step")]
-    [DataRow((sbyte)(-2), nameof(TpmClockAdjustConstants.TPM_CLOCK_MEDIUM_SLOWER), DisplayName = "-2 names the medium slower step")]
-    [DataRow((sbyte)(-1), nameof(TpmClockAdjustConstants.TPM_CLOCK_FINE_SLOWER), DisplayName = "-1 names the fine slower step")]
+    [DataRow((sbyte)-3, nameof(TpmClockAdjustConstants.TPM_CLOCK_COARSE_SLOWER), DisplayName = "-3 names the coarse slower step")]
+    [DataRow((sbyte)-2, nameof(TpmClockAdjustConstants.TPM_CLOCK_MEDIUM_SLOWER), DisplayName = "-2 names the medium slower step")]
+    [DataRow((sbyte)-1, nameof(TpmClockAdjustConstants.TPM_CLOCK_FINE_SLOWER), DisplayName = "-1 names the fine slower step")]
     [DataRow((sbyte)0, nameof(TpmClockAdjustConstants.TPM_CLOCK_NO_CHANGE), DisplayName = "0 names the no-change step")]
     [DataRow((sbyte)1, nameof(TpmClockAdjustConstants.TPM_CLOCK_FINE_FASTER), DisplayName = "1 names the fine faster step")]
     [DataRow((sbyte)2, nameof(TpmClockAdjustConstants.TPM_CLOCK_MEDIUM_FASTER), DisplayName = "2 names the medium faster step")]

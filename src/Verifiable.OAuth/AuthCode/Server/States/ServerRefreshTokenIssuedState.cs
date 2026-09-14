@@ -18,17 +18,28 @@ namespace Verifiable.OAuth.AuthCode.Server.States;
 /// via <see cref="ResolveCorrelationKeyDelegate"/>.
 /// </para>
 /// <para>
-/// On a successful refresh exchange, the AS invalidates this state
-/// (the application's <see cref="DeleteServerFlowStateDelegate"/> removes
-/// the index entry and the flow record) and creates a new
-/// <see cref="ServerRefreshTokenIssuedState"/> for the rotated token.
-/// Reuse of an invalidated refresh token returns <c>invalid_grant</c>
-/// per RFC 6749 §5.2 and RFC 9700 §2.2.2.
+/// On a successful refresh exchange, the AS retires this record in place as a
+/// <see cref="ServerTokenIssuedState"/> and creates a fresh record for the rotated token.
+/// The retired record and its index remain available until its <see cref="FlowState.ExpiresAt"/>
+/// so reuse can revoke the family. This implements
+/// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+/// draft-16 §4.3.1</see>: "Authorization servers MUST utilize one of these methods to detect
+/// refresh token replay by malicious actors for public clients".
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerRefreshTokenIssued ClientId={ClientId,nq} IssuedAt={IssuedAt} Bound={Confirmation is not null}")]
 public sealed record ServerRefreshTokenIssuedState: FlowState
 {
+    /// <summary>
+    /// The flow whose issuance audit contains the access token minted with this refresh token.
+    /// Set to the code flow at initial issuance and to the presented refresh flow at rotation,
+    /// then copied onto the retired record so reuse reaches the paired access token under
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
+    /// authorization grant associated with it." Null when an imported state has no audit link.
+    /// </summary>
+    public string? PredecessorFlowId { get; init; }
+
     /// <summary>The OAuth client identifier the refresh token was issued to.</summary>
     public required string ClientId { get; init; }
 

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -77,8 +75,8 @@ internal sealed class AsicZipAuthoringTests
 
         Assert.AreEqual(AsicWellKnown.MimetypeEntryName, first.Name, "Annex A.1 item 1 makes the mimetype entry the first file in the container.");
         Assert.AreEqual(0, first.HeaderOffset, "The first file's local header is the container's first octet.");
-        Assert.AreEqual(0, (int)first.Method, "Annex A.1 item 3 sets the compression method at offset 8 to zero.");
-        Assert.AreEqual(0, (int)first.ExtraFieldByteLength, "Annex A.1 item 2 sets the extra field length at offset 28 to zero.");
+        Assert.AreEqual(0, first.Method, "Annex A.1 item 3 sets the compression method at offset 8 to zero.");
+        Assert.AreEqual(0, first.ExtraFieldByteLength, "Annex A.1 item 2 sets the extra field length at offset 28 to zero.");
         Assert.AreEqual(0, first.Flags & 0x0008, "No data descriptor follows the entry, so its sizes are in its own header.");
         Assert.AreEqual(0, first.Flags & 0x0001, "Annex A.1 item 6 forbids encrypting the mimetype entry.");
         Assert.AreEqual(first.CompressedByteLength, first.UncompressedByteLength, "A stored entry's two sizes are the same value.");
@@ -140,7 +138,7 @@ internal sealed class AsicZipAuthoringTests
             Assert.AreEqual(central.UncompressedByteLength, local.UncompressedByteLength);
             Assert.AreEqual(central.DosTime, local.DosTime);
             Assert.AreEqual(central.DosDate, local.DosDate);
-            Assert.AreEqual(0, (int)central.ExtraFieldByteLength, "No entry carries an extra field.");
+            Assert.AreEqual(0, central.ExtraFieldByteLength, "No entry carries an extra field.");
         }
     }
 
@@ -160,9 +158,9 @@ internal sealed class AsicZipAuthoringTests
         using PooledMemory container = WriteExtendedContainer();
 
         OracleZipArchive archive = AsicZipStructureOracle.Parse(container.AsReadOnlySpan());
-        Assert.AreEqual(3, (int)archive.DeclaredEntryCount);
-        Assert.AreEqual(0, (int)archive.ThisDiskNumber);
-        Assert.AreEqual(0, (int)archive.CentralDirectoryDiskNumber);
+        Assert.AreEqual(3, archive.DeclaredEntryCount);
+        Assert.AreEqual(0, archive.ThisDiskNumber);
+        Assert.AreEqual(0, archive.CentralDirectoryDiskNumber);
         Assert.AreEqual(
             archive.CentralDirectoryOffset + (int)archive.CentralDirectoryByteLength,
             container.Length - 22,
@@ -184,7 +182,7 @@ internal sealed class AsicZipAuthoringTests
         OracleZipEntry entry = archive.LocalHeaders[1];
 
         Assert.AreEqual("data.txt", entry.Name);
-        Assert.AreEqual(0, (int)entry.Method);
+        Assert.AreEqual(0, entry.Method);
         Assert.IsTrue(
             container.AsReadOnlySpan().Slice(entry.DataOffset, content.Length).SequenceEqual(content),
             "A stored entry's octets appear in the container unchanged.");
@@ -211,7 +209,7 @@ internal sealed class AsicZipAuthoringTests
         OracleZipArchive archive = AsicZipStructureOracle.Parse(container.AsReadOnlySpan());
         OracleZipEntry entry = archive.LocalHeaders[1];
 
-        Assert.AreEqual(8, (int)entry.Method, "Deflate is ZIP method 8 (IETF RFC 1951).");
+        Assert.AreEqual(8, entry.Method, "Deflate is ZIP method 8 (IETF RFC 1951).");
         Assert.IsLessThan(entry.UncompressedByteLength, entry.CompressedByteLength, "The entry was actually compressed.");
         Assert.IsTrue(
             AsicZipStructureOracle.ReadEntryContent(container.AsReadOnlySpan(), entry).AsSpan().SequenceEqual(content),

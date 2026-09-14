@@ -32,7 +32,7 @@ internal sealed class KbJwtIatClockSkewCheckTests
     [TestMethod]
     public async Task TightPerFlowPolicySkewRejectsFutureIat()
     {
-        ExchangeContext ExchangeContext = new();
+        ExchangeContext ExchangeContext = [];
         ExchangeContext.SetClockSkewTolerance(TimeSpan.FromSeconds(1));
 
         ClaimOutcome outcome = await RunAsync(ExchangeContext, fieldClockSkew: TimeSpan.FromMinutes(5));
@@ -46,7 +46,7 @@ internal sealed class KbJwtIatClockSkewCheckTests
     [TestMethod]
     public async Task PermissivePerFlowPolicySkewAcceptsFutureIat()
     {
-        ExchangeContext ExchangeContext = new();
+        ExchangeContext ExchangeContext = [];
         ExchangeContext.SetClockSkewTolerance(TimeSpan.FromMinutes(5));
 
         ClaimOutcome outcome = await RunAsync(ExchangeContext, fieldClockSkew: TimeSpan.FromSeconds(1));
@@ -62,7 +62,7 @@ internal sealed class KbJwtIatClockSkewCheckTests
     {
         //No SetClockSkewTolerance on the context → ClockSkewToleranceOverride is
         //null → the check uses the ValidationContext.ClockSkew field.
-        ExchangeContext ExchangeContext = new();
+        ExchangeContext ExchangeContext = [];
 
         ClaimOutcome tightFieldOutcome = await RunAsync(ExchangeContext, fieldClockSkew: TimeSpan.FromSeconds(1));
         Assert.AreEqual(ClaimOutcome.Failure, tightFieldOutcome,

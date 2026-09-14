@@ -1,21 +1,15 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -544,7 +538,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
 
                 //Independent oracle: the framework's native CFB mode with a 128-bit feedback register, a
                 //different code path from the shipped ECB-loop CFB helper (TpmParameterEncryption.AesCfb).
-                aes.EncryptCfb(plain, zeroFeedback, encIdentityOwner.Memory.Span[..innerLength], PaddingMode.None, feedbackSizeInBits: AesBlockSize * 8);
+                _ = aes.EncryptCfb(plain, zeroFeedback, encIdentityOwner.Memory.Span[..innerLength], PaddingMode.None, feedbackSizeInBits: AesBlockSize * 8);
             }
             finally
             {
@@ -581,7 +575,7 @@ internal sealed class TpmInHouseSimulatorCredentialOracleTests
             try
             {
                 Span<byte> blob = blobOwner.Memory.Span[..blobLength];
-                BinaryPrimitives.WriteUInt16BigEndian(blob, (ushort)Sha256DigestSize);
+                BinaryPrimitives.WriteUInt16BigEndian(blob, Sha256DigestSize);
                 outerHmac.AsReadOnlySpan().CopyTo(blob[sizeof(ushort)..]);
                 encIdentityOwner.Memory.Span[..innerLength].CopyTo(blob[(sizeof(ushort) + Sha256DigestSize)..]);
 

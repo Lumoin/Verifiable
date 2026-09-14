@@ -70,7 +70,7 @@ internal sealed class XmlReferenceProcessingTests
 
     private static XmlReferenceResolver CreateFixedResolver(byte[] octets)
     {
-        return (ReadOnlySpan<byte> uri, BaseMemoryPool pool, out PooledMemory? result) =>
+        return (uri, pool, out result) =>
         {
             result = PooledMemory.FromBytes(octets, pool, BufferTags.XmlDigestInput);
 
@@ -648,7 +648,7 @@ internal sealed class XmlReferenceProcessingTests
     [TestMethod]
     public void PrefixListExceedingTheDocumentedCapRefuses()
     {
-        string overLongPrefixList = new string('a', XmlReferenceProcessing.MaximumPrefixListByteLength + 1);
+        string overLongPrefixList = new('a', XmlReferenceProcessing.MaximumPrefixListByteLength + 1);
         string document = $$"""
             <Document>
               <Target Id="target"><Elem/></Target>
@@ -950,7 +950,7 @@ internal sealed class XmlReferenceProcessingTests
     [TestMethod]
     public void SignedInfoOctetsRenderCommentsPerTheAlgorithmVariant()
     {
-        string BuildDocument(string algorithmUri) => $$"""
+        static string BuildDocument(string algorithmUri) => $$"""
             <Signature xmlns="{{XmlSignatureIdentifiers.XmlSignatureNamespace}}">
               <SignedInfo>
                 <CanonicalizationMethod Algorithm="{{algorithmUri}}"/>
@@ -1121,7 +1121,7 @@ internal sealed class XmlReferenceProcessingTests
         var transforms = new StringBuilder();
         for(int i = 0; i <= XmlReferenceProcessing.MaximumTransformCount; ++i)
         {
-            transforms.Append(CultureInfo.InvariantCulture, $"<Transform Algorithm=\"{XmlSignatureIdentifiers.EnvelopedSignatureTransformUri}\"/>");
+            _ = transforms.Append(CultureInfo.InvariantCulture, $"<Transform Algorithm=\"{XmlSignatureIdentifiers.EnvelopedSignatureTransformUri}\"/>");
         }
 
         string document = $$"""
@@ -1175,7 +1175,7 @@ internal sealed class XmlReferenceProcessingTests
         var transforms = new StringBuilder();
         for(int i = 0; i <= XmlReferenceProcessing.MaximumReparseDepth; ++i)
         {
-            transforms.Append(CultureInfo.InvariantCulture, $"<Transform Algorithm=\"{XmlSignatureIdentifiers.CanonicalXml10Uri}\"/>");
+            _ = transforms.Append(CultureInfo.InvariantCulture, $"<Transform Algorithm=\"{XmlSignatureIdentifiers.CanonicalXml10Uri}\"/>");
         }
 
         string document = $$"""

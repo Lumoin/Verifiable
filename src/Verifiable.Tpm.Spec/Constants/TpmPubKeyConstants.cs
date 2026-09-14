@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
@@ -12,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// (Part 2: Structures, section "6 Constants", Table 31).
 /// </para>
 /// </remarks>
-public enum TpmPubKeyConstants : uint
+public enum TpmPubKeyConstants: uint
 {
     /// <summary>
     /// Start of the property range for TPM SPDM authentication public keys

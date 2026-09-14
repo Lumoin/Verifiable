@@ -1,8 +1,8 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Core.Model.SelectiveDisclosure;
 
 namespace Verifiable.Cbor.Sd;
 

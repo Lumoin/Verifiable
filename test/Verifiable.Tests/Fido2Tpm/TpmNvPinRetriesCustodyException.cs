@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
@@ -34,7 +33,7 @@ public sealed class TpmNvPinRetriesCustodyException: Exception
     /// Initializes a new instance with a message describing which TPM operation failed closed.
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
-    public TpmNvPinRetriesCustodyException(string message): base(message)
+    public TpmNvPinRetriesCustodyException(string message) : base(message)
     {
     }
 
@@ -45,7 +44,7 @@ public sealed class TpmNvPinRetriesCustodyException: Exception
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
     /// <param name="innerException">The underlying TPM failure, if any.</param>
-    public TpmNvPinRetriesCustodyException(string message, Exception innerException): base(message, innerException)
+    public TpmNvPinRetriesCustodyException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

@@ -10,7 +10,7 @@ namespace Verifiable.JCose;
 /// or claims can be trusted.
 /// </summary>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class UnverifiedJwsMessage : IDisposable, IEquatable<UnverifiedJwsMessage>
+public sealed class UnverifiedJwsMessage: IDisposable, IEquatable<UnverifiedJwsMessage>
 {
     private bool disposed;
 

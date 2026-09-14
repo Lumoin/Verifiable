@@ -1,6 +1,5 @@
-using System.Buffers;
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -10,7 +9,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -72,7 +70,7 @@ internal sealed class JarmAuthorizeFlowTests
         Assert.DoesNotContain("code=", authorizeResponse.Location);
         Assert.DoesNotContain("state=", authorizeResponse.Location);
 
-        string responseJwt = ExtractResponseJwt(authorizeResponse.Location!, '?');
+        string responseJwt = ExtractResponseJwt(authorizeResponse.Location, '?');
         JarmResponseValidationResult result = await ValidateAsync(
             responseJwt, material).ConfigureAwait(false);
 
@@ -84,14 +82,14 @@ internal sealed class JarmAuthorizeFlowTests
         RequestFields tokenFields = new()
         {
             [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
-            [OAuthRequestParameterNames.Code] = result.Code!,
+            [OAuthRequestParameterNames.Code] = result.Code,
             [OAuthRequestParameterNames.CodeVerifier] = pkce.EncodedVerifier,
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
         };
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
@@ -114,7 +112,7 @@ internal sealed class JarmAuthorizeFlowTests
 
         string marker = "name=\"response\" value=\"";
         int start = authorizeResponse.Body.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-        int end = authorizeResponse.Body.IndexOf('"', start);
+        int end = authorizeResponse.Body.IndexOf('"', start, StringComparison.Ordinal);
         string responseJwt = authorizeResponse.Body[start..end];
 
         JarmResponseValidationResult result = await ValidateAsync(
@@ -165,7 +163,7 @@ internal sealed class JarmAuthorizeFlowTests
         Assert.Contains("?response=", authorizeResponse.Location);
         Assert.DoesNotContain("error=", authorizeResponse.Location);
 
-        string responseJwt = ExtractResponseJwt(authorizeResponse.Location!, '?');
+        string responseJwt = ExtractResponseJwt(authorizeResponse.Location, '?');
         JarmResponseValidationResult result = await ValidateAsync(
             responseJwt, material).ConfigureAwait(false);
 
@@ -189,7 +187,7 @@ internal sealed class JarmAuthorizeFlowTests
 
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
@@ -278,13 +276,13 @@ internal sealed class JarmAuthorizeFlowTests
 
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            BuildParFields(pkce, parResponseMode), new ExchangeContext(),
+            BuildParFields(pkce, parResponseMode), [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
         string marker = "\"request_uri\":\"";
         int start = parResponse.Body.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-        int end = parResponse.Body.IndexOf('"', start);
+        int end = parResponse.Body.IndexOf('"', start, StringComparison.Ordinal);
         string requestUri = parResponse.Body[start..end];
 
         RequestFields authorizeFields = new()
@@ -298,7 +296,7 @@ internal sealed class JarmAuthorizeFlowTests
             authorizeFields[OAuthRequestParameterNames.ResponseMode] = frontChannelResponseMode;
         }
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
 
         return await host.DispatchAtEndpointAsync(
@@ -311,7 +309,7 @@ internal sealed class JarmAuthorizeFlowTests
     private async ValueTask<JarmResponseValidationResult> ValidateAsync(
         string responseJwt, VerifierKeyMaterial material)
     {
-        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3) =>
             ValueTask.FromResult<PublicKeyMemory?>(material.SigningPublicKey);
 
         return await JarmResponseValidation.ValidateAsync(
@@ -320,7 +318,7 @@ internal sealed class JarmAuthorizeFlowTests
             ClientId,
             AllowedAlgorithms,
             TimeProvider.GetUtcNow(),
-            resolver,
+resolver,
             PayloadDeserializer,
             TestSetup.Base64UrlDecoder,
             Pool,
@@ -336,7 +334,7 @@ internal sealed class JarmAuthorizeFlowTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -345,7 +343,7 @@ internal sealed class JarmAuthorizeFlowTests
     {
         string marker = $"{separator}response=";
         int start = location.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-        int end = location.IndexOf('&', start);
+        int end = location.IndexOf('&', start, StringComparison.Ordinal);
         string encoded = end < 0 ? location[start..] : location[start..end];
 
         return Uri.UnescapeDataString(encoded);

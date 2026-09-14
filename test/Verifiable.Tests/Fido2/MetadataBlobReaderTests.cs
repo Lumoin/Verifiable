@@ -1,7 +1,6 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -61,15 +60,15 @@ internal sealed class MetadataBlobReaderTests
         Assert.AreEqual(aaguid, fido2Entry.Aaguid);
         Assert.IsNull(fido2Entry.Aaid);
         Assert.IsNotNull(fido2Entry.AttestationRootCertificates);
-        Assert.HasCount(1, fido2Entry.AttestationRootCertificates!);
-        Assert.IsTrue(fido2Entry.AttestationRootCertificates![0].AsReadOnlySpan().SequenceEqual(attestationRootCertificate.RawData));
+        Assert.HasCount(1, fido2Entry.AttestationRootCertificates);
+        Assert.IsTrue(fido2Entry.AttestationRootCertificates[0].AsReadOnlySpan().SequenceEqual(attestationRootCertificate.RawData));
         Assert.HasCount(1, fido2Entry.StatusReports);
         Assert.AreEqual(WellKnownAuthenticatorStatuses.FidoCertified, fido2Entry.StatusReports[0].Status);
 
         MetadataBlobPayloadEntry u2fEntry = blob.Payload.Entries[1];
         Assert.IsNull(u2fEntry.Aaguid);
         Assert.IsNotNull(u2fEntry.AttestationCertificateKeyIdentifiers);
-        Assert.Contains("aabbccddeeff00112233445566778899aabbccdd", u2fEntry.AttestationCertificateKeyIdentifiers!);
+        Assert.Contains("aabbccddeeff00112233445566778899aabbccdd", u2fEntry.AttestationCertificateKeyIdentifiers);
     }
 
 
@@ -79,7 +78,7 @@ internal sealed class MetadataBlobReaderTests
     {
         byte[] blobBytes = Encoding.UTF8.GetBytes("aGVhZGVy.cGF5bG9hZA");
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -89,7 +88,7 @@ internal sealed class MetadataBlobReaderTests
     {
         byte[] blobBytes = Encoding.UTF8.GetBytes("aGVhZGVy.cGF5bG9hZA.c2ln.ZXh0cmE");
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -104,7 +103,7 @@ internal sealed class MetadataBlobReaderTests
             MetadataBlobTestVectors.BuildHeaderJson(WellKnownJwaValues.Es256, [signerCertificate.RawData])));
         byte[] blobBytes = Encoding.UTF8.GetBytes($"{headerSegment}.!!!not-base64url!!!.c2ln");
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -120,7 +119,7 @@ internal sealed class MetadataBlobReaderTests
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [MetadataBlobTestVectors.BuildEntryJson(aaguid: Guid.NewGuid())]);
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -136,7 +135,7 @@ internal sealed class MetadataBlobReaderTests
         const string payloadJson = """{"no":1,"no":2,"nextUpdate":"2030-01-01","entries":[]}""";
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -152,7 +151,7 @@ internal sealed class MetadataBlobReaderTests
         const string payloadJson = "[]";
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -186,7 +185,7 @@ internal sealed class MetadataBlobReaderTests
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -204,7 +203,7 @@ internal sealed class MetadataBlobReaderTests
         string payloadJson = MetadataBlobTestVectors.BuildPayloadJson(1, "2030-01-01", [entryJson]);
         byte[] blobBytes = MetadataBlobTestVectors.BuildBlobBytes(headerJson, payloadJson, data => MetadataBlobTestVectors.SignEs256(signingKey, data));
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 
@@ -218,13 +217,13 @@ internal sealed class MetadataBlobReaderTests
         var builder = new System.Text.StringBuilder();
         for(int i = 0; i < depth; i++)
         {
-            builder.Append("{\"a\":");
+            _ = builder.Append("{\"a\":");
         }
 
-        builder.Append('1');
+        _ = builder.Append('1');
         for(int i = 0; i < depth; i++)
         {
-            builder.Append('}');
+            _ = builder.Append('}');
         }
 
         return builder.ToString();

@@ -1,10 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -13,12 +13,6 @@ using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -145,7 +139,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -184,7 +178,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -222,7 +216,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutOwnerWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutOwnerWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, CounterIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -242,7 +236,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, MismatchedAuthHandle, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -264,7 +258,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutAuthWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutAuthWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -286,7 +280,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
@@ -309,7 +303,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, NonDaCounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, NonDaCounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
@@ -329,7 +323,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementAsync(
             device, pool, registry, OrdinaryIndexHandle, OrdinaryIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -352,7 +346,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> result = await WriteIndexAuthValueAsync(
             device, pool, registry, CounterIndexHandle, CorrectAuth, RejectedWriteAttempt).ConfigureAwait(false);
@@ -398,7 +392,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(int i = 0; i < IncrementsBeforeDelete; i++)
         {
@@ -410,7 +404,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         TpmResult<NvUndefineSpaceResponse> undefineResult = await UndefineIndexAsync(device, pool, registry, CounterIndexHandle).ConfigureAwait(false);
         Assert.IsTrue(undefineResult.IsSuccess, $"Undefine must succeed: '{undefineResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, SecondCounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, SecondCounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> firstIncrementOfSecond = await IncrementAsync(
             device, pool, registry, SecondCounterIndexHandle, SecondCounterIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -468,7 +462,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(int i = 0; i < IncrementsBeforeDelete; i++)
         {
@@ -537,7 +531,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadCounterAsync(device, pool, registry, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
 
@@ -558,7 +552,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> incrementResult = await IncrementAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -589,7 +583,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(ulong expected = 1; expected <= IncrementCount; expected++)
         {
@@ -624,7 +618,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(int i = 0; i < IncrementsBeforeDelete; i++)
         {
@@ -677,7 +671,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(int i = 0; i < IncrementsBeforeClear; i++)
         {
@@ -739,7 +733,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -789,7 +783,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, NonDaCounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, NonDaCounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> noDaWrongResult = await IncrementOverHmacAsync(
             device, pool, registry, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
@@ -798,7 +792,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmRcConstants.TPM_RC_BAD_AUTH, noDaWrongResult.ResponseCode,
             "A genuine command-HMAC mismatch names the offending session, so the raw wire code carries the session-index modifier (TPM 2.0 Library Part 2, clause 6.6.2).");
 
-        await DefineIndexAsync(device, pool, registry, SecondIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, SecondIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> secondIndexWrongResult = await IncrementOverHmacAsync(
             device, pool, registry, SecondIndexHandle, WrongAuth).ConfigureAwait(false);
@@ -827,7 +821,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -867,7 +861,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutAuthWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterWithoutAuthWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> result = await IncrementOverHmacAsync(
             device, pool, registry, CounterIndexHandle, WrongAuth).ConfigureAwait(false);
@@ -898,7 +892,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawDecryptCode = await IncrementOverHmacHandFramedAsync(
             device, pool, registry, CounterIndexHandle, CorrectAuth, TpmaSession.DECRYPT).ConfigureAwait(false);
@@ -932,7 +926,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawEncryptCode = await IncrementOverHmacHandFramedAsync(
             device, pool, registry, CounterIndexHandle, CorrectAuth, TpmaSession.ENCRYPT).ConfigureAwait(false);
@@ -970,9 +964,9 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await IncrementOverHmacAsync(
                 device, pool, registry, CounterIndexHandle, CorrectAuth, TpmaSession.DECRYPT).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -991,9 +985,9 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await IncrementOverHmacAsync(
                 device, pool, registry, CounterIndexHandle, CorrectAuth, TpmaSession.ENCRYPT).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1015,7 +1009,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateSaltedSessionRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
         uint tpmKeyHandle = tpmKey.ObjectHandle.Value;
 
@@ -1084,7 +1078,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateSaltedSessionRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
         uint tpmKeyHandle = tpmKey.ObjectHandle.Value;
 
@@ -1155,7 +1149,7 @@ internal sealed class TpmInHouseSimulatorNvCounterTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes).ConfigureAwait(false);
 
         StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
         TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(

@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -202,9 +198,9 @@ public sealed class CertifyCreationInput: ITpmCommandInput, IDisposable
             signHandle,
             objectHandle,
             qualifyingDataOwner,
-            qualifyingDataOwner.Memory.Slice(0, qualifyingData.Length),
+            qualifyingDataOwner.Memory[..qualifyingData.Length],
             creationHashOwner,
-            creationHashOwner.Memory.Slice(0, creationHash.Length),
+            creationHashOwner.Memory[..creationHash.Length],
             creationTicket,
             signatureScheme,
             schemeHashAlg);

@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -161,7 +158,7 @@ public sealed class GetTimeInput: ITpmCommandInput, IDisposable
         qualifyingData.CopyTo(owner.Memory.Span);
 
         return new GetTimeInput(
-            privacyAdminHandle, signHandle, owner, owner.Memory.Slice(0, qualifyingData.Length), signatureScheme, schemeHashAlg);
+            privacyAdminHandle, signHandle, owner, owner.Memory[..qualifyingData.Length], signatureScheme, schemeHashAlg);
     }
 
     private GetTimeInput(

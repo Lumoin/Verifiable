@@ -1,6 +1,4 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.BouncyCastle;

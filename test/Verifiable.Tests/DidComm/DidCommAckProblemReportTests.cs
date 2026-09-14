@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Verifiable.DidComm;
 using Verifiable.DidComm.ProblemReports;
-using Verifiable.Foundation;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.DidComm;
@@ -53,7 +48,7 @@ internal sealed class DidCommAckProblemReportTests
     {
         Assert.IsNotNull(source);
 
-        return string.Join("|", source!.Select(static x => x?.ToString() ?? "<null>"));
+        return string.Join("|", source.Select(static x => x?.ToString() ?? "<null>"));
     }
 
 
@@ -124,7 +119,7 @@ internal sealed class DidCommAckProblemReportTests
 
         Assert.AreEqual(WellKnownEmptyMessageNames.EmptyType, empty.Type);
         Assert.IsNotNull(empty.Body);
-        Assert.IsEmpty(empty.Body!, "The empty message body is the empty object {}.");
+        Assert.IsEmpty(empty.Body, "The empty message body is the empty object {}.");
 
         string json = PackToJson(empty);
         Assert.Contains("\"body\":{}", json, "The empty message MUST serialize body as {}.");
@@ -132,7 +127,7 @@ internal sealed class DidCommAckProblemReportTests
         DidCommMessage roundTripped = RoundTrip(empty);
         Assert.AreEqual(WellKnownEmptyMessageNames.EmptyType, roundTripped.Type);
         Assert.IsNotNull(roundTripped.Body);
-        Assert.IsEmpty(roundTripped.Body!, "The empty {} body survives the round trip.");
+        Assert.IsEmpty(roundTripped.Body, "The empty {} body survives the round trip.");
     }
 
 
@@ -173,11 +168,11 @@ internal sealed class DidCommAckProblemReportTests
     [TestMethod]
     public void CreateAcknowledgmentGuardsRejectBadInput()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment([], "id", "thid"));
-        Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment(["a", ""], "id", "thid"));
-        Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment(["a"], "", "thid"));
-        Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment(["a"], "id", ""));
-        Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateEmptyMessage(""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment([], "id", "thid"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment(["a", ""], "id", "thid"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment(["a"], "", "thid"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateAcknowledgment(["a"], "id", ""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => DidCommAckExtensions.CreateEmptyMessage(""));
     }
 
 
@@ -185,7 +180,7 @@ internal sealed class DidCommAckProblemReportTests
     public void ProblemCodeParsesStructure()
     {
         Assert.IsTrue(ProblemCode.TryParse("e.p.xfer.cant-use-endpoint", out ProblemCode? code));
-        Assert.AreEqual(ProblemSorter.Error, code!.Sorter);
+        Assert.AreEqual(ProblemSorter.Error, code.Sorter);
         Assert.IsTrue(code.IsError);
         Assert.IsFalse(code.IsWarning);
         Assert.AreEqual("p", code.Scope);
@@ -193,7 +188,7 @@ internal sealed class DidCommAckProblemReportTests
         Assert.HasCount(4, code.Tokens);
 
         Assert.IsTrue(ProblemCode.TryParse("w.m", out ProblemCode? warning), "A two-token code (sorter+scope, no descriptor) is valid.");
-        Assert.AreEqual(ProblemSorter.Warning, warning!.Sorter);
+        Assert.AreEqual(ProblemSorter.Warning, warning.Sorter);
         Assert.AreEqual("m", warning.Scope);
         Assert.IsEmpty(warning.Descriptors);
 
@@ -319,7 +314,7 @@ internal sealed class DidCommAckProblemReportTests
         DidCommMessage parsed = RoundTrip(message);
         Assert.IsTrue(parsed.TryInterpretProblemReport(out ProblemReport? recovered));
 
-        Assert.AreEqual(report.Code.Value, recovered!.Code.Value);
+        Assert.AreEqual(report.Code.Value, recovered.Code.Value);
         Assert.AreEqual(report.Comment, recovered.Comment);
         Assert.AreEqual(report.EscalateTo, recovered.EscalateTo);
         Assert.AreEqual(report.ParentThreadId, recovered.ParentThreadId);
@@ -349,7 +344,7 @@ internal sealed class DidCommAckProblemReportTests
         Assert.DoesNotContain("\"ack\"", json, "An absent ack MUST NOT be emitted.");
 
         Assert.IsTrue(RoundTrip(message).TryInterpretProblemReport(out ProblemReport? recovered));
-        Assert.AreEqual("e.m.msg.bad-format", recovered!.Code.Value);
+        Assert.AreEqual("e.m.msg.bad-format", recovered.Code.Value);
         Assert.AreEqual("parent-7", recovered.ParentThreadId);
         Assert.IsNull(recovered.Comment);
         Assert.IsNull(recovered.Args);
@@ -408,19 +403,19 @@ internal sealed class DidCommAckProblemReportTests
         Assert.AreEqual("parent-thread", escalated.ParentThreadId, "The escalation stays under the same parent thread.");
 
         //Narrowing the scope (p → m) MUST be rejected.
-        Assert.ThrowsExactly<ArgumentException>(() => warning.EscalateWarningToError(ProblemCode.Parse("e.m.msg.bad-lang")));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => warning.EscalateWarningToError(ProblemCode.Parse("e.m.msg.bad-lang")));
 
         //A non-error escalated code MUST be rejected.
-        Assert.ThrowsExactly<ArgumentException>(() => warning.EscalateWarningToError(ProblemCode.Parse("w.p.msg.bad-lang")));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => warning.EscalateWarningToError(ProblemCode.Parse("w.p.msg.bad-lang")));
 
         //An equally-broad state-name scope (rank 1 → 1) is allowed; widening (state → p) is allowed.
         var stateWarning = new ProblemReport { Code = ProblemCode.Parse("w.get-pay-details.payment-failed"), ParentThreadId = "t" };
         Assert.IsTrue(stateWarning.EscalateWarningToError(ProblemCode.Parse("e.p.payment-failed")).Code.IsError, "state-name → p widens the scope.");
-        Assert.ThrowsExactly<ArgumentException>(() => stateWarning.EscalateWarningToError(ProblemCode.Parse("e.m.payment-failed")), "state-name → m narrows the scope.");
+        _ = Assert.ThrowsExactly<ArgumentException>(() => stateWarning.EscalateWarningToError(ProblemCode.Parse("e.m.payment-failed")), "state-name → m narrows the scope.");
 
         //Escalating a non-warning report MUST be rejected.
         var error = new ProblemReport { Code = ProblemCode.Parse("e.p.x"), ParentThreadId = "t" };
-        Assert.ThrowsExactly<InvalidOperationException>(() => error.EscalateWarningToError(ProblemCode.Parse("e.p.y")));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => error.EscalateWarningToError(ProblemCode.Parse("e.p.y")));
     }
 
 

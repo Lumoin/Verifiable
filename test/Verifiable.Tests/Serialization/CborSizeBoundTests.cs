@@ -1,4 +1,3 @@
-using System;
 using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 

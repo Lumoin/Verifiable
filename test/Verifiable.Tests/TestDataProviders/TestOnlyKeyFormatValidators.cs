@@ -39,8 +39,8 @@ namespace Verifiable.Tests.TestDataProviders
                 //as one expression since each conjunct/disjunct already names what it checks.
                 return WellKnownKeyTypeValues.IsRsa((string)actualKeyFormat.Header[WellKnownJwkMemberNames.Kty])
                     && ((string)actualKeyFormat.Header[WellKnownJwkMemberNames.E]).Equals(RsaUtilities.DefaultExponent, StringComparison.OrdinalIgnoreCase)
-                    && (alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa2048RawModulusBase64UrlEncodedLength }
-                        || alg == CryptoAlgorithm.Rsa4096 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa4096RawModulusBase64UrlEncodedLength });
+                    && ((alg == CryptoAlgorithm.Rsa2048 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa2048RawModulusBase64UrlEncodedLength })
+                        || (alg == CryptoAlgorithm.Rsa4096 && actualKeyFormat.Header[WellKnownJwkMemberNames.N] is string { Length: Rsa4096RawModulusBase64UrlEncodedLength }));
             }
 
             static bool ValidateEd25519KeyFormatContentsMatchesRequested(PublicKeyJwk actualKeyFormat)

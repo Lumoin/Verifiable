@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.DataIntegrity;
@@ -28,7 +27,6 @@ namespace Verifiable.Json.Converters;
 public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 {
     private CryptosuiteInfoFactoryDelegate CryptosuiteFactory { get; }
-    private VerificationMethodTypeSelector VmTypeSelector { get; }
 
 
     /// <summary>
@@ -54,9 +52,11 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
     /// Creates a converter with full control over both dispatch mechanisms.
     /// </summary>
     /// <param name="vmTypeSelector">
-    /// The delegate that maps verification method <c>type</c> strings to .NET types.
-    /// Should be the same instance used by <see cref="VerificationMethodConverter"/>
-    /// to ensure consistent type dispatch across DID documents and proofs.
+    /// Accepted for symmetry with <see cref="VerificationMethodConverter"/>'s constructor; this
+    /// converter deserializes an embedded verification method through the source-generated
+    /// <see cref="VerifiableJsonContext"/> and does not read this delegate. Passing the same
+    /// instance the application wires into <see cref="VerificationMethodConverter"/> costs
+    /// nothing and keeps both constructors' shapes aligned.
     /// </param>
     /// <param name="cryptosuiteFactory">The factory for resolving cryptosuite names to instances.</param>
     public DataIntegrityProofConverter(
@@ -65,7 +65,6 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
     {
         ArgumentNullException.ThrowIfNull(vmTypeSelector);
         ArgumentNullException.ThrowIfNull(cryptosuiteFactory);
-        VmTypeSelector = vmTypeSelector;
         CryptosuiteFactory = cryptosuiteFactory;
     }
 
@@ -124,8 +123,7 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
         {
             proof.VerificationMethod = CreateVerificationMethodReference(
                 verificationMethodElement,
-                proofPurpose,
-                options);
+                proofPurpose);
         }
 
         if(root.TryGetProperty("proofValue", out var proofValueElement))
@@ -277,15 +275,12 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
 
     /// <summary>
     /// Creates the appropriate <see cref="VerificationMethodReference"/> subclass based on
-    /// <c>proofPurpose</c>. For embedded verification methods, uses
-    /// <see cref="VerifiableJsonContext.Default"/> for AOT-safe deserialization, which
-    /// re-enters <see cref="VerificationMethodConverter"/> via <paramref name="options"/>
-    /// to apply the shared <see cref="VerificationMethodTypeSelector"/>.
+    /// <c>proofPurpose</c>. For embedded verification methods, deserializes through the
+    /// source-generated <see cref="VerifiableJsonContext.Default"/> context for AOT safety.
     /// </summary>
     private static VerificationMethodReference? CreateVerificationMethodReference(
         JsonElement element,
-        string? proofPurpose,
-        JsonSerializerOptions options)
+        string? proofPurpose)
     {
         if(element.ValueKind == JsonValueKind.Null)
         {
@@ -301,8 +296,8 @@ public class DataIntegrityProofConverter: JsonConverter<DataIntegrityProof>
         }
         else if(element.ValueKind == JsonValueKind.Object)
         {
-            //Deserialize through options so VerificationMethodConverter applies
-            //VmTypeSelector for subclass dispatch. AOT-safe via registered JsonTypeInfo.
+            //Deserializes through the source-generated VerifiableJsonContext.VerificationMethod
+            //JsonTypeInfo, an AOT-safe path that reads only the base VerificationMethod shape.
             embedded = JsonSerializer.Deserialize(
                 element.GetRawText(),
                 VerifiableJsonContext.Default.VerificationMethod)!;

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;

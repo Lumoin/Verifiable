@@ -1,10 +1,7 @@
-using System;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Lds;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
@@ -80,7 +77,7 @@ internal sealed class CscaMasterListTests
         using CmsSignedData notAMasterList = CmsSignedDataTestFactory.SignAsCms(
             BuildMasterListContent(csca.RawData), LdsSecurityObjectOid, signer);
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () => await CscaMasterList.ParseAsync(notAMasterList, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A CMS whose content type is not id-icao-cscaMasterList must be rejected.").ConfigureAwait(false);
     }
@@ -102,7 +99,7 @@ internal sealed class CscaMasterListTests
         //content, before the unsigned embedded signer certificate), so the CMS signature no longer verifies.
         using CmsSignedData tampered = CmsSignedDataTestFactory.TamperContent(masterList, "Verifiable Test CSCA"u8);
 
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => await CscaMasterList.ParseAsync(tampered, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A master list whose signed content has been tampered must fail CMS verification.").ConfigureAwait(false);
     }

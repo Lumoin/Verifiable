@@ -108,7 +108,7 @@ internal sealed class AndroidKeyDescriptionReaderTests
             [1, 2, 3, 4], AndroidKeyAttestationTestVectors.EmptyAuthorizationList, AndroidKeyAttestationTestVectors.ConformantAuthorizationList);
         byte[] truncated = valid[..^4];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(truncated));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(truncated));
     }
 
 
@@ -124,7 +124,7 @@ internal sealed class AndroidKeyDescriptionReaderTests
         //bytes) is inflated far beyond the buffer's actual remaining length.
         corrupted[1] = 0x7E;
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(corrupted));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(corrupted));
     }
 
 
@@ -148,7 +148,7 @@ internal sealed class AndroidKeyDescriptionReaderTests
 
         byte[] keyDescriptionBytes = AssembleKeyDescription([1, 2, 3, 4], EncodeEmptySequence(), malformedTeeEnforced);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(keyDescriptionBytes));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(keyDescriptionBytes));
     }
 
 
@@ -170,7 +170,7 @@ internal sealed class AndroidKeyDescriptionReaderTests
         byte[] newContent = [.. innerContent, .. extraField];
         byte[] withNinthField = [0x30, checked((byte)newContent.Length), .. newContent];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(withNinthField));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AndroidKeyDescription.Read(withNinthField));
     }
 
 

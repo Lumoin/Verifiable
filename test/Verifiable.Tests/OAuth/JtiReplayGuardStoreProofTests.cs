@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -13,11 +9,8 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.States;
-using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Siop.Wallet;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -338,7 +331,7 @@ internal sealed class JtiReplayGuardStoreProofTests
     /// <param name="policy">The replay policy the consultation runs under.</param>
     private static ExchangeContext BuildContext(JtiReplayPolicy policy)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetJtiReplayPolicy(policy);
 
         return context;
@@ -419,6 +412,8 @@ internal sealed class JtiReplayGuardStoreProofTests
                 JtiIndex[jti.CorrelationKey] = Behavior switch
                 {
                     JtiStoreBehavior.ResolvesForeignFlowId => ForeignFlowId,
+                    JtiStoreBehavior.ResolvesWhatItSaved => correlationKey,
+                    JtiStoreBehavior.NeverResolvesJtiReplay => correlationKey,
                     _ => correlationKey
                 };
             }
@@ -547,7 +542,7 @@ internal sealed class JtiReplayGuardSiopWireProofTests
                 .ConfigureAwait(false);
 
             Assert.AreNotEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
-            Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(
+            _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(
                 host.GetFlowState(handle).State,
                 "SIOPv2 §11.2: a store that cannot prove it recorded the nonce must fail the first presentation closed.");
         }
@@ -586,7 +581,7 @@ internal sealed class JtiReplayGuardSiopWireProofTests
                 .ConfigureAwait(false);
 
             Assert.AreEqual((int)HttpStatusCode.OK, first.StatusCode, first.Body);
-            Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(
+            _ = Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(
                 host.GetFlowState(firstHandle).State,
                 "SIOPv2 §11.2: the first use of a nonce verifies against a correct store.");
 
@@ -597,7 +592,7 @@ internal sealed class JtiReplayGuardSiopWireProofTests
                 .ConfigureAwait(false);
 
             Assert.AreNotEqual((int)HttpStatusCode.OK, second.StatusCode, second.Body);
-            Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(
+            _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(
                 host.GetFlowState(secondHandle).State,
                 "SIOPv2 §11.2: the same (client_id, nonce) is refused as a replay against a correct store.");
         }
@@ -655,6 +650,6 @@ internal sealed class JtiReplayGuardSiopWireProofTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 }

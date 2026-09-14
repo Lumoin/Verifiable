@@ -1,7 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -9,13 +8,11 @@ using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -142,7 +139,7 @@ internal sealed class TpmBackedPassportReadTests
         Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private async Task<TpmDevice> CreateOperationalTpmAsync(string tpmId)
     {
-        var simulator = new TpmSimulator(tpmId,selfTest: TpmSelfTestBehavior.Passes, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var simulator = new TpmSimulator(tpmId, selfTest: TpmSelfTestBehavior.Passes, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using IMemoryOwner<byte> command = FrameSessionlessCommand(new StartupInput(TpmSuConstants.TPM_SU_CLEAR), BaseMemoryPool.Shared, out int length);
@@ -160,7 +157,7 @@ internal sealed class TpmBackedPassportReadTests
     /// </summary>
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented command buffer transfers to the caller, which disposes it.")]
     private static IMemoryOwner<byte> FrameSessionlessCommand<TInput>(TInput input, BaseMemoryPool pool, out int length)
-        where TInput: ITpmCommandInput
+        where TInput : ITpmCommandInput
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();
         IMemoryOwner<byte> owner = pool.Rent(length);

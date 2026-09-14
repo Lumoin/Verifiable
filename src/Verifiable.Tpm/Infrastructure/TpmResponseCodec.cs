@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Infrastructure;
@@ -11,7 +9,7 @@ namespace Verifiable.Tpm.Infrastructure;
 /// <param name="reader">The reader positioned at the response parameter area.</param>
 /// <param name="pool">The memory pool for allocations.</param>
 /// <returns>The parsed response.</returns>
-public delegate TResponse TpmResponseParser<TResponse>(ref TpmReader reader, BaseMemoryPool pool) where TResponse: ITpmWireType;
+public delegate TResponse TpmResponseParser<TResponse>(ref TpmReader reader, BaseMemoryPool pool) where TResponse : ITpmWireType;
 
 /// <summary>
 /// Delegate for parsing TPM response with one output handle.
@@ -21,7 +19,7 @@ public delegate TResponse TpmResponseParser<TResponse>(ref TpmReader reader, Bas
 /// <param name="handle">The output handle from the response handle area.</param>
 /// <param name="pool">The memory pool for allocations.</param>
 /// <returns>The parsed response.</returns>
-public delegate TResponse TpmResponseParserWithHandle<TResponse>(ref TpmReader reader, uint handle, BaseMemoryPool pool) where TResponse: ITpmWireType;
+public delegate TResponse TpmResponseParserWithHandle<TResponse>(ref TpmReader reader, uint handle, BaseMemoryPool pool) where TResponse : ITpmWireType;
 
 /// <summary>
 /// Internal delegate for type-erased response parsing with ref support.
@@ -131,7 +129,7 @@ public sealed class TpmResponseCodec
     {
         return new TpmResponseCodec(
             0,
-            (ref TpmReader r, uint[] _, BaseMemoryPool p) => parser(ref r, p),
+            (ref r, _, p) => parser(ref r, p),
             responseFirstParameterIsEncryptable: responseFirstParameterIsEncryptable);
     }
 
@@ -151,7 +149,7 @@ public sealed class TpmResponseCodec
     {
         return new TpmResponseCodec(
             1,
-            (ref TpmReader r, uint[] h, BaseMemoryPool p) => parser(ref r, h[0], p),
+            (ref r, h, p) => parser(ref r, h[0], p),
             responseFirstParameterIsEncryptable: responseFirstParameterIsEncryptable);
     }
 

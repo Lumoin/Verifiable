@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -185,6 +183,7 @@ public static class PreservationProfileWellKnown
         PreservationProfileContentItem.SchemeIdentifier => "OVR-6.4-04 j)",
         PreservationProfileContentItem.EvidenceRetentionPeriod => "OVR-6.4-05",
         PreservationProfileContentItem.ExpectedEvidenceDuration => "OVR-6.4-06",
+        PreservationProfileContentItem.NotStated => string.Empty,
         _ => string.Empty
     };
 
@@ -205,6 +204,19 @@ public static class PreservationProfileWellKnown
         PreservationProfileContentItem.SchemeIdentifier => PreservationRequirementKeyword.May,
         PreservationProfileContentItem.ExpectedEvidenceDuration => PreservationRequirementKeyword.Should,
         PreservationProfileContentItem.NotStated => PreservationRequirementKeyword.NotStated,
+        PreservationProfileContentItem.UniqueIdentification => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.Identifier => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.SupportedOperations => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.SupportedInputFormats => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.AdditionalOutputFormats => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.EvidencePolicyReference => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.SignatureValidationPolicyReference => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.ValidityPeriod => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.StorageModel => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.PreservationGoals => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.EvidenceFormats => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.Description => PreservationRequirementKeyword.Shall,
+        PreservationProfileContentItem.EvidenceRetentionPeriod => PreservationRequirementKeyword.Shall,
         _ => PreservationRequirementKeyword.Shall
     };
 
@@ -240,6 +252,21 @@ public static class PreservationProfileWellKnown
         PreservationProfileContentItem.ExpectedEvidenceDuration =>
             string.Equals(storageModel, PreservationWellKnown.WithTemporaryStorageModel, StringComparison.Ordinal)
             || string.Equals(storageModel, PreservationWellKnown.WithoutStorageModel, StringComparison.Ordinal),
+        PreservationProfileContentItem.NotStated => true,
+        PreservationProfileContentItem.UniqueIdentification => true,
+        PreservationProfileContentItem.Identifier => true,
+        PreservationProfileContentItem.SupportedOperations => true,
+        PreservationProfileContentItem.SupportedInputFormats => true,
+        PreservationProfileContentItem.AdditionalOutputFormats => true,
+        PreservationProfileContentItem.EvidencePolicyReference => true,
+        PreservationProfileContentItem.SignatureValidationPolicyReference => true,
+        PreservationProfileContentItem.ValidityPeriod => true,
+        PreservationProfileContentItem.StorageModel => true,
+        PreservationProfileContentItem.PreservationGoals => true,
+        PreservationProfileContentItem.EvidenceFormats => true,
+        PreservationProfileContentItem.Specification => true,
+        PreservationProfileContentItem.Description => true,
+        PreservationProfileContentItem.SchemeIdentifier => true,
         _ => true
     };
 }

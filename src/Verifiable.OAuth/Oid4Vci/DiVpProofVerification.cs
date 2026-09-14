@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;

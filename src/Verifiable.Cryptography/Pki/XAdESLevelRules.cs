@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -57,7 +53,7 @@ public enum XAdESQualifyingPropertiesBindingFailure
 /// the wrapping-attack BLOCKER this gate exists to close.
 /// </summary>
 /// <param name="Failure">Which pin failed.</param>
-public sealed record XAdESQualifyingPropertiesBindingViolation(XAdESQualifyingPropertiesBindingFailure Failure) : XAdESRuleViolation
+public sealed record XAdESQualifyingPropertiesBindingViolation(XAdESQualifyingPropertiesBindingFailure Failure): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Failure switch
@@ -93,7 +89,7 @@ public sealed record XAdESQualifyingPropertiesBindingViolation(XAdESQualifyingPr
 /// baseline level regardless of which properties the reference names.
 /// </summary>
 /// <param name="QualifyingPropertiesReferenceCount">How many <c>QualifyingPropertiesReference</c> instances the signature carries.</param>
-public sealed record XAdESIndirectIncorporationViolation(int QualifyingPropertiesReferenceCount) : XAdESRuleViolation
+public sealed record XAdESIndirectIncorporationViolation(int QualifyingPropertiesReferenceCount): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-02";
@@ -116,7 +112,7 @@ public sealed record XAdESIndirectIncorporationViolation(int QualifyingPropertie
 /// </summary>
 /// <param name="Kind">Which qualifying property the offending occurrence is.</param>
 /// <param name="Ordinal">The occurrence's position among <see cref="XAdESQualifyingPropertiesFacts.TimestampContainers"/>.</param>
-public sealed record XAdESTimestampContainerNotRfc3161OnlyViolation(XAdESTimestampContainerKind Kind, int Ordinal) : XAdESRuleViolation
+public sealed record XAdESTimestampContainerNotRfc3161OnlyViolation(XAdESTimestampContainerKind Kind, int Ordinal): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-04";
@@ -139,7 +135,7 @@ public sealed record XAdESTimestampContainerNotRfc3161OnlyViolation(XAdESTimesta
 /// </summary>
 /// <param name="Ordinal">The occurrence's position among <see cref="XAdESQualifyingPropertiesFacts.TimestampContainers"/>.</param>
 /// <param name="TokenCount">The occurrence's own <see cref="XAdESTimestampContainerMetadata.TokenCount"/>.</param>
-public sealed record XAdESSignatureTimeStampCardinalityViolation(int Ordinal, int TokenCount) : XAdESRuleViolation
+public sealed record XAdESSignatureTimeStampCardinalityViolation(int Ordinal, int TokenCount): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t24-n";
@@ -160,7 +156,7 @@ public sealed record XAdESSignatureTimeStampCardinalityViolation(int Ordinal, in
 /// every successful read, so "carries SigPolicyHash" collapses to "the explicit arm is present" — the leaf's
 /// <c>XAdESSignaturePolicyStoreLegality.IsSignaturePolicyStoreLegal</c> states the identical predicate).
 /// </summary>
-public sealed record XAdESSignaturePolicyStoreLegalityViolation : XAdESRuleViolation
+public sealed record XAdESSignaturePolicyStoreLegalityViolation: XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t23-m";
@@ -181,7 +177,7 @@ public sealed record XAdESSignaturePolicyStoreLegalityViolation : XAdESRuleViola
 /// object, or one targeting an excluded reference — the leaf's <c>XAdESDataObjectFormatCoverage.TryVerify</c>
 /// computes the bijection this fact records the outcome of).
 /// </summary>
-public sealed record XAdESDataObjectFormatCoverageViolation : XAdESRuleViolation
+public sealed record XAdESDataObjectFormatCoverageViolation: XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t08-k";
@@ -201,7 +197,7 @@ public sealed record XAdESDataObjectFormatCoverageViolation : XAdESRuleViolation
 /// <param name="Row">The violated row.</param>
 /// <param name="Level">The level the evaluation was run against.</param>
 /// <param name="IsMissing"><see langword="true"/> for the "shall be present but is absent" arm; <see langword="false"/> for the "shall not be present but is" arm.</param>
-public sealed record XAdESRowPresenceViolation(AdESTableRow Row, AdESBaselineLevel Level, bool IsMissing) : XAdESRuleViolation
+public sealed record XAdESRowPresenceViolation(AdESTableRow Row, AdESBaselineLevel Level, bool IsMissing): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Row.RequirementId;
@@ -218,7 +214,7 @@ public sealed record XAdESRowPresenceViolation(AdESTableRow Row, AdESBaselineLev
 /// <param name="Level">The level the evaluation was run against.</param>
 /// <param name="Expected">The cardinality Table 2 states for <paramref name="Row"/> at <paramref name="Level"/>.</param>
 /// <param name="ActualCount">The wire occurrence count actually observed.</param>
-public sealed record XAdESRowCardinalityViolation(AdESTableRow Row, AdESBaselineLevel Level, AdESCardinality Expected, int ActualCount) : XAdESRuleViolation
+public sealed record XAdESRowCardinalityViolation(AdESTableRow Row, AdESBaselineLevel Level, AdESCardinality Expected, int ActualCount): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Row.RequirementId;
@@ -237,7 +233,7 @@ public sealed record XAdESRowCardinalityViolation(AdESTableRow Row, AdESBaseline
 /// </summary>
 /// <param name="ServiceRow">The unsatisfied service row (<see cref="XAdESBaselineLevelTable.ValidationDataForTimestampsService"/>).</param>
 /// <param name="Level">The level the evaluation was run against.</param>
-public sealed record XAdESValidationDataServiceViolation(AdESTableRow ServiceRow, AdESBaselineLevel Level) : XAdESRuleViolation
+public sealed record XAdESValidationDataServiceViolation(AdESTableRow ServiceRow, AdESBaselineLevel Level): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => ServiceRow.RequirementId;
@@ -260,7 +256,7 @@ public sealed record XAdESValidationDataServiceViolation(AdESTableRow ServiceRow
 /// the entry being silently ignored.
 /// </summary>
 /// <param name="Name">The unrecognized element's local name, exact-character, or the unrecognized dictionary key.</param>
-public sealed record XAdESUnknownQualifyingPropertyPresentViolation(string Name) : XAdESRuleViolation
+public sealed record XAdESUnknownQualifyingPropertyPresentViolation(string Name): XAdESRuleViolation
 {
     /// <summary>
     /// Gets <c>XA-LIB-01</c>: Table 2 of ETSI EN 319 132-1 V1.3.1 clause 6.3 names no row for content this
@@ -284,7 +280,7 @@ public sealed record XAdESUnknownQualifyingPropertyPresentViolation(string Name)
 /// own remarks).
 /// </summary>
 /// <param name="Name">The deprecated element's local name, exact-character.</param>
-public sealed record XAdESDeprecatedQualifyingPropertyPresentViolation(string Name) : XAdESRuleViolation
+public sealed record XAdESDeprecatedQualifyingPropertyPresentViolation(string Name): XAdESRuleViolation
 {
     /// <summary>
     /// Gets <c>XA-LIB-02</c>. Unlike <see cref="XAdESUnknownQualifyingPropertyPresentViolation"/>'s disposition,
@@ -315,7 +311,7 @@ public sealed record XAdESDeprecatedQualifyingPropertyPresentViolation(string Na
 /// (the source's own grammar, honored verbatim).
 /// </summary>
 /// <param name="Row">The gated row.</param>
-public sealed record XAdESAttributeMaterialGateViolation(AdESTableRow Row) : XAdESRuleViolation
+public sealed record XAdESAttributeMaterialGateViolation(AdESTableRow Row): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Row.RequirementId;
@@ -333,7 +329,7 @@ public sealed record XAdESAttributeMaterialGateViolation(AdESTableRow Row) : XAd
 /// reference's stored digest — the certificate <c>ds:KeyInfo/X509Data/X509Certificate</c> carries is not the
 /// one <c>SigningCertificateV2</c> identifies as the signer's own.
 /// </summary>
-public sealed record XAdESSigningCertificateBindingViolation : XAdESRuleViolation
+public sealed record XAdESSigningCertificateBindingViolation: XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t01-a";
@@ -354,7 +350,7 @@ public sealed record XAdESSigningCertificateBindingViolation : XAdESRuleViolatio
 /// countersignature shall be the base-64 encoded digest of the complete (and canonicalized)
 /// <c>ds:SignatureValue</c> element ... of the embedding and countersigned XAdES signature."
 /// </summary>
-public sealed record XAdESCounterSignatureDigestViolation : XAdESRuleViolation
+public sealed record XAdESCounterSignatureDigestViolation: XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-5.2.7.2";
@@ -374,7 +370,7 @@ public sealed record XAdESCounterSignatureDigestViolation : XAdESRuleViolation
 /// <param name="Ordinal">The token's position among the signature's own <c>SignatureTimeStamp</c>-classed tokens.</param>
 /// <param name="GenerationTime">The token's own <c>genTime</c>.</param>
 /// <param name="NotAfter">The signing certificate's <c>notAfter</c> instant.</param>
-public sealed record XAdESSignatureTimeStampCertificateValidityViolation(int Ordinal, DateTimeOffset GenerationTime, DateTimeOffset NotAfter) : XAdESRuleViolation
+public sealed record XAdESSignatureTimeStampCertificateValidityViolation(int Ordinal, DateTimeOffset GenerationTime, DateTimeOffset NotAfter): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t24-o";
@@ -396,7 +392,7 @@ public sealed record XAdESSignatureTimeStampCertificateValidityViolation(int Ord
 /// <param name="Ordinal">The token's position among the signature's own <c>SignatureTimeStamp</c>-classed tokens.</param>
 /// <param name="GenerationTime">The token's own <c>genTime</c>.</param>
 /// <param name="RevokedAt">The caller-supplied revocation instant.</param>
-public sealed record XAdESSignatureTimeStampCertificateRevokedViolation(int Ordinal, DateTimeOffset GenerationTime, DateTimeOffset RevokedAt) : XAdESRuleViolation
+public sealed record XAdESSignatureTimeStampCertificateRevokedViolation(int Ordinal, DateTimeOffset GenerationTime, DateTimeOffset RevokedAt): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t24-o";
@@ -440,7 +436,7 @@ public abstract record XAdESRuleObservation
 /// </summary>
 /// <param name="FirstIndex">The first duplicate's position in <see cref="XAdESQualifyingPropertiesFacts.EmbeddedCertificates"/>.</param>
 /// <param name="SecondIndex">The second duplicate's position.</param>
-public sealed record XAdESCertificateValueDuplicationObservation(int FirstIndex, int SecondIndex) : XAdESRuleObservation
+public sealed record XAdESCertificateValueDuplicationObservation(int FirstIndex, int SecondIndex): XAdESRuleObservation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t25-q";
@@ -463,7 +459,7 @@ public sealed record XAdESCertificateValueDuplicationObservation(int FirstIndex,
 /// <see langword="true"/> when the duplicate lies in <see cref="XAdESQualifyingPropertiesFacts.EmbeddedCertificateRevocationLists"/>;
 /// <see langword="false"/> when it lies in <see cref="XAdESQualifyingPropertiesFacts.EmbeddedOcspResponses"/>.
 /// </param>
-public sealed record XAdESRevocationValueDuplicationObservation(int FirstIndex, int SecondIndex, bool IsCrl) : XAdESRuleObservation
+public sealed record XAdESRevocationValueDuplicationObservation(int FirstIndex, int SecondIndex, bool IsCrl): XAdESRuleObservation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t32-v";
@@ -525,7 +521,7 @@ public enum XAdESReferenceMaterialKind
 /// <param name="MaterialKind">Which kind of material the entry names.</param>
 [DebuggerDisplay("XAdESReferencesValidationDataConsistencyViolation: {Surface}/{MaterialKind}")]
 public sealed record XAdESReferencesValidationDataConsistencyViolation(
-    XAdESRefsFamilyDigestSurface Surface, XAdESReferenceMaterialKind MaterialKind) : XAdESRuleViolation
+    XAdESRefsFamilyDigestSurface Surface, XAdESReferenceMaterialKind MaterialKind): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Surface switch
@@ -553,7 +549,7 @@ public sealed record XAdESReferencesValidationDataConsistencyViolation(
 /// </summary>
 /// <param name="Surface">Which <c>refs</c>-family property carried the disagreeing entry.</param>
 /// <param name="Ordinal">The entry's position among the surface's own <c>OCSPRef</c> entries.</param>
-public sealed record XAdESOcspProducedAtConsistencyViolation(XAdESRefsFamilyDigestSurface Surface, int Ordinal) : XAdESRuleViolation
+public sealed record XAdESOcspProducedAtConsistencyViolation(XAdESRefsFamilyDigestSurface Surface, int Ordinal): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Surface == XAdESRefsFamilyDigestSurface.CompleteRevocationRefs ? "XA-A.1.2" : "XA-A.1.4";
@@ -571,7 +567,7 @@ public sealed record XAdESOcspProducedAtConsistencyViolation(XAdESRefsFamilyDige
 /// <c>SigPolicyHash</c>'s own declared algorithm, does not match the signed <c>SigPolicyHash</c> value
 /// (<see cref="XAdESLevelRules.CheckSignaturePolicyDocumentDigestAsync"/>).
 /// </summary>
-public sealed record XAdESSignaturePolicyDocumentDigestViolation : XAdESRuleViolation
+public sealed record XAdESSignaturePolicyDocumentDigestViolation: XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-5.2.9-NOTE3";
@@ -589,7 +585,7 @@ public sealed record XAdESSignaturePolicyDocumentDigestViolation : XAdESRuleViol
 /// signature's signed <c>ds:Manifest</c>(s) (<see cref="XAdESLevelRules.CheckRenewedDigestsV2ReferenceLookupAsync"/>).
 /// </summary>
 /// <param name="Ordinal">The entry's position among the property's own <c>RecomputedDigestValue</c> entries.</param>
-public sealed record XAdESRenewedDigestsV2ReferenceUnresolvedViolation(int Ordinal) : XAdESRuleViolation
+public sealed record XAdESRenewedDigestsV2ReferenceUnresolvedViolation(int Ordinal): XAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-5.5.3-13";
@@ -611,7 +607,7 @@ public sealed record XAdESRenewedDigestsV2ReferenceUnresolvedViolation(int Ordin
 /// never a <see cref="XAdESRuleViolation"/> — mirrors the CB-AdES precedent's
 /// <c>AdESTableRow.PreferredServiceProvisionOptionRequirementId(s)</c> hook.
 /// </summary>
-public sealed record XAdESValidationDataServicePreferenceObservation : XAdESRuleObservation
+public sealed record XAdESValidationDataServicePreferenceObservation: XAdESRuleObservation
 {
     /// <inheritdoc/>
     public override string RequirementId => "XA-6.3-t40-y";
@@ -772,7 +768,7 @@ public static class XAdESLevelRules
         IReadOnlyList<AdESTableRow> rows = XAdESBaselineLevelTable.Rows;
         for(int i = 0; i < rows.Count; ++i)
         {
-            names.Add(rows[i].Name);
+            _ = names.Add(rows[i].Name);
         }
 
         return names;
@@ -827,6 +823,16 @@ public static class XAdESLevelRules
                 case AdESTableRowKind.Service:
                     CheckService(row, facts, level, context.AnyTimestampTokenCarriesEmbeddedValidationMaterial, violations);
                     continue;
+
+                //These kinds are evaluated by the occurrence-count check below, like every row the switch
+                //does not otherwise divert.
+                case AdESTableRowKind.HeaderParameter:
+                case AdESTableRowKind.Component:
+                case AdESTableRowKind.SignatureDictionaryField:
+                case AdESTableRowKind.CmsAttribute:
+                case AdESTableRowKind.QualifyingProperty:
+                default:
+                    break;
             }
 
             if(DataObjectFormatChildRequirementIds.Contains(row.RequirementId))
@@ -1491,7 +1497,7 @@ public static class XAdESLevelRules
 
                 //First-match-wins mirrors the unmemoized loop's own linear-scan semantics: a digest collision
                 //across candidates keeps resolving to the earliest one.
-                digestToIndex.TryAdd(Convert.ToHexStringLower(candidateDigest.AsReadOnlySpan()), i);
+                _ = digestToIndex.TryAdd(Convert.ToHexStringLower(candidateDigest.AsReadOnlySpan()), i);
             }
 
             return digestToIndex;

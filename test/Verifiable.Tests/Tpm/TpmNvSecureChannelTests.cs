@@ -1,12 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -15,12 +13,6 @@ using Verifiable.Tpm.Extensions.Pin;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -113,7 +105,7 @@ internal sealed class TpmNvSecureChannelTests
         Assert.AreEqual(PinLimit, verifyResult.Value.PinLimit, "pinLimit must be left unchanged by a successful verify.");
 
         Assert.IsNotNull(nvReadCommand, "The capturing wrapper must have observed the NV_Read command.");
-        uint sessionHandle = ReadFirstSessionHandleAfterHandleCount(nvReadCommand!, handleCount: 2);
+        uint sessionHandle = ReadFirstSessionHandleAfterHandleCount(nvReadCommand, handleCount: 2);
         Assert.AreNotEqual((uint)TpmRh.TPM_RH_PW, sessionHandle, "VerifyPinAsync's default must never send a TPM_RS_PW password session.");
     }
 
@@ -606,7 +598,7 @@ internal sealed class TpmNvSecureChannelTests
 
         Assert.IsNotNull(defineCommand, "The capturing wrapper must have observed the NV_DefineSpace command.");
         Assert.IsFalse(
-            ContainsSubsequence(defineCommand!, CorrectPinHash),
+            ContainsSubsequence(defineCommand, CorrectPinHash),
             "The default define encrypts the auth parameter, so the stored PIN form must never appear as a contiguous byte sequence in the NV_DefineSpace command.");
     }
 
@@ -642,7 +634,7 @@ internal sealed class TpmNvSecureChannelTests
 
         Assert.IsNotNull(defineCommand, "The capturing wrapper must have observed the NV_DefineSpace command.");
         Assert.IsTrue(
-            ContainsSubsequence(defineCommand!, CorrectPinHash),
+            ContainsSubsequence(defineCommand, CorrectPinHash),
             "The password opt-out sends the stored PIN form as a plaintext auth parameter with no encryption path - documenting the opt-out's cost.");
     }
 
@@ -1024,11 +1016,11 @@ internal sealed class TpmNvSecureChannelTests
     /// <returns>The matching command and response bytes.</returns>
     private static (byte[] Command, byte[] Response) FirstPair(List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, TpmCcConstants code)
     {
-        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) pair in pairs)
+        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) in pairs)
         {
-            if(pair.Code == code)
+            if(Code == code)
             {
-                return (pair.Command, pair.Response);
+                return (Command, Response);
             }
         }
 

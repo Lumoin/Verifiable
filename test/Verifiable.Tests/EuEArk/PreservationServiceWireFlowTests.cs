@@ -1,14 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Assessment.EArchiving;
 using Verifiable.Cryptography;
@@ -1010,8 +1005,8 @@ internal sealed class PreservationServiceWireFlowTests
             PreservationMessageKind responseKind,
             PreservationSyntax syntax,
             CancellationToken cancellationToken)
-            where TRequest: PreservationRequest
-            where TResponse: PreservationResponse
+            where TRequest : PreservationRequest
+            where TResponse : PreservationResponse
         {
             using PreservationMessageEncodeResult encoded = await PreservationMessageXmlJsonBinding.EncodeAsync(
                 new PreservationMessageEncodeContext { Message = request, Syntax = syntax },

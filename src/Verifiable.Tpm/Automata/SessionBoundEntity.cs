@@ -1,8 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
-using Verifiable.Tpm.Spec;
 
 namespace Verifiable.Tpm.Automata;
 
@@ -70,7 +68,7 @@ public sealed class SessionBoundEntity: SensitiveMemory
     /// instance.
     /// </summary>
     /// <param name="storage">The memory owner holding the folded bind value.</param>
-    private SessionBoundEntity(IMemoryOwner<byte> storage): base(storage, TpmTags.BoundEntity)
+    private SessionBoundEntity(IMemoryOwner<byte> storage) : base(storage, TpmTags.BoundEntity)
     {
     }
 

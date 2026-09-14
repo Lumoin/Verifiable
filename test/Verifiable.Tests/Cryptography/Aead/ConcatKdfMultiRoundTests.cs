@@ -120,7 +120,7 @@ internal sealed class ConcatKdfMultiRoundTests
     {
         byte[] z = Convert.FromHexString(AppendixCZ);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
         {
             using ContentEncryptionKey _ = ConcatKdf.Derive(
                 z,

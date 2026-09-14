@@ -1,11 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -235,14 +232,14 @@ internal sealed class CAdESOptionalAttributesTests
     {
         using PkiCertificateMemory certificate = MintP256Certificate();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, null, PkiDigestAlgorithm.Sha256, SigningTime, null, null, BaseMemoryPool.Shared,
                 TestContext.CancellationToken, new CAdESOptionalSignedAttributes { SignerLocation = new CAdESSignerLocation() }).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, null, PkiDigestAlgorithm.Sha256, SigningTime, null, null, BaseMemoryPool.Shared,
@@ -365,7 +362,7 @@ internal sealed class CAdESOptionalAttributesTests
     {
         using PkiCertificateMemory certificate = MintP256Certificate();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, null, PkiDigestAlgorithm.Sha256, SigningTime, null, null, BaseMemoryPool.Shared,
@@ -507,9 +504,9 @@ internal sealed class CAdESOptionalAttributesTests
         using DigestValue tlvImprint = AtsHashIndexV3Oracle.Hash(tlvWriter.Encode(), PkiDigestAlgorithm.Sha256);
 
         Assert.IsNotNull(info.MessageImprint, "A content-time-stamp token this surface acquired states a message imprint.");
-        Assert.AreSequenceEqual(rawImprint.AsReadOnlySpan().ToArray(), info.MessageImprint!.AsReadOnlySpan().ToArray(),
+        Assert.AreSequenceEqual(rawImprint.AsReadOnlySpan().ToArray(), info.MessageImprint.AsReadOnlySpan().ToArray(),
             "Clause 5.2.8: the imprint is the raw hash of the content, without ASN.1 tag and length.");
-        Assert.IsFalse(tlvImprint.AsReadOnlySpan().SequenceEqual(info.MessageImprint!.AsReadOnlySpan()),
+        Assert.IsFalse(tlvImprint.AsReadOnlySpan().SequenceEqual(info.MessageImprint.AsReadOnlySpan()),
             "The imprint is not the hash of the content wrapped as a TLV — that convention belongs to clause 5.5.3, not 5.2.8.");
 
         await AssertEngineAcceptsAsync(signedData).ConfigureAwait(false);
@@ -773,7 +770,7 @@ internal sealed class CAdESOptionalAttributesTests
         using CmsSignedData baseline = await SignBaselineAsync(scenario).ConfigureAwait(false);
         var responder = new MintingTimestampResponder(scenario.Authority, [scenario.Authority], SigningTime.AddMinutes(1));
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             using CmsSignedData _ = await CAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CAdESSignatureTimestampContext
@@ -962,7 +959,7 @@ internal sealed class CAdESOptionalAttributesTests
         Assert.IsTrue(verified.TryGetSignedAttribute(attributeType, out CmsSignedAttribute? attribute),
             $"The independent BouncyCastle reader must recover the '{attributeType}' signed attribute.");
 
-        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(attribute!.Length);
+        IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(attribute.Length);
         attribute.AsReadOnlySpan().CopyTo(owner.Memory.Span);
 
         return new CmsSignedAttribute(attributeType, owner);

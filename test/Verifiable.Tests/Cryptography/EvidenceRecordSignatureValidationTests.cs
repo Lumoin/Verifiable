@@ -1,12 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -105,7 +100,7 @@ internal sealed class EvidenceRecordSignatureValidationTests
         Assert.AreEqual(SignatureValidationIndication.Indeterminate, withoutRecord.Conclusion.Indication,
             "Step 7) of clause 5.2.6.4: a signing certificate outside its validity range at the validation time, with nothing proving when the signature existed, is INDETERMINATE.");
         Assert.IsNotNull(withoutRecord.LongTermValidation, "The process of clause 5.6.3 ran.");
-        Assert.IsEmpty(withoutRecord.LongTermValidation!.EvidenceRecordValidations,
+        Assert.IsEmpty(withoutRecord.LongTermValidation.EvidenceRecordValidations,
             "A run given no Evidence Record has nothing for step 1) to do, and reports exactly that.");
         Assert.IsFalse(withoutRecord.LongTermValidation.HasLongTermAvailabilityAttributes,
             "The signature carries no archive time-stamp attribute and no record accompanies it, so step 3)'s early return applies.");
@@ -117,7 +112,7 @@ internal sealed class EvidenceRecordSignatureValidationTests
         Assert.AreEqual(SignatureValidationIndication.TotalPassed, withRecord.Conclusion.Indication,
             $"Step 1) of clause 5.6.3.4: the record's proof of existence at a time the certificate was valid is what clause 5.6.2.4 step 3) needs to settle an out-of-bounds status. Sub-indications: {string.Join(", ", withRecord.Conclusion.SubIndications.Select(s => s.Value))}.");
         Assert.IsNotNull(withRecord.LongTermValidation, "The process of clause 5.6.3 ran.");
-        Assert.IsTrue(withRecord.LongTermValidation!.HasLongTermAvailabilityAttributes,
+        Assert.IsTrue(withRecord.LongTermValidation.HasLongTermAvailabilityAttributes,
             "An Evidence Record IS material for long term availability (EN 319 162-1 clause 4.4.5 item 2), so step 3)'s early return does not apply.");
         Assert.AreEqual(ArchiveTime, withRecord.LongTermValidation.BestSignatureTime,
             "Step 6): best-signature-time is the earliest instant the accumulated proofs prove the signature value existed at, which is the record's initial Archive Timestamp.");
@@ -193,7 +188,7 @@ internal sealed class EvidenceRecordSignatureValidationTests
         Assert.Contains(signedContent.Representation, provisioning.CoveredObjects.ToList(),
             "Clause 5.6.2.3 step 5): a proof for the Signed Data Object is a proof for each object it contains, the signed content among them.");
         Assert.IsNotNull(signedContent.ProofOfExistence, "Clause 4.4.6: the covered object carries the proof the record established for it.");
-        Assert.AreEqual(ProofOfExistenceOrigin.EvidenceRecord, signedContent.ProofOfExistence!.Origin,
+        Assert.AreEqual(ProofOfExistenceOrigin.EvidenceRecord, signedContent.ProofOfExistence.Origin,
             "The proof is attributed to the evidence record that established it, not to the process itself.");
     }
 
@@ -796,7 +791,7 @@ internal sealed class EvidenceRecordSignatureValidationTests
         /// <typeparam name="T">The carrier's type.</typeparam>
         /// <param name="carrier">The carrier.</param>
         /// <returns>The same carrier.</returns>
-        private T Own<T>(T carrier) where T: IDisposable
+        private T Own<T>(T carrier) where T : IDisposable
         {
             Owned.Add(carrier);
 

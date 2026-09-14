@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Foundation.Automata;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Did;
+using Verifiable.Foundation.Automata;
 
 namespace Verifiable.Core.Resolvers;
 
@@ -18,33 +14,33 @@ public abstract record RegistrationFlowState;
 /// </summary>
 /// <param name="Method">The DID method name.</param>
 /// <param name="Document">The initial DID document, if provided.</param>
-public sealed record RegistrationInitiated(string Method, DidDocument? Document) : RegistrationFlowState;
+public sealed record RegistrationInitiated(string Method, DidDocument? Document): RegistrationFlowState;
 
 /// <summary>
 /// The registrar requires the client to sign a payload before continuing.
 /// </summary>
 /// <param name="Request">The signing request to present to the client.</param>
 /// <param name="PendingState">The state to resume with once the signature is provided.</param>
-public sealed record AwaitingSignature(SigningRequest Request, RegistrationFlowState PendingState) : RegistrationFlowState;
+public sealed record AwaitingSignature(SigningRequest Request, RegistrationFlowState PendingState): RegistrationFlowState;
 
 /// <summary>
 /// The registrar is waiting for an asynchronous backend operation to complete.
 /// </summary>
 /// <param name="JobId">The job identifier for polling.</param>
-public sealed record AwaitingConfirmation(string JobId) : RegistrationFlowState;
+public sealed record AwaitingConfirmation(string JobId): RegistrationFlowState;
 
 /// <summary>
 /// The registration completed successfully.
 /// </summary>
 /// <param name="Did">The created/updated DID.</param>
 /// <param name="Document">The resulting DID document.</param>
-public sealed record RegistrationCompleted(string Did, DidDocument? Document) : RegistrationFlowState;
+public sealed record RegistrationCompleted(string Did, DidDocument? Document): RegistrationFlowState;
 
 /// <summary>
 /// The registration failed.
 /// </summary>
 /// <param name="Error">The error description.</param>
-public sealed record RegistrationFailed(string Error) : RegistrationFlowState;
+public sealed record RegistrationFailed(string Error): RegistrationFlowState;
 
 /// <summary>
 /// PDA inputs for a DID registration flow.
@@ -77,7 +73,7 @@ public sealed record BeginCreate(
     string Method,
     DidDocument? Document,
     IReadOnlyList<KeyMaterialInput>? Keys = null,
-    IReadOnlyDictionary<string, object?>? Options = null) : RegistrationInput;
+    IReadOnlyDictionary<string, object?>? Options = null): RegistrationInput;
 
 /// <summary>
 /// Begin an update operation. Maps to the DIF
@@ -101,32 +97,32 @@ public sealed record BeginCreate(
 public sealed record BeginUpdate(
     string Did,
     IReadOnlyList<DidDocumentOperationStep> Operations,
-    DidDocument? CurrentDocument = null) : RegistrationInput;
+    DidDocument? CurrentDocument = null): RegistrationInput;
 
 /// <summary>
 /// Begin a deactivate operation.
 /// </summary>
 /// <param name="Did">The DID to deactivate.</param>
-public sealed record BeginDeactivate(string Did) : RegistrationInput;
+public sealed record BeginDeactivate(string Did): RegistrationInput;
 
 /// <summary>
 /// The client provides a signing response after an <see cref="AwaitingSignature"/> state.
 /// </summary>
 /// <param name="Response">The signing response from the client.</param>
-public sealed record ProvideSignature(SigningResponse Response) : RegistrationInput;
+public sealed record ProvideSignature(SigningResponse Response): RegistrationInput;
 
 /// <summary>
 /// The backend confirms that an asynchronous operation completed.
 /// </summary>
 /// <param name="Did">The resulting DID.</param>
 /// <param name="Document">The resulting DID document.</param>
-public sealed record ConfirmCompletion(string Did, DidDocument? Document) : RegistrationInput;
+public sealed record ConfirmCompletion(string Did, DidDocument? Document): RegistrationInput;
 
 /// <summary>
 /// An error occurred during the registration flow.
 /// </summary>
 /// <param name="Error">The error description.</param>
-public sealed record RegistrationError(string Error) : RegistrationInput;
+public sealed record RegistrationError(string Error): RegistrationInput;
 
 /// <summary>
 /// Provides the transition function and factory methods for creating DID registration
@@ -188,7 +184,7 @@ public static class DidRegistrationTransitions
         {
             //Begin operations: delegate to the method handler.
             (RegistrationInitiated or null, BeginCreate or BeginUpdate or BeginDeactivate) =>
-                await HandleMethodOperation(state, input, methodHandler, cancellationToken).ConfigureAwait(false),
+                await HandleMethodOperation(input, methodHandler, cancellationToken).ConfigureAwait(false),
 
             //Client provides a signature: pop the signing frame and delegate to handler.
             (AwaitingSignature awaiting, ProvideSignature sig) when stackTop == SigningFrame =>
@@ -216,7 +212,6 @@ public static class DidRegistrationTransitions
     }
 
     private static async ValueTask<TransitionResult<RegistrationFlowState, string>?> HandleMethodOperation(
-        RegistrationFlowState? currentState,
         RegistrationInput input,
         Func<RegistrationFlowState, RegistrationInput, CancellationToken, ValueTask<RegistrationFlowState>> methodHandler,
         CancellationToken cancellationToken)

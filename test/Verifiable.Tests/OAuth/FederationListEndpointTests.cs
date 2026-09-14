@@ -3,7 +3,6 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
@@ -82,7 +81,7 @@ internal sealed class FederationListEndpointTests
         //sees an empty filter list.
         Assert.IsTrue(filterObserved, "The list delegate must be invoked.");
         Assert.IsNotNull(observedFilters);
-        Assert.IsEmpty(observedFilters!,
+        Assert.IsEmpty(observedFilters,
             "An unfiltered request must pass an empty entity_type filter list to the delegate.");
 
         List<string> ids = ParseStringArray(body);
@@ -146,11 +145,11 @@ internal sealed class FederationListEndpointTests
 
         Assert.IsNotNull(observedFilters,
             "The entity_type query parameter must reach the delegate as a parsed filter.");
-        Assert.HasCount(1, observedFilters!,
+        Assert.HasCount(1, observedFilters,
             "A single entity_type maps to a one-element filter list.");
         Assert.AreEqual(
             WellKnownEntityTypeIdentifiers.OpenIdRelyingParty.Value,
-            observedFilters![0].Value,
+            observedFilters[0].Value,
             "The parsed filter must carry the wire entity_type value.");
 
         List<string> ids = ParseStringArray(body);
@@ -240,10 +239,10 @@ internal sealed class FederationListEndpointTests
             .ConfigureAwait(false);
 
         Assert.IsNotNull(observedFilters);
-        Assert.HasCount(2, observedFilters!,
+        Assert.HasCount(2, observedFilters,
             "Both repeated entity_type values must reach the delegate, not just one.");
-        Assert.Contains(WellKnownEntityTypeIdentifiers.OpenIdRelyingParty, observedFilters!);
-        Assert.Contains(WellKnownEntityTypeIdentifiers.OpenIdProvider, observedFilters!);
+        Assert.Contains(WellKnownEntityTypeIdentifiers.OpenIdRelyingParty, observedFilters);
+        Assert.Contains(WellKnownEntityTypeIdentifiers.OpenIdProvider, observedFilters);
 
         List<string> ids = ParseStringArray(body);
         Assert.HasCount(2, ids, "The union of the requested types is returned.");

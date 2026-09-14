@@ -1,6 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 
@@ -88,7 +86,7 @@ internal sealed class Fido2AssertionOptionsBuilderTests
         PublicKeyCredentialRequestOptions options = await builder.BuildAsync(rpId: "example.com", pool: BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken);
 
         Assert.IsNotNull(options.AllowCredentials);
-        Assert.IsEmpty(options.AllowCredentials!);
+        Assert.IsEmpty(options.AllowCredentials);
     }
 
 

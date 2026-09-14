@@ -1,9 +1,9 @@
-using System.Diagnostics.CodeAnalysis;
 using CsCheck;
+using Microsoft.Extensions.Time.Testing;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 

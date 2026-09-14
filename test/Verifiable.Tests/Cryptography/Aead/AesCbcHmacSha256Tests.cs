@@ -77,7 +77,7 @@ internal sealed class AesCbcHmacSha256Tests
         tamperedTag[0] ^= 0x01;
         using AuthenticationTag tag = TagFromBytes(tamperedTag);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using DecryptedContent _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha256DecryptAsync(
                 ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -99,7 +99,7 @@ internal sealed class AesCbcHmacSha256Tests
         tamperedCiphertext.CopyTo(owner.Memory.Span);
         using Ciphertext ciphertext = new(owner, CryptoTags.AesCbcHmacCiphertext);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using DecryptedContent _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha256DecryptAsync(
                 ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -119,7 +119,7 @@ internal sealed class AesCbcHmacSha256Tests
         tamperedAad[0] ^= 0x01;
         using AdditionalData aad = AadFromBytes(tamperedAad);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using DecryptedContent _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha256DecryptAsync(
                 ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -168,7 +168,7 @@ internal sealed class AesCbcHmacSha256Tests
         CryptographicOperations.ZeroMemory(keyBytes);
         using AdditionalData aad = AadFromHex(VectorAad);
 
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
         {
             using AeadEncryptResult _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha256EncryptAsync(
                 new byte[16], wrongLengthKey, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);

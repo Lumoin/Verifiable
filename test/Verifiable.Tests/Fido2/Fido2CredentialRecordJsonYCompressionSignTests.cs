@@ -1,8 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;

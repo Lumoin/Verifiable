@@ -1,5 +1,4 @@
 using System.Buffers.Text;
-using System.Collections.Generic;
 using Verifiable.Core.StatusList;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
@@ -80,13 +79,13 @@ internal sealed class StatusListTokenClaimsTests
         Assert.AreEqual(BaseTime.ToUnixTimeSeconds(), payload["iat"], "'iat' must carry the issuance time as a NumericDate.");
         Assert.AreEqual(BaseTime.AddHours(1).ToUnixTimeSeconds(), payload["exp"], "'exp' must carry the expiry time as a NumericDate.");
         Assert.AreEqual(43200L, payload["ttl"], "'ttl' must carry the cache lifetime in seconds.");
-        Assert.IsInstanceOfType<long>(payload["iat"], "'iat' must be a whole number, not text.");
-        Assert.IsInstanceOfType<long>(payload["exp"], "'exp' must be a whole number, not text.");
-        Assert.IsInstanceOfType<long>(payload["ttl"], "'ttl' must be a number, not text.");
+        _ = Assert.IsInstanceOfType<long>(payload["iat"], "'iat' must be a whole number, not text.");
+        _ = Assert.IsInstanceOfType<long>(payload["exp"], "'exp' must be a whole number, not text.");
+        _ = Assert.IsInstanceOfType<long>(payload["ttl"], "'ttl' must be a number, not text.");
 
         var statusListClaim = (IReadOnlyDictionary<string, object>)payload["status_list"];
         Assert.AreEqual(2L, statusListClaim["bits"], "'bits' must carry the number of bits per Referenced Token.");
-        Assert.IsInstanceOfType<long>(statusListClaim["bits"], "'bits' is a JSON Integer, not text.");
+        _ = Assert.IsInstanceOfType<long>(statusListClaim["bits"], "'bits' is a JSON Integer, not text.");
         Assert.AreEqual(Base64Url.EncodeToString(list.Compress()), statusListClaim["lst"], "'lst' MUST be the base64url-encoded compressed byte array.");
     }
 
@@ -642,7 +641,7 @@ internal sealed class StatusListTokenClaimsTests
     {
         if(shape == "empty-claims-set")
         {
-            return new JwtPayload();
+            return [];
         }
 
         JwtPayload payload = HandBuiltClaimsSet();

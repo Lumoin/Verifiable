@@ -1,8 +1,5 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -177,7 +174,7 @@ public static class PAdESSignatureFacts
         int consumed;
         try
         {
-            AsnDecoder.ReadEncodedValue(padded, AsnEncodingRules.DER, out _, out _, out consumed);
+            _ = AsnDecoder.ReadEncodedValue(padded, AsnEncodingRules.DER, out _, out _, out consumed);
         }
         catch(AsnContentException)
         {

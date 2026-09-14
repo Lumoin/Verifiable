@@ -100,7 +100,7 @@ public readonly struct EntityIdentifier: IEquatable<EntityIdentifier>
     public static bool TryCreate(string? value, out EntityIdentifier identifier)
     {
         identifier = default;
-        if(!IsWellFormedEntityIdentifier(value, out Uri? uri))
+        if(!IsWellFormedEntityIdentifier(value, out _))
         {
             return false;
         }

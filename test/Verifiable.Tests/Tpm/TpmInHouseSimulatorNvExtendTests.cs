@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -15,11 +12,6 @@ using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -167,7 +159,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadIndexAsync(device, pool, registry, ExtendIndexHandle, CorrectAuth, Sha256DigestSize).ConfigureAwait(false);
 
@@ -189,7 +181,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         byte[] data = RandomNumberGenerator.GetBytes(Sha256DigestSize);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
@@ -212,7 +204,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         byte[] first = RandomNumberGenerator.GetBytes(Sha256DigestSize);
         byte[] second = RandomNumberGenerator.GetBytes(Sha256DigestSize);
 
@@ -242,7 +234,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
             device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -264,7 +256,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
             device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -287,7 +279,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         byte[] data = RandomNumberGenerator.GetBytes(Tpm2bMaxNvBuffer.MaxSize);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
@@ -313,7 +305,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
@@ -350,7 +342,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(
+        _ = await DefineIndexAsync(
             device, pool, registry, Sha384ExtendIndexHandle, ExtendAttributes, Sha384DigestSize, TpmAlgIdConstants.TPM_ALG_SHA384).ConfigureAwait(false);
         byte[] data = RandomNumberGenerator.GetBytes(Sha384DigestSize);
 
@@ -419,7 +411,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, ExtendIndexHandle, ReadOnlyMemory<byte>.Empty, FiveOctets).ConfigureAwait(false);
@@ -442,7 +434,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutOwnerWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutOwnerWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> correctResult = await ExtendAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, ExtendIndexHandle, ReadOnlyMemory<byte>.Empty, FiveOctets).ConfigureAwait(false);
@@ -466,7 +458,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
@@ -490,7 +482,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
             device, pool, registry, MismatchedAuthHandle, ExtendIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -513,7 +505,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutAuthWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutAuthWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> correctResult = await ExtendAsync(
             device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -538,7 +530,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
@@ -561,7 +553,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, NonDaExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, NonDaExtendAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendAsync(
@@ -592,7 +584,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -632,7 +624,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> correctResult = await ExtendAsync(
             device, pool, registry, OrdinaryIndexHandle, OrdinaryIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -657,7 +649,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes, CounterDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes, CounterDataSize).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> correctResult = await ExtendAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -682,7 +674,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> result = await WriteIndexAuthValueAsync(
             device, pool, registry, ExtendIndexHandle, CorrectAuth, RejectedWriteAttempt).ConfigureAwait(false);
@@ -705,7 +697,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         using TpmPasswordSession session = TpmPasswordSession.Create(CorrectAuth, pool);
         var incrementInput = new NvIncrementInput(ExtendIndexHandle, ExtendIndexHandle);
@@ -729,7 +721,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         byte[] nameBefore = await ReadIndexNameAsync(device, ExtendIndexHandle).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> firstResult = await ExtendAsync(
@@ -762,7 +754,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ClearStclearExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ClearStclearExtendAttributes).ConfigureAwait(false);
         byte[] first = RandomNumberGenerator.GetBytes(Sha256DigestSize);
         byte[] second = RandomNumberGenerator.GetBytes(Sha256DigestSize);
 
@@ -799,7 +791,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         byte[] data = RandomNumberGenerator.GetBytes(Sha256DigestSize);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
@@ -823,7 +815,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, ExtendIndexHandle, ReadOnlyMemory<byte>.Empty, FiveOctets).ConfigureAwait(false);
@@ -846,7 +838,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
@@ -871,7 +863,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
             device, pool, registry, MismatchedAuthHandle, ExtendIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -892,7 +884,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutOwnerWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutOwnerWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, ExtendIndexHandle, ReadOnlyMemory<byte>.Empty, FiveOctets).ConfigureAwait(false);
@@ -914,7 +906,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutAuthWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendWithoutAuthWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
             device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -942,7 +934,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -970,7 +962,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, NonDaExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, NonDaExtendAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> result = await ExtendOverHmacAsync(
@@ -999,7 +991,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         TpmResponseRegistry registry = CreateNvRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetSessionAuditDigest, TpmResponseCodec.GetSessionAuditDigest);
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         (byte[] response, uint sessionHandle, byte[] cpHash) = await ExtendOverHmacHandFramedForAuditAsync(
             device, pool, registry, ExtendIndexHandle, CorrectAuth, FiveOctets).ConfigureAwait(false);
@@ -1097,7 +1089,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(
+        _ = await DefineIndexAsync(
             device, pool, registry, Sha512ExtendIndexHandle, ExtendAttributes, Sha512DigestSize, TpmAlgIdConstants.TPM_ALG_SHA512).ConfigureAwait(false);
         byte[] data = RandomNumberGenerator.GetBytes(Sha512DigestSize);
 
@@ -1125,7 +1117,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, OrderlyExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, OrderlyExtendAttributes).ConfigureAwait(false);
         byte[] first = RandomNumberGenerator.GetBytes(Sha256DigestSize);
         byte[] second = RandomNumberGenerator.GetBytes(Sha256DigestSize);
 
@@ -1162,8 +1154,8 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
@@ -1198,7 +1190,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         ReadOnlyMemory<byte> indexName = await ReadIndexNameAsync(device, ExtendIndexHandle).ConfigureAwait(false);
         ReadOnlyMemory<byte>[] handleNames = [indexName, indexName];
 
@@ -1257,7 +1249,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawDecryptCode = await ExtendOverHmacHandFramedAsync(
             device, pool, registry, ExtendIndexHandle, CorrectAuth, FiveOctets, TpmaSession.DECRYPT).ConfigureAwait(false);
@@ -1284,7 +1276,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawEncryptCode = await ExtendOverHmacHandFramedAsync(
             device, pool, registry, ExtendIndexHandle, CorrectAuth, FiveOctets, TpmaSession.ENCRYPT).ConfigureAwait(false);
@@ -1312,9 +1304,9 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await ExtendOverHmacAsync(
                 device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, FiveOctets, TpmaSession.DECRYPT).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1333,9 +1325,9 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await ExtendOverHmacAsync(
                 device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, FiveOctets, TpmaSession.ENCRYPT).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1355,7 +1347,7 @@ internal sealed class TpmInHouseSimulatorNvExtendTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateSaltedSessionRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes).ConfigureAwait(false);
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
         uint tpmKeyHandle = tpmKey.ObjectHandle.Value;
 

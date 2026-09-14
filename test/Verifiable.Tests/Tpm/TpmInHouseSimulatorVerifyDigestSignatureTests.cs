@@ -1,19 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -339,7 +332,7 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
         Assert.HasCount(P256ComponentSize, verified.Validation.Hmac, "The verified ticket HMAC is a SHA-256 HMAC.");
         Assert.IsTrue(verified.Validation.Metadata.HasValue, "A TPM_ST_DIGEST_VERIFIED ticket must carry metadata (Table 111's digestVerified arm).");
         Assert.AreEqual(
-            TpmAlgIdConstants.TPM_ALG_SHA256, verified.Validation.Metadata!.Value.Value,
+            TpmAlgIdConstants.TPM_ALG_SHA256, verified.Validation.Metadata.Value.Value,
             "The ticket metadata must be the verified scheme's hash algorithm.");
 
         //Recompute the ticket exactly as TPM2_VerifyDigestSignature would: proof = H(seed || hierarchy), and the
@@ -707,7 +700,7 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
     private static byte[] BuildEcdsaSignatureBody(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> p1363Signature)
     {
         int fieldWidth = p1363Signature.Length / 2;
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + fieldWidth + sizeof(ushort) + fieldWidth];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + fieldWidth + sizeof(ushort) + fieldWidth];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)sigAlg);
         writer.WriteUInt16((ushort)hashAlg);
@@ -772,7 +765,7 @@ internal sealed class TpmInHouseSimulatorVerifyDigestSignatureTests
     /// <returns>The marshaled body.</returns>
     private static byte[] BuildEcdsaSignatureBodyFromComponents(TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> signatureR, ReadOnlySpan<byte> signatureS)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + signatureR.Length + sizeof(ushort) + signatureS.Length];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + signatureR.Length + sizeof(ushort) + signatureS.Length];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_ECDSA);
         writer.WriteUInt16((ushort)hashAlg);

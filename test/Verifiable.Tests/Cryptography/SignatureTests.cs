@@ -59,7 +59,7 @@ internal sealed class SignatureTests
     {
         using var sig = CreateSignature(SignatureBytes1, CryptoTags.P256Signature);
 
-        Assert.IsFalse(sig.Equals((Signature?)null), "Equals(null) should return false.");
+        Assert.IsFalse(sig.Equals(null), "Equals(null) should return false.");
         Assert.IsFalse(sig.Equals((object?)null), "Equals((object)null) should return false.");
     }
 
@@ -144,7 +144,7 @@ internal sealed class SignatureTests
         var sig = CreateSignature(SignatureBytes1, CryptoTags.P256Signature);
         sig.Dispose();
 
-        Assert.Throws<ObjectDisposedException>(() => sig.AsReadOnlySpan());
+        _ = Assert.Throws<ObjectDisposedException>(() => sig.AsReadOnlySpan());
     }
 
 
@@ -154,7 +154,7 @@ internal sealed class SignatureTests
         var sig = CreateSignature(SignatureBytes1, CryptoTags.P256Signature);
         sig.Dispose();
 
-        Assert.Throws<ObjectDisposedException>(() => sig.AsReadOnlyMemory());
+        _ = Assert.Throws<ObjectDisposedException>(() => sig.AsReadOnlyMemory());
     }
 
 
@@ -177,7 +177,7 @@ internal sealed class SignatureTests
     {
         using var sig = CreateSignature(SignatureBytes1, CryptoTags.P256Signature);
 
-        string display = sig.ToString()!;
+        string display = sig.ToString();
 
         Assert.IsNotNull(display);
         Assert.Contains("Signature(", display, StringComparison.Ordinal, "Display should start with 'Signature('.");
@@ -192,7 +192,7 @@ internal sealed class SignatureTests
     {
         using var sig = CreateSignature(LongSignatureBytes, CryptoTags.P256Signature);
 
-        string display = sig.ToString()!;
+        string display = sig.ToString();
 
         Assert.Contains("...", display, StringComparison.Ordinal, "Long signatures should show ellipsis in the display.");
         Assert.Contains($"{LongSignatureBytes.Length} bytes", display, StringComparison.Ordinal, "Display should show the full byte count.");
@@ -204,7 +204,7 @@ internal sealed class SignatureTests
     {
         using var sig = CreateSignature(SignatureBytes1, Tag.Empty);
 
-        string display = sig.ToString()!;
+        string display = sig.ToString();
 
         Assert.Contains("Unknown", display, StringComparison.Ordinal, "Display should show 'Unknown' when no algorithm is in the tag.");
     }

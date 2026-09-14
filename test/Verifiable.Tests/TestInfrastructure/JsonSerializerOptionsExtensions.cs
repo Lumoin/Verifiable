@@ -4,7 +4,6 @@ using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Ebsi;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Web;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
 using Verifiable.Json.Converters.Dcql;

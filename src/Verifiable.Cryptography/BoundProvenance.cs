@@ -82,7 +82,7 @@ public sealed class BoundProvenance: VerificationProvenance
     public VerificationRelationship? Relationship { get; }
 
 
-    private BoundProvenance(KeyId? identity, ResolutionSource source, VerificationRelationship? relationship, object subject): base(identity)
+    private BoundProvenance(KeyId? identity, ResolutionSource source, VerificationRelationship? relationship, object subject) : base(identity)
     {
         Source = source;
         Relationship = relationship;

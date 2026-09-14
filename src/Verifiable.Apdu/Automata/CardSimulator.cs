@@ -1,13 +1,8 @@
-using System;
 using System.Buffers;
-using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
@@ -1372,6 +1367,15 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
     {
         CvcChainVerificationResult.InvalidSignature => StatusWord.AuthenticationFailed,
         CvcChainVerificationResult.MalformedValidity => StatusWord.WrongData,
+        CvcChainVerificationResult.Valid => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.EmptyChain => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.TrustAnchorNotCertificationAuthority => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.BrokenChain => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.InvalidRole => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.NotYetValid => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.Expired => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.UnsupportedIssuerKey => StatusWord.ConditionsNotSatisfied,
+        CvcChainVerificationResult.ChainNotTerminatedByTerminal => StatusWord.ConditionsNotSatisfied,
         _ => StatusWord.ConditionsNotSatisfied
     };
 
@@ -1390,8 +1394,8 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         try
         {
             Span<byte> span = owner.Memory.Span;
-            span[0] = (byte)(CardVerifiableCertificateTag >> 8);
-            span[1] = (byte)(CardVerifiableCertificateTag & 0xFF);
+            span[0] = CardVerifiableCertificateTag >> 8;
+            span[1] = CardVerifiableCertificateTag & 0xFF;
             int offset = 2 + WriteBerLength(content.Length, span[2..]);
             content.CopyTo(span[offset..]);
             length = total;
@@ -1533,7 +1537,7 @@ public sealed class CardSimulator: IObservable<TraceEntry<CardSimulatorState, Ca
         IMemoryOwner<byte> owner = pool.Rent(length);
         try
         {
-            Encoding.ASCII.GetBytes(identifier, owner.Memory.Span[..length]);
+            _ = Encoding.ASCII.GetBytes(identifier, owner.Memory.Span[..length]);
 
             return owner;
         }

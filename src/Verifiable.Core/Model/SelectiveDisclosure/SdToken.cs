@@ -1,6 +1,4 @@
-using System.Buffers;
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -303,18 +301,18 @@ public class SdToken<TEnvelope>: IEquatable<SdToken<TEnvelope>>, IDisposable whe
         {
             if(DisclosurePaths.Paths.Contains(path))
             {
-                selectableSeeds.Add(path);
+                _ = selectableSeeds.Add(path);
             }
             else if(!IssuerSignedClaims.ContainsKey(path))
             {
                 if(DisclosureInteriorClaims.ContainsKey(path)
                     && DisclosurePaths.TryFindEnclosingDisclosurePath(path, out CredentialPath owningPath))
                 {
-                    selectableSeeds.Add(owningPath);
+                    _ = selectableSeeds.Add(owningPath);
                 }
                 else
                 {
-                    unmatched.Add(path);
+                    _ = unmatched.Add(path);
                 }
             }
         }

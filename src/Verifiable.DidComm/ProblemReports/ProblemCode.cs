@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -200,7 +199,7 @@ public sealed class ProblemCode: IEquatable<ProblemCode>
 
         foreach(char c in token)
         {
-            bool isAllowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+            bool isAllowed = c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-';
             if(!isAllowed)
             {
                 return false;

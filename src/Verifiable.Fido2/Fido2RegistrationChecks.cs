@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Security.Cryptography;
 using Verifiable.Core.Assessment;
 

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Foundation.Automata;
@@ -10,6 +8,9 @@ namespace Verifiable.Foundation.Automata;
 /// <typeparam name="TStackSymbol">The type of symbols on the stack.</typeparam>
 public abstract class StackAction<TStackSymbol>
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StackAction{TStackSymbol}"/> class.
+    /// </summary>
     protected StackAction() { }
 
     /// <summary>
@@ -79,6 +80,7 @@ public abstract class StackAction<TStackSymbol>
     private static int ApplyPush(Stack<TStackSymbol> stack, TStackSymbol symbol)
     {
         stack.Push(symbol);
+
         return 0;
     }
 
@@ -90,7 +92,8 @@ public abstract class StackAction<TStackSymbol>
                 "Cannot pop the sentinel stack symbol. This indicates a bug in the transition function.");
         }
 
-        stack.Pop();
+        _ = stack.Pop();
+
         return 0;
     }
 
@@ -102,8 +105,9 @@ public abstract class StackAction<TStackSymbol>
                 "Cannot replace the sentinel stack symbol. This indicates a bug in the transition function.");
         }
 
-        stack.Pop();
+        _ = stack.Pop();
         stack.Push(symbol);
+
         return 0;
     }
 }

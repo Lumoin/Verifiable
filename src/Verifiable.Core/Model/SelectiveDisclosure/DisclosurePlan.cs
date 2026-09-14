@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;

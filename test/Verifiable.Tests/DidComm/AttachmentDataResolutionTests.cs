@@ -1,15 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Net;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -156,12 +150,12 @@ internal sealed class AttachmentDataResolutionTests
     public async Task LinkHostRebindingToLoopbackIsBlockedAtConnectionTime()
     {
         //A public-looking host that "rebinds" to a loopback address on resolution — the DNS-rebinding attack.
-        HostResolverDelegate rebindToLoopback = (host, cancellationToken) =>
+        ValueTask<IReadOnlyList<IPAddress>> rebindToLoopback(string host, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Loopback]);
 
         bool pinned = false;
         bool dialed = false;
-        OutboundTransportDelegate transport = async (request, context, cancellationToken) =>
+        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             pinned = true;
 
@@ -172,7 +166,7 @@ internal sealed class AttachmentDataResolutionTests
             dialed = true;
 
             return new OutboundResponse { StatusCode = 200 };
-        };
+        }
 
         byte[] content = "internal secret"u8.ToArray();
         var data = new AttachmentData
@@ -181,12 +175,12 @@ internal sealed class AttachmentDataResolutionTests
             Links = ["https://rebinding.example/blob"]
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         using AttachmentResolutionResult result = await data.ResolveAsync(
             context,
-            transport,
+transport,
             TestSetup.Base64UrlDecoder,
             TestSetup.Base58Decoder,
             TestSetup.MultihashSha256Selector,
@@ -500,7 +494,7 @@ internal sealed class AttachmentDataResolutionTests
             Hash = MultibaseSha256Multihash(content)
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         using AttachmentResolutionResult result = await data.ResolveAsync(
@@ -522,7 +516,7 @@ internal sealed class AttachmentDataResolutionTests
     //given policy.
     private async Task<AttachmentResolutionResult> ResolveAsync(AttachmentData data, OutboundFetchPolicy policy, FakeTransport transport)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(policy);
 
         return await data.ResolveAsync(
@@ -545,7 +539,7 @@ internal sealed class AttachmentDataResolutionTests
         Span<byte> multihash = stackalloc byte[1 + 1 + 32];
         multihash[0] = 0x12;
         multihash[1] = 0x20;
-        SHA256.HashData(content, multihash[2..]);
+        _ = SHA256.HashData(content, multihash[2..]);
 
         return "z" + TestSetup.Base58Encoder(multihash);
     }
@@ -560,7 +554,7 @@ internal sealed class AttachmentDataResolutionTests
         private Dictionary<string, (int Status, byte[] Body)> Routes { get; }
         private bool ThrowsOnContact { get; }
 
-        public FakeTransport() : this(new Dictionary<string, (int, byte[])>(StringComparer.Ordinal)) { }
+        public FakeTransport() : this(new(StringComparer.Ordinal)) { }
 
         public FakeTransport(Dictionary<string, (int Status, byte[] Body)> routes) : this(routes, throwsOnContact: false) { }
 
@@ -572,7 +566,7 @@ internal sealed class AttachmentDataResolutionTests
 
         //A transport whose every contacted request throws — a socket failure the resolver must catch and
         //fail closed (AllLinksFailed), never rethrow.
-        public static FakeTransport Throwing() => new(new Dictionary<string, (int, byte[])>(StringComparer.Ordinal), throwsOnContact: true);
+        public static FakeTransport Throwing() => new(new(StringComparer.Ordinal), throwsOnContact: true);
 
         public List<OutboundRequest> Calls { get; } = [];
 

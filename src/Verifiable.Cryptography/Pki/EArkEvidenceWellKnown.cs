@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
@@ -318,6 +317,7 @@ public static class EArkEvidenceWellKnown
         EArkEvidenceKind.SignedDataObject => SignedDataObjectMediaType,
         EArkEvidenceKind.Container => ContainerMediaType,
         EArkEvidenceKind.EvidenceRecord => EvidenceRecordMediaType,
+        EArkEvidenceKind.NotEvaluated => null,
         _ => null
     };
 

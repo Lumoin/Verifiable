@@ -1,15 +1,13 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -60,7 +58,7 @@ internal sealed class AccessTokenTypeValidationTests
     public async Task JwsAccessTokenValidatorRejectsRealIdTokenButAcceptsRealAccessToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -171,7 +169,7 @@ internal sealed class AccessTokenTypeValidationTests
     public async Task BearerTokenValidationRejectsRealIdTokenButAcceptsRealAccessToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -202,7 +200,7 @@ internal sealed class AccessTokenTypeValidationTests
     public async Task Oidc10IdTokenValidatorRejectsRealAccessTokenButAcceptsRealIdToken()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -245,7 +243,7 @@ internal sealed class AccessTokenTypeValidationTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, WellKnownHttpMethods.Post,
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body!, "request_uri");
@@ -255,7 +253,7 @@ internal sealed class AccessTokenTypeValidationTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -276,7 +274,7 @@ internal sealed class AccessTokenTypeValidationTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, WellKnownHttpMethods.Post,
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
@@ -294,7 +292,7 @@ internal sealed class AccessTokenTypeValidationTests
     private async Task<JwsAccessTokenValidationResult> ValidateAsAccessTokenAsync(
         string token, VerifierKeyMaterial material, string expectedAudience)
     {
-        ServerVerificationKeyResolverDelegate resolveKey = (kid, tenant, ctx, ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
@@ -303,7 +301,7 @@ internal sealed class AccessTokenTypeValidationTests
             token,
             material.Registration.IssuerUri!.OriginalString,
             expectedAudience,
-            resolveKey,
+resolveKey,
             MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
@@ -311,7 +309,7 @@ internal sealed class AccessTokenTypeValidationTests
             BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty: null,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -324,7 +322,7 @@ internal sealed class AccessTokenTypeValidationTests
     private async Task<Oidc10IdTokenValidationResult> ValidateAsIdTokenAsync(
         string token, VerifierKeyMaterial material, string expectedAudience)
     {
-        ServerVerificationKeyResolverDelegate resolveKey = (kid, tenant, ctx, ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
@@ -333,7 +331,7 @@ internal sealed class AccessTokenTypeValidationTests
             token,
             material.Registration.IssuerUri!.OriginalString,
             expectedAudience,
-            resolveKey,
+resolveKey,
             MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
@@ -341,7 +339,7 @@ internal sealed class AccessTokenTypeValidationTests
             BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty: null,
             expectedNonce: null,
             trustedAudiences: null,
@@ -352,7 +350,7 @@ internal sealed class AccessTokenTypeValidationTests
     /// <summary>Validates a hand-built token against a locally resolved (non-host) key, mirroring <see cref="JwsAccessTokenValidatorTests"/>.</summary>
     private async Task<JwsAccessTokenValidationResult> ValidateStandaloneAsync(string token, PublicKeyMemory publicKey)
     {
-        ServerVerificationKeyResolverDelegate resolver = (kid, tenant, ctx, ct) =>
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(string.Equals(kid.Value, StandaloneKid, StringComparison.Ordinal)
                 ? publicKey : null);
 
@@ -360,7 +358,7 @@ internal sealed class AccessTokenTypeValidationTests
             token,
             StandaloneIssuer,
             StandaloneAudience,
-            resolver,
+resolver,
             MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
@@ -368,7 +366,7 @@ internal sealed class AccessTokenTypeValidationTests
             BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty: null,
             TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -392,7 +390,7 @@ internal sealed class AccessTokenTypeValidationTests
             Headers: headers,
             RouteValues: RouteValues.Empty);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
 
         return await host.Server.DispatchAsync(request, context, TestContext.CancellationToken)

@@ -1,8 +1,5 @@
-using System;
-using System.Buffers;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Lumoin.Veritas.Cbor;
+using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
@@ -70,7 +67,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
     [DataRow(7, DisplayName = "value 7 (out of range)")]
     public async Task EnterpriseAttestationOnNonCapableAuthenticatorReturnsInvalidParameterRegardlessOfValue(int enterpriseAttestationValue)
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator($"mc-ep-noncapable-{enterpriseAttestationValue}",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator($"mc-ep-noncapable-{enterpriseAttestationValue}", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, enterpriseAttestation: enterpriseAttestationValue);
@@ -226,7 +223,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
         Assert.IsTrue(decoded.AttStmt.HasValue, "attStmt must be present.");
         Assert.IsTrue(decoded.EpAtt.HasValue && decoded.EpAtt.Value, "epAtt must be present and true.");
         Assert.IsTrue(decoded.LargeBlobKey.HasValue, "largeBlobKey must be present.");
-        Assert.HasCount(32, decoded.LargeBlobKey!.Value.ToArray());
+        Assert.HasCount(32, decoded.LargeBlobKey.Value.ToArray());
     }
 
 
@@ -369,7 +366,7 @@ internal sealed class CtapAuthenticatorMakeCredentialEnterpriseAttestationTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapAuthenticatorSimulator capableEnabledSimulator = await CtapEnterpriseAttestationFixtures.CreateCapableEnabledSimulatorAsync(
             "mc-ep-r15a-capable", pool, preConfiguredRpIds: null, TestContext.CancellationToken);
-        using CtapAuthenticatorSimulator nonCapableSimulator = CreateSimulator("mc-ep-r15a-noncapable",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator nonCapableSimulator = CreateSimulator("mc-ep-r15a-noncapable", BaseMemoryPool.Shared);
 
         CtapMakeCredentialResponse capableEnabledDecoded = await SendPlainMakeCredentialAsync(capableEnabledSimulator, pool);
         CtapMakeCredentialResponse nonCapableDecoded = await SendPlainMakeCredentialAsync(nonCapableSimulator, pool);

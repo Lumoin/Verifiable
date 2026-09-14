@@ -1,8 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -12,11 +10,6 @@ using Verifiable.Tpm.Extensions.Seal;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -670,9 +663,9 @@ internal sealed class TpmInHouseSimulatorCreationDataTests
         using CertifyCreationResponse certifyCreation = result.Value;
         TpmsAttest attest = certifyCreation.CertifyInfo.AttestationData;
         Assert.IsNotNull(attest.Attested.Creation);
-        Assert.AreEqual(48, attest.Attested.Creation!.CreationHash.Size, "The attested creationHash preserves the subject's 48-octet SHA-384 width.");
+        Assert.AreEqual(48, attest.Attested.Creation.CreationHash.Size, "The attested creationHash preserves the subject's 48-octet SHA-384 width.");
         Assert.IsTrue(
-            attest.Attested.Creation!.CreationHash.AsReadOnlySpan().SequenceEqual(subject.CreationHash.AsReadOnlySpan()),
+            attest.Attested.Creation.CreationHash.AsReadOnlySpan().SequenceEqual(subject.CreationHash.AsReadOnlySpan()),
             "The attested creationHash must equal the SHA-384 creationHash CreatePrimary reported — the ticket verified against exactly these bytes.");
     }
 

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Verifiable.DidComm;
 
 /// <summary>
@@ -30,7 +28,7 @@ internal static class DidCommBodyNumbers
     {
         (bool isNarrowed, long narrowed) = raw switch
         {
-            int i => (true, (long)i),
+            int i => (true, i),
             long l => (true, l),
             decimal d when decimal.Truncate(d) == d && d >= long.MinValue && d <= long.MaxValue => (true, (long)d),
             _ => (false, 0L)

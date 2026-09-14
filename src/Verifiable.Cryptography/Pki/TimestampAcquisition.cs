@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Numerics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -81,7 +78,7 @@ public sealed class TimestampAcquisitionException: Exception
     /// (the standard parameterless exception constructor .NET convention expects; every throw site in this
     /// library uses one of the classified overloads below instead).
     /// </summary>
-    public TimestampAcquisitionException(): this(TimestampAcquisitionFailureKind.ResponseMalformed, "Time-stamp token acquisition failed.")
+    public TimestampAcquisitionException() : this(TimestampAcquisitionFailureKind.ResponseMalformed, "Time-stamp token acquisition failed.")
     {
     }
 
@@ -90,7 +87,7 @@ public sealed class TimestampAcquisitionException: Exception
     /// Initializes a new instance with a message, classified <see cref="TimestampAcquisitionFailureKind.ResponseMalformed"/>.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    public TimestampAcquisitionException(string message): this(TimestampAcquisitionFailureKind.ResponseMalformed, message)
+    public TimestampAcquisitionException(string message) : this(TimestampAcquisitionFailureKind.ResponseMalformed, message)
     {
     }
 
@@ -101,7 +98,7 @@ public sealed class TimestampAcquisitionException: Exception
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of this exception.</param>
-    public TimestampAcquisitionException(string message, Exception innerException): this(TimestampAcquisitionFailureKind.ResponseMalformed, message, innerException)
+    public TimestampAcquisitionException(string message, Exception innerException) : this(TimestampAcquisitionFailureKind.ResponseMalformed, message, innerException)
     {
     }
 
@@ -298,7 +295,7 @@ public static class TimestampAcquisition
                 exception);
         }
 
-        if(parsed.status != PkiStatusGranted && parsed.status != PkiStatusGrantedWithMods)
+        if(parsed.status is not PkiStatusGranted and not PkiStatusGrantedWithMods)
         {
             throw new TimestampAcquisitionException(
                 TimestampAcquisitionFailureKind.ResponseRejected,

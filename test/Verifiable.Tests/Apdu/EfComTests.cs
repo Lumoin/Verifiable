@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Apdu.Lds;
 
 namespace Verifiable.Tests.Apdu;

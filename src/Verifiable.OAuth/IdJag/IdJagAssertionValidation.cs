@@ -250,6 +250,8 @@ public static class IdJagAssertionValidation
         Rfc7523TemporalOutcome.MissingExpiration => IdJagValidationFailureReason.MissingExpiration,
         Rfc7523TemporalOutcome.Expired => IdJagValidationFailureReason.Expired,
         Rfc7523TemporalOutcome.NotYetValid => IdJagValidationFailureReason.NotYetValid,
+        Rfc7523TemporalOutcome.InconsistentTemporalClaims => IdJagValidationFailureReason.InconsistentTemporalClaims,
+
         _ => IdJagValidationFailureReason.InconsistentTemporalClaims
     };
 

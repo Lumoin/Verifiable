@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Cbor;
@@ -7,7 +7,6 @@ using Verifiable.Cbor.StatusList;
 using Verifiable.Core.StatusList;
 using Verifiable.Json.StatusList;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;

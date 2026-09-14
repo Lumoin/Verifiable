@@ -6,16 +6,11 @@ using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 
 using Verifiable.OAuth.Server;
-
-using Verifiable.OAuth.Server.Audit;
-using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 namespace Verifiable.OAuth.Oid4Vp;
 
 /// <summary>
@@ -559,10 +554,10 @@ public static class Oid4VpEndpoints
         StringBuilder builder = JsonAppender.Rent();
         try
         {
-            builder.Append('{');
+            _ = builder.Append('{');
             bool first = true;
             JsonAppender.AppendUriField(builder, OAuthRequestParameterNames.RedirectUri, redirectUri, ref first);
-            builder.Append('}');
+            _ = builder.Append('}');
 
             return builder.ToString();
         }
@@ -925,7 +920,7 @@ public static class Oid4VpEndpoints
                             OAuthErrors.InvalidRequest, "Malformed error parameter.")));
                 }
 
-                fields.TryGetValue(
+                _ = fields.TryGetValue(
                     OAuthRequestParameterNames.ErrorDescription, out string? walletErrorDescription);
 
                 if(!string.IsNullOrWhiteSpace(walletErrorDescription)

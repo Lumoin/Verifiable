@@ -441,12 +441,12 @@ public static class CompositeClientIdSigningKeyResolver
                     $"decentralized_identifier: failed to dereference kid '{kid}' to a verification method.");
             }
 
-            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) decoded =
+            (CryptoAlgorithm algorithm, Purpose purpose, EncodingScheme scheme, IMemoryOwner<byte> keyMaterial) =
                 VerificationMethodCryptoConversions.DefaultConverter(verificationMethod, pool);
 
-            Tag tag = Tag.Create(decoded.algorithm).With(decoded.purpose).With(decoded.scheme);
+            Tag tag = Tag.Create(algorithm).With(purpose).With(scheme);
 
-            return new PublicKeyMemory(decoded.keyMaterial, tag);
+            return new PublicKeyMemory(keyMaterial, tag);
         };
     }
 

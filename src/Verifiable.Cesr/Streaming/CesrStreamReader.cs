@@ -1,10 +1,8 @@
 using Lumoin.Base;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
 using Verifiable.Cesr.Text;
 
 namespace Verifiable.Cesr.Streaming;
@@ -378,6 +376,7 @@ public static class CesrStreamReader
         CesrSerializationKind.Json => matchStart == "{\"v\":\""u8.Length && probe.StartsWith("{\"v\":\""u8),
         CesrSerializationKind.Cbor => matchStart >= 3 && probe[matchStart - 3] == 0x61 && probe[matchStart - 2] == 0x76,
         CesrSerializationKind.Mgpk => matchStart >= 3 && probe[matchStart - 3] == 0xA1 && probe[matchStart - 2] == 0x76,
+        CesrSerializationKind.None => false,
         _ => false
     };
 

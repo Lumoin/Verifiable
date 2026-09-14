@@ -1,8 +1,6 @@
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json.Converters;
 

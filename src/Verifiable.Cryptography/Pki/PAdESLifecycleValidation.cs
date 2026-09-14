@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -490,7 +486,7 @@ public static class PAdESLifecycleValidation
             foreach((long objectNumber, long offset) in section.DeclaredObjects)
             {
                 //Newest-wins within the suffix itself, mirroring TryWalkXrefChain's own merge semantics.
-                suffixObjects.TryAdd(objectNumber, offset);
+                _ = suffixObjects.TryAdd(objectNumber, offset);
             }
         }
 
@@ -547,7 +543,7 @@ public static class PAdESLifecycleValidation
                 return false;
             }
 
-            if(!IsLegitimateDssCatalogRedefinition(fullSpan, prefixCatalog!, newCatalogValue, prefixObjectOffsets))
+            if(!IsLegitimateDssCatalogRedefinition(fullSpan, prefixCatalog, newCatalogValue, prefixObjectOffsets))
             {
                 reason = "An incremental-update revision appended past the signature's own coverage redefines the document catalog outside the recognised DSS-append shape (PA-5.4.2.1-T1).";
 
@@ -608,8 +604,8 @@ public static class PAdESLifecycleValidation
             return false;
         }
 
-        ReadOnlySpan<byte> oldEntries = fullDocument.Slice(prefixCatalog.EntriesStart, prefixCatalog.EntriesEnd - prefixCatalog.EntriesStart);
-        ReadOnlySpan<byte> newEntries = fullDocument.Slice(newCatalogValue.DictionaryContentStart, newCatalogValue.DictionaryContentEnd - newCatalogValue.DictionaryContentStart);
+        ReadOnlySpan<byte> oldEntries = fullDocument[prefixCatalog.EntriesStart..prefixCatalog.EntriesEnd];
+        ReadOnlySpan<byte> newEntries = fullDocument[newCatalogValue.DictionaryContentStart..newCatalogValue.DictionaryContentEnd];
 
         if(newEntries.Length <= oldEntries.Length || !newEntries[..oldEntries.Length].SequenceEqual(oldEntries))
         {
@@ -684,6 +680,7 @@ public static class PAdESLifecycleValidation
             => SignatureValidationSubIndication.SignatureConstraintsFailure,
         PAdESSignatureStatus.InvalidTimestamp or PAdESSignatureStatus.TimestampImprintMismatch
             => SignatureValidationSubIndication.SignatureConstraintsFailure,
+        PAdESSignatureStatus.Valid => SignatureValidationSubIndication.Custom,
         _ => SignatureValidationSubIndication.Custom
     };
 }

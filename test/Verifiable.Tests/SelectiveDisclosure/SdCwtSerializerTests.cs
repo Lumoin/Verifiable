@@ -1,10 +1,10 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
@@ -161,9 +161,9 @@ internal sealed class SdCwtSerializerTests
         using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         Assert.AreEqual("address", parsed.ClaimName);
-        Assert.IsInstanceOfType<Dictionary<object, object?>>(parsed.ClaimValue);
+        _ = Assert.IsInstanceOfType<Dictionary<object, object?>>(parsed.ClaimValue);
 
-        var parsedAddress = (Dictionary<object, object?>)parsed.ClaimValue!;
+        var parsedAddress = (Dictionary<object, object?>)parsed.ClaimValue;
         Assert.AreEqual("123 Main St", parsedAddress["street"]);
         Assert.AreEqual("Anytown", parsedAddress["city"]);
         Assert.AreEqual(12345, parsedAddress["zip"]);
@@ -181,9 +181,9 @@ internal sealed class SdCwtSerializerTests
         using SdDisclosure parsed = SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared);
 
         Assert.AreEqual("nationalities", parsed.ClaimName);
-        Assert.IsInstanceOfType<List<object?>>(parsed.ClaimValue);
+        _ = Assert.IsInstanceOfType<List<object?>>(parsed.ClaimValue);
 
-        var parsedNationalities = (List<object?>)parsed.ClaimValue!;
+        var parsedNationalities = (List<object?>)parsed.ClaimValue;
         Assert.HasCount(3, parsedNationalities);
         Assert.AreEqual("US", parsedNationalities[0]);
         Assert.AreEqual("DE", parsedNationalities[1]);
@@ -267,7 +267,7 @@ internal sealed class SdCwtSerializerTests
 
             //Verify structure.
             var reader = new CborReader(cbor, CborOptions.Lax);
-            reader.ReadStartMap();
+            _ = reader.ReadStartMap();
             int key = reader.ReadInt32();
             Assert.AreEqual(SdCwtSerializer.SdClaimsHeaderKey, key);
 
@@ -316,7 +316,7 @@ internal sealed class SdCwtSerializerTests
         writer.WriteEndArray();
         byte[] cbor = buffer.WrittenSpan.ToArray();
 
-        Assert.Throws<CborContentException>(() => SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared));
+        _ = Assert.Throws<CborContentException>(() => SdCwtSerializer.ParseDisclosure(cbor, TestSalts.TestSaltTag, BaseMemoryPool.Shared));
     }
 
 

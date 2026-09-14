@@ -1,9 +1,6 @@
-using System;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.WebFinger;
 
@@ -56,7 +53,7 @@ internal sealed class WebFingerAcctUriTests
 
         Assert.AreEqual("acct:alice%40sub.example@example.com", resource);
 
-        int lastAt = resource.LastIndexOf('@');
+        int lastAt = resource.LastIndexOf('@', StringComparison.Ordinal);
         Assert.AreEqual("example.com", resource[(lastAt + 1)..], "The host is everything after the LAST @.");
         Assert.IsFalse(resource[..lastAt].Contains('@', StringComparison.Ordinal), "No raw @ may remain before the delimiting @.");
     }
@@ -83,15 +80,15 @@ internal sealed class WebFingerAcctUriTests
         //the shape REF-3's comparison rule would govern IF this library ever compared subject to resource.
         const string jrdJson = """{"subject":"acct:Alice%40Example.COM@Example.com"}""";
 
-        OutboundTransportDelegate transport = (request, context, cancellationToken) =>
+        static ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             int status = string.Equals(request.Target.AbsoluteUri, queryUrl, StringComparison.Ordinal) ? 200 : 404;
             TaggedMemory<byte> body = new(Encoding.UTF8.GetBytes(jrdJson), BufferTags.Json);
 
             return ValueTask.FromResult(new OutboundResponse { StatusCode = status, Body = body });
-        };
+        }
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
         WebFingerResolveDelegate resolver = WebFingerClient.BuildResolving(transport, WebFingerJrdJsonParsing.ParseJrd);
 

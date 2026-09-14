@@ -1,6 +1,6 @@
-using System.Buffers;
-using Lumoin.Veritas.Cbor;
 using CsCheck;
+using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 
 namespace Verifiable.Tests.Serialization;
@@ -117,6 +117,8 @@ internal sealed class EncodedCborItemPropertyTests
                         break;
                     case bool b:
                         w.WriteBoolean(b);
+                        break;
+                    default:
                         break;
                 }
             }

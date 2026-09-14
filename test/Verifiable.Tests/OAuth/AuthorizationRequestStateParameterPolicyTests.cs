@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.JCose;
-using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.Tests.TestInfrastructure;
@@ -55,7 +54,7 @@ internal sealed class AuthorizationRequestStateParameterPolicyTests
     [TestMethod]
     public void RequiredPolicyRejectsAbsentState()
     {
-        Assert.ThrowsExactly<FormatException>(
+        _ = Assert.ThrowsExactly<FormatException>(
             () => AuthorizationRequestObjectFormFields.Parse(
                 BaseFields(includeState: false),
                 DcqlDeserializer, ClientMetadataDeserializer,

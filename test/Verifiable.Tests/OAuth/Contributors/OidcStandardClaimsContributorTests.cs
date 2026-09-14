@@ -331,18 +331,4 @@ internal sealed class OidcStandardClaimsContributorTests
         Assert.AreEqual("Ada", emitted[WellKnownJwtClaimNames.GivenName]);
     }
 
-
-    private static Dictionary<string, object> ExtractEmitted(List<Claim> claims)
-    {
-        Dictionary<string, object> emitted = new(StringComparer.Ordinal);
-        foreach(Claim c in claims)
-        {
-            if(c.Outcome == ClaimOutcome.Success && c.Context is ClaimContributionContext ctx)
-            {
-                emitted[ctx.ClaimName] = ctx.ClaimValue;
-            }
-        }
-
-        return emitted;
-    }
 }

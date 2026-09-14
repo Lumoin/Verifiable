@@ -1,9 +1,6 @@
-using System;
-using System.Buffers;
 using System.Text;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.EventLogs;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
 

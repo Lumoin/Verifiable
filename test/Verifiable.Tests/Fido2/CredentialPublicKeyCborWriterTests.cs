@@ -131,7 +131,7 @@ internal sealed class CredentialPublicKeyCborWriterTests
     {
         var coseKey = new CoseKey(kty: CoseKeyTypes.Symmetric);
 
-        Assert.ThrowsExactly<ArgumentException>(() => CredentialPublicKeyCborWriter.Write(coseKey));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CredentialPublicKeyCborWriter.Write(coseKey));
     }
 
 
@@ -139,6 +139,6 @@ internal sealed class CredentialPublicKeyCborWriterTests
     [TestMethod]
     public void NullCoseKeyThrowsArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CredentialPublicKeyCborWriter.Write(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CredentialPublicKeyCborWriter.Write(null!));
     }
 }

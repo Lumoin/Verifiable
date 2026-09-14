@@ -161,12 +161,12 @@ namespace Verifiable.Cryptography
             //lengths to {33, 41, 49, 65, 67}. The 33-byte length is shared by P-256,
             //secp256k1, and BP-256r1; the 49-byte length is shared by P-384 and BP-384r1.
             //The curveType flag disambiguates in those cases — see ResolveCurveParameters.
-            if(!(compressedPoint.Length == BrainpoolP224r1CompressedByteCount
-                || compressedPoint.Length == P256CompressedByteCount
-                || compressedPoint.Length == BrainpoolP320r1CompressedByteCount
-                || compressedPoint.Length == P384CompressedByteCount
-                || compressedPoint.Length == BrainpoolP512r1CompressedByteCount
-                || compressedPoint.Length == P521CompressedByteCount))
+            if(compressedPoint.Length is not (BrainpoolP224r1CompressedByteCount
+                or P256CompressedByteCount
+                or BrainpoolP320r1CompressedByteCount
+                or P384CompressedByteCount
+                or BrainpoolP512r1CompressedByteCount
+                or P521CompressedByteCount))
             {
                 throw new ArgumentOutOfRangeException(nameof(compressedPoint),
                     $"Length must be one of {BrainpoolP224r1CompressedByteCount}, {P256CompressedByteCount}, {BrainpoolP320r1CompressedByteCount}, {P384CompressedByteCount}, {BrainpoolP512r1CompressedByteCount}, {P521CompressedByteCount}.");
@@ -178,7 +178,7 @@ namespace Verifiable.Cryptography
             //the general formula subsumes all three cases without special-casing.
             static BigInteger CalculateYPoint(BigInteger x, BigInteger coefficientA, BigInteger coefficientB, BigInteger pIdentity, BigInteger prime)
             {
-                BigInteger rhs = (BigInteger.ModPow(x, 3, prime) + coefficientA * x + coefficientB) % prime;
+                BigInteger rhs = (BigInteger.ModPow(x, 3, prime) + (coefficientA * x) + coefficientB) % prime;
                 if(rhs.Sign < 0)
                 {
                     rhs += prime;
@@ -328,6 +328,10 @@ namespace Verifiable.Cryptography
             EllipticCurveTypes.BrainpoolP320r1 => WellKnownOids.EcBrainpoolP320r1DerValue,
             EllipticCurveTypes.BrainpoolP384r1 => WellKnownOids.EcBrainpoolP384r1DerValue,
             EllipticCurveTypes.BrainpoolP512r1 => WellKnownOids.EcBrainpoolP512r1DerValue,
+            EllipticCurveTypes.None => throw new NotSupportedException($"No named-curve OID is known for '{curve}'."),
+            EllipticCurveTypes.NistCurves => throw new NotSupportedException($"No named-curve OID is known for '{curve}'."),
+            EllipticCurveTypes.Curve25519 => throw new NotSupportedException($"No named-curve OID is known for '{curve}'."),
+            EllipticCurveTypes.BrainpoolCurves => throw new NotSupportedException($"No named-curve OID is known for '{curve}'."),
             _ => throw new NotSupportedException($"No named-curve OID is known for '{curve}'.")
         };
 
@@ -483,7 +487,7 @@ namespace Verifiable.Cryptography
                     $"Length must be one of {BrainpoolP224r1.PointArrayLength}, {P256.PointArrayLength}, {BrainpoolP320r1.PointArrayLength}, {P384.PointArrayLength}, {BrainpoolP512r1.PointArrayLength}, {P521.PointArrayLength}.");
             }
 
-            return (byte)(2 + (yPoint![^1] & 1));
+            return (byte)(2 + (yPoint[^1] & 1));
         }
 
 
@@ -492,12 +496,12 @@ namespace Verifiable.Cryptography
         //P-521 (66) are unambiguous on length. Curve parameters disambiguate where length
         //alone cannot.
         private static bool IsSupportedCoordinateLength(int length) =>
-            length == BrainpoolP224r1.PointArrayLength
-            || length == P256.PointArrayLength
-            || length == BrainpoolP320r1.PointArrayLength
-            || length == P384.PointArrayLength
-            || length == BrainpoolP512r1.PointArrayLength
-            || length == P521.PointArrayLength;
+            length is BrainpoolP224r1.PointArrayLength
+            or P256.PointArrayLength
+            or BrainpoolP320r1.PointArrayLength
+            or P384.PointArrayLength
+            or BrainpoolP512r1.PointArrayLength
+            or P521.PointArrayLength;
 
 
         /// <summary>
@@ -571,12 +575,12 @@ namespace Verifiable.Cryptography
         //Companion to IsSupportedCoordinateLength for the 0x04-prefixed full-point form
         //(length 1 + 2 × field byte size).
         private static bool IsSupportedUncompressedLength(int length) =>
-            length == BrainpoolP224r1.UncompressedPointByteCount
-            || length == P256.UncompressedPointByteCount
-            || length == BrainpoolP320r1.UncompressedPointByteCount
-            || length == P384.UncompressedPointByteCount
-            || length == BrainpoolP512r1.UncompressedPointByteCount
-            || length == P521.UncompressedPointByteCount;
+            length is BrainpoolP224r1.UncompressedPointByteCount
+            or P256.UncompressedPointByteCount
+            or BrainpoolP320r1.UncompressedPointByteCount
+            or P384.UncompressedPointByteCount
+            or BrainpoolP512r1.UncompressedPointByteCount
+            or P521.UncompressedPointByteCount;
 
 
         /// <summary>
@@ -619,7 +623,7 @@ namespace Verifiable.Cryptography
 
             if(point[0] == EvenYCoordinate || point[0] == OddYCoordinate)
             {
-                x = point.Slice(1);
+                x = point[1..];
                 y = Decompress(point, curveType);
                 return;
             }
@@ -639,11 +643,11 @@ namespace Verifiable.Cryptography
         /// and be either 32 (P-256), 42 (P-384) or 66 (P-521) bytes</exception>.
         public static bool IsCompressed(ReadOnlySpan<byte> maybeCompressedCoordinates)
         {
-            if(!(maybeCompressedCoordinates.Length == P256CompressedByteCount
-                || maybeCompressedCoordinates.Length == BrainpoolP320r1CompressedByteCount
-                || maybeCompressedCoordinates.Length == P384CompressedByteCount
-                || maybeCompressedCoordinates.Length == BrainpoolP512r1CompressedByteCount
-                || maybeCompressedCoordinates.Length == P521CompressedByteCount))
+            if(maybeCompressedCoordinates.Length is not (P256CompressedByteCount
+                or BrainpoolP320r1CompressedByteCount
+                or P384CompressedByteCount
+                or BrainpoolP512r1CompressedByteCount
+                or P521CompressedByteCount))
             {
                 throw new ArgumentOutOfRangeException(nameof(maybeCompressedCoordinates),
                     $"Length must be one of {P256CompressedByteCount}, {BrainpoolP320r1CompressedByteCount}, {P384CompressedByteCount}, {BrainpoolP512r1CompressedByteCount}, {P521CompressedByteCount}.");
@@ -674,7 +678,7 @@ namespace Verifiable.Cryptography
             {
                 //Verify that y ^ 2 == x ^ 3 + ax + b(mod p).
                 BigInteger ySquared = BigInteger.ModPow(y, 2, prime);
-                BigInteger xCubedPlusAXPlusB = (BigInteger.ModPow(x, 3, prime) + coefficientA * x + coefficientB) % prime;
+                BigInteger xCubedPlusAXPlusB = (BigInteger.ModPow(x, 3, prime) + (coefficientA * x) + coefficientB) % prime;
                 return ySquared == xCubedPlusAXPlusB;
             }
 

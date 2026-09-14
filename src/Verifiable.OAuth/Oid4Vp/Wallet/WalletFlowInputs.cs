@@ -1,5 +1,4 @@
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 

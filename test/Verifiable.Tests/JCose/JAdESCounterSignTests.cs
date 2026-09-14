@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -148,7 +144,7 @@ internal sealed class JAdESCounterSignTests
         string compact = JwsSerialization.SerializeCompact(countersignature, TestSetup.Base64UrlEncoder);
         using JAdESUnsignedHeaderElementCounterSignature element = BuildCounterSignatureElement(JAdESEtsiUIncorporationMode.ClearJson, $"{{\"cSig\":\"{compact}\"}}");
 
-        JAdESCounterSignatureJson.TryDecode(element, JAdESEtsiUIncorporationMode.ClearJson, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, out UnverifiedJAdESMessage? nested);
+        _ = JAdESCounterSignatureJson.TryDecode(element, JAdESEtsiUIncorporationMode.ClearJson, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, out UnverifiedJAdESMessage? nested);
         using(nested)
         {
             bool verified = await JAdESCounterSign.VerifyAsync(
@@ -191,7 +187,7 @@ internal sealed class JAdESCounterSignTests
         string compact = JwsSerialization.SerializeCompact(countersignature, TestSetup.Base64UrlEncoder);
         using JAdESUnsignedHeaderElementCounterSignature element = BuildCounterSignatureElement(JAdESEtsiUIncorporationMode.ClearJson, $"{{\"cSig\":\"{compact}\"}}");
 
-        JAdESCounterSignatureJson.TryDecode(element, JAdESEtsiUIncorporationMode.ClearJson, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, out UnverifiedJAdESMessage? nested);
+        _ = JAdESCounterSignatureJson.TryDecode(element, JAdESEtsiUIncorporationMode.ClearJson, TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared, out UnverifiedJAdESMessage? nested);
         using(nested)
         {
             bool verified = await JAdESCounterSign.VerifyAsync(

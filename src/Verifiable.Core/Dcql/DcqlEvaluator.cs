@@ -1,10 +1,8 @@
 using System.Collections.Frozen;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 
 namespace Verifiable.Core.Dcql;
 
@@ -477,7 +475,7 @@ public static class DcqlEvaluator
                 }
             }
 
-            matchedPatterns.Add(claimQuery.Path);
+            _ = matchedPatterns.Add(claimQuery.Path);
         }
 
         if(missingRequired.Count > 0 || failedValueConstraints.Count > 0)
@@ -503,7 +501,7 @@ public static class DcqlEvaluator
             {
                 if(claimQuery.Path is not null && matchedPatterns.Contains(claimQuery.Path))
                 {
-                    availableClaimIds.Add(claimQuery.EffectiveId);
+                    _ = availableClaimIds.Add(claimQuery.EffectiveId);
                 }
             }
 
@@ -539,7 +537,7 @@ public static class DcqlEvaluator
         var types = new HashSet<string>(StringComparer.Ordinal);
         foreach(TrustedAuthoritiesQuery authority in authorities)
         {
-            types.Add(authority.Type);
+            _ = types.Add(authority.Type);
         }
 
         return string.Join(", ", types);
@@ -551,7 +549,7 @@ public static class DcqlEvaluator
         var result = new HashSet<DcqlClaimPattern>();
         foreach(var pattern in credentialQuery.RequiredPatterns())
         {
-            result.Add(pattern);
+            _ = result.Add(pattern);
         }
 
         return result;

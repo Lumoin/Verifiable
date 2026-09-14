@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -78,7 +75,7 @@ public static class BasicAccessControlCardResponder
             throw new ArgumentException($"KIC must be {KeyingMaterialLength} bytes.", nameof(chipKeyingMaterial));
         }
 
-        int expectedTokenLength = 2 * NonceLength + KeyingMaterialLength + BlockSize;
+        int expectedTokenLength = (2 * NonceLength) + KeyingMaterialLength + BlockSize;
         if(terminalToken.Length != expectedTokenLength)
         {
             throw new ArgumentException($"The terminal token EIFD || MIFD must be {expectedTokenLength} bytes.", nameof(terminalToken));
@@ -129,7 +126,7 @@ public static class BasicAccessControlCardResponder
         BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> padded = pool.Rent(Iso9797Padding.PaddedLength(terminalCryptogram.Length, BlockSize));
-        Iso9797Padding.Pad(terminalCryptogram.Span, BlockSize, padded.Memory.Span);
+        _ = Iso9797Padding.Pad(terminalCryptogram.Span, BlockSize, padded.Memory.Span);
 
         VerifyBlockCipherMacDelegate verify = Resolve<VerifyBlockCipherMacDelegate>();
         (bool isValid, _) = await verify(
@@ -183,7 +180,7 @@ public static class BasicAccessControlCardResponder
         CancellationToken cancellationToken)
     {
         //R = RND.IC || RND.IFD || KIC — a secret because it carries KIC.
-        using IMemoryOwner<byte> r = pool.Rent(2 * NonceLength + KeyingMaterialLength, AllocationKind.Pinned);
+        using IMemoryOwner<byte> r = pool.Rent((2 * NonceLength) + KeyingMaterialLength, AllocationKind.Pinned);
         chipNonce.Span.CopyTo(r.Memory.Span);
         terminalNonce.Span.CopyTo(r.Memory.Span[NonceLength..]);
         chipKeyingMaterial.Span.CopyTo(r.Memory.Span[(2 * NonceLength)..]);
@@ -266,7 +263,7 @@ public static class BasicAccessControlCardResponder
         SymmetricKeyMemory macKey, ReadOnlyMemory<byte> data, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> padded = pool.Rent(Iso9797Padding.PaddedLength(data.Length, BlockSize));
-        Iso9797Padding.Pad(data.Span, BlockSize, padded.Memory.Span);
+        _ = Iso9797Padding.Pad(data.Span, BlockSize, padded.Memory.Span);
 
         ComputeBlockCipherMacDelegate computeMac = Resolve<ComputeBlockCipherMacDelegate>();
         (MacValue mac, _) = await computeMac(
@@ -291,7 +288,7 @@ public static class BasicAccessControlCardResponder
     /// <summary>
     /// Resolves a registered symmetric delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

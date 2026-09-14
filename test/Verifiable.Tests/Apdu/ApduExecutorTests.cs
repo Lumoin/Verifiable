@@ -1,8 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -164,7 +160,7 @@ internal sealed class ApduExecutorTests
     [TestMethod]
     public async Task TransportErrorPropagates()
     {
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -495,7 +491,7 @@ internal sealed class ApduExecutorTests
 
         //GET RESPONSE is Case 2 short: header(4) + Le(1). The Le byte is the corrected length.
         byte[] getResponse = getResponseCommands[0];
-        byte requestedLe = getResponse[getResponse.Length - 1];
+        byte requestedLe = getResponse[^1];
         Assert.AreEqual(OriginalLe, requestedLe);
     }
 
@@ -505,7 +501,7 @@ internal sealed class ApduExecutorTests
         //A transport that reports success but returns a frame shorter than the mandatory two-byte
         //status word is a protocol integrity failure. The executor must surface it through the
         //result channel as a transport error rather than throwing while reading the status word.
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)

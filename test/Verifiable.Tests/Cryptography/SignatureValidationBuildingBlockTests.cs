@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -206,13 +203,13 @@ internal sealed class SignatureValidationBuildingBlockTests
         Assert.AreEqual(SignatureFormatIdentifier.CAdES, facts.Format, "The binding must declare the format it speaks.");
         Assert.IsTrue(facts.TryGetAttribute(ContentTypeOid, out _), "The content-type signed attribute must surface.");
         Assert.IsTrue(facts.TryGetAttribute(SigningCertificateV2Oid, out SignatureAttributeFacts? signingCertificateAttribute), "The signing-certificate-v2 attribute must surface.");
-        Assert.AreEqual(SignatureAttributeScope.Signed, signingCertificateAttribute!.Scope, "The signing-certificate-v2 attribute is covered by the signature.");
+        Assert.AreEqual(SignatureAttributeScope.Signed, signingCertificateAttribute.Scope, "The signing-certificate-v2 attribute is covered by the signature.");
         Assert.IsTrue(signingCertificateAttribute.IsWellFormed, "A decodable attribute must not be reported as malformed.");
         Assert.AreEqual(SigningTime, facts.ClaimedSigningTime, "The claimed signing time must surface from the signing-time attribute.");
         Assert.HasCount(1, facts.SigningCertificateReferences, "One ESSCertIDv2 is one signing certificate reference.");
         Assert.IsTrue(facts.SigningCertificateReferences[0].IsSignerReference, "RFC 5035 §3 makes the first certificate identifier the signer's.");
         Assert.IsNotNull(facts.SigningCertificate, "The signer's certificate must be matched from the SignerInfo identifier.");
-        Assert.IsTrue(facts.SigningCertificate!.AsReadOnlyMemory().Span.SequenceEqual(signerCertificate.RawData), "The matched certificate must be the one that signed.");
+        Assert.IsTrue(facts.SigningCertificate.AsReadOnlyMemory().Span.SequenceEqual(signerCertificate.RawData), "The matched certificate must be the one that signed.");
         Assert.IsNotNull(facts.SignedContent, "An encapsulating signature carries its signed content.");
         Assert.IsEmpty(facts.Timestamps, "A baseline signature embeds no time-stamp token.");
     }
@@ -275,7 +272,7 @@ internal sealed class SignatureValidationBuildingBlockTests
         {
             Assert.AreEqual(BuildingBlockIndication.Failed, result.Conclusion.Indication, "Clause 5.2.2.3 makes a non-conformant signature FAILED.");
             Assert.Contains(SignatureValidationSubIndication.FormatFailure, result.Conclusion.SubIndications, "The sub-indication must be FORMAT_FAILURE.");
-            Assert.IsInstanceOfType<FormatFailureReportData>(result.Conclusion.ReportData[0], "Table 6 mandates information on why parsing failed.");
+            _ = Assert.IsInstanceOfType<FormatFailureReportData>(result.Conclusion.ReportData[0], "Table 6 mandates information on why parsing failed.");
         }
     }
 
@@ -379,7 +376,7 @@ internal sealed class SignatureValidationBuildingBlockTests
         Assert.AreEqual(BuildingBlockIndication.Failed, result.Conclusion.Indication, "Table 15 makes a hash failure FAILED, not INDETERMINATE.");
         Assert.Contains(SignatureValidationSubIndication.HashFailure, result.Conclusion.SubIndications,
             "Content that does not match its message-digest attribute is HASH_FAILURE, distinct from SIG_CRYPTO_FAILURE.");
-        Assert.IsInstanceOfType<HashFailureReportData>(result.Conclusion.ReportData[0], "Table 15 asks for the identifiers of the signed data that failed.");
+        _ = Assert.IsInstanceOfType<HashFailureReportData>(result.Conclusion.ReportData[0], "Table 15 asks for the identifiers of the signed data that failed.");
     }
 
 
@@ -586,7 +583,7 @@ internal sealed class SignatureValidationBuildingBlockTests
 
             Assert.AreEqual(BuildingBlockIndication.Passed, good.Conclusion.Indication, "Step 9): a chain that validates with fresh good status is PASSED.");
             Assert.Contains(SignatureValidationSubIndication.RevokedNoProofOfExistence, revokedLeaf.Conclusion.SubIndications, "Step 4)b) names REVOKED_NO_POE for the signing certificate.");
-            Assert.IsInstanceOfType<CertificateRevocationReportData>(revokedLeaf.Conclusion.ReportData[0], "Table 6 mandates the chain, the revocation date and the reason.");
+            _ = Assert.IsInstanceOfType<CertificateRevocationReportData>(revokedLeaf.Conclusion.ReportData[0], "Table 6 mandates the chain, the revocation date and the reason.");
             Assert.Contains(SignatureValidationSubIndication.RevokedCertificationAuthorityNoProofOfExistence, revokedIntermediate.Conclusion.SubIndications,
                 "Step 4)d) names REVOKED_CA_NO_POE for an intermediate.");
             Assert.Contains(SignatureValidationSubIndication.TryLater, noStatus.Conclusion.SubIndications,
@@ -696,7 +693,7 @@ internal sealed class SignatureValidationBuildingBlockTests
 
             Assert.Contains(SignatureValidationSubIndication.RevocationOutOfBoundsNoProofOfExistence, result.Conclusion.SubIndications,
                 "Step 8): the validation time lies outside the validity range of the revocation data's own issuer certificate.");
-            Assert.IsInstanceOfType<RevocationOutOfBoundsReportData>(result.Conclusion.ReportData[0]);
+            _ = Assert.IsInstanceOfType<RevocationOutOfBoundsReportData>(result.Conclusion.ReportData[0]);
         }
         finally
         {
@@ -772,7 +769,7 @@ internal sealed class SignatureValidationBuildingBlockTests
 
         Assert.AreEqual(BuildingBlockIndication.Indeterminate, result.Conclusion.Indication, "Table 17 makes an unmet constraint INDETERMINATE.");
         Assert.Contains(SignatureValidationSubIndication.SignatureConstraintsFailure, result.Conclusion.SubIndications, "The sub-indication is SIG_CONSTRAINTS_FAILURE.");
-        Assert.IsInstanceOfType<UnsatisfiedSignatureConstraintsReportData>(result.Conclusion.ReportData[0], "Table 17 mandates the set of constraints not verified.");
+        _ = Assert.IsInstanceOfType<UnsatisfiedSignatureConstraintsReportData>(result.Conclusion.ReportData[0], "Table 17 mandates the set of constraints not verified.");
         Assert.IsNotEmpty(result.Conclusion.ConstraintEvaluations, "Clause 5.1.3 requires the per-constraint outcome for an indeterminate result.");
     }
 
@@ -873,7 +870,7 @@ internal sealed class SignatureValidationBuildingBlockTests
         Assert.AreEqual(BuildingBlockIndication.Indeterminate, result.Conclusion.Indication, "An algorithm no table asserts reliable leaves the acceptance indeterminate.");
         Assert.Contains(SignatureValidationSubIndication.CryptographicConstraintsFailureNoProofOfExistence, result.Conclusion.SubIndications,
             "Clause 5.2.8.4.1 names CRYPTO_CONSTRAINTS_FAILURE_NO_POE.");
-        Assert.IsInstanceOfType<CryptographicConstraintsFailureReportData>(result.Conclusion.ReportData[0], "Table 17 mandates the list of algorithms concerned.");
+        _ = Assert.IsInstanceOfType<CryptographicConstraintsFailureReportData>(result.Conclusion.ReportData[0], "Table 17 mandates the list of algorithms concerned.");
     }
 
 

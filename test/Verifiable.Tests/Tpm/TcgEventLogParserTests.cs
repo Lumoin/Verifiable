@@ -1,10 +1,6 @@
-using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Text;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Verifiable.Tpm.EventLog;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -92,7 +88,7 @@ internal class TcgEventLogParserTests
         var result = TcgEventLogParser.Parse(log);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.IsNull(result.Value!.Events[0].EventDataDescription);
+        Assert.IsNull(result.Value.Events[0].EventDataDescription);
     }
 
     [TestMethod]
@@ -113,7 +109,7 @@ internal class TcgEventLogParserTests
         //The SpecId event still parses; the misdeclared crypto-agile event is rejected and the log is truncated
         //there rather than accepting a wrong-width digest.
         Assert.IsTrue(result.IsSuccess);
-        Assert.IsTrue(result.Value!.IsTruncated);
+        Assert.IsTrue(result.Value.IsTruncated);
         Assert.HasCount(1, result.Value.Events);
     }
 
@@ -132,7 +128,7 @@ internal class TcgEventLogParserTests
         var result = TcgEventLogParser.Parse(log);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual("Separator (Success)", result.Value!.Events[0].EventDataDescription);
+        Assert.AreEqual("Separator (Success)", result.Value.Events[0].EventDataDescription);
     }
 
     [TestMethod]
@@ -150,7 +146,7 @@ internal class TcgEventLogParserTests
         var result = TcgEventLogParser.Parse(log);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual("Separator (Error)", result.Value!.Events[0].EventDataDescription);
+        Assert.AreEqual("Separator (Error)", result.Value.Events[0].EventDataDescription);
     }
 
     [TestMethod]
@@ -168,7 +164,7 @@ internal class TcgEventLogParserTests
         var result = TcgEventLogParser.Parse(log);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.HasCount(3, result.Value!.Events);
+        Assert.HasCount(3, result.Value.Events);
         Assert.AreEqual(0, result.Value.Events[0].PcrIndex);
         Assert.AreEqual(0, result.Value.Events[1].PcrIndex);
         Assert.AreEqual(7, result.Value.Events[2].PcrIndex);
@@ -186,7 +182,7 @@ internal class TcgEventLogParserTests
         var result = TcgEventLogParser.Parse(truncated);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.IsTrue(result.Value!.IsTruncated);
+        Assert.IsTrue(result.Value.IsTruncated);
         Assert.HasCount(1, result.Value.Events);
     }
 
@@ -204,7 +200,7 @@ internal class TcgEventLogParserTests
         var result = TcgEventLogParser.Parse(log);
 
         Assert.IsTrue(result.IsSuccess);
-        for(int i = 0; i < result.Value!.Events.Count; i++)
+        for(int i = 0; i < result.Value.Events.Count; i++)
         {
             Assert.AreEqual(i, result.Value.Events[i].Index);
         }
@@ -226,7 +222,7 @@ internal class TcgEventLogParserTests
 
         Assert.IsTrue(result.IsSuccess);
 
-        var pcr0Events = new List<TcgEvent>(result.Value!.GetEventsForPcr(0));
+        var pcr0Events = new List<TcgEvent>(result.Value.GetEventsForPcr(0));
         Assert.HasCount(2, pcr0Events);
 
         var pcr7Events = new List<TcgEvent>(result.Value.GetEventsForPcr(7));
@@ -251,7 +247,7 @@ internal class TcgEventLogParserTests
 
         Assert.IsTrue(result.IsSuccess);
 
-        var postCodeEvents = new List<TcgEvent>(result.Value!.GetEventsByType(TcgEventType.EV_POST_CODE));
+        var postCodeEvents = new List<TcgEvent>(result.Value.GetEventsByType(TcgEventType.EV_POST_CODE));
         Assert.HasCount(2, postCodeEvents);
 
         var separatorEvents = new List<TcgEvent>(result.Value.GetEventsByType(TcgEventType.EV_SEPARATOR));

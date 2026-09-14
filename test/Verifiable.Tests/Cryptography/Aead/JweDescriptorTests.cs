@@ -113,7 +113,7 @@ internal sealed class JweDescriptorTests
     [DataRow("   ")]
     public void JweContentEncryption_FromWellKnownName_ThrowsOnNullOrWhitespace(string? wireName)
     {
-        Assert.Throws<ArgumentException>(() => JweContentEncryption.FromWellKnownName(wireName!),
+        _ = Assert.Throws<ArgumentException>(() => JweContentEncryption.FromWellKnownName(wireName!),
             "A null or whitespace enc string must be rejected at the parse boundary.");
     }
 }

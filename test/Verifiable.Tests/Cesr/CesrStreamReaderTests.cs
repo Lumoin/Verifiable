@@ -1,9 +1,6 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Text;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Cesr;
 using Verifiable.Cesr.Streaming;
 using Verifiable.Cesr.Text;
@@ -92,7 +89,7 @@ internal sealed class CesrStreamReaderTests
         byte[] stream = BuildStream(body);
         byte[] truncated = stream[..^3];
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
             await ReadAllAsync(PipeReader.Create(new ReadOnlySequence<byte>(truncated))));
     }
 
@@ -108,7 +105,7 @@ internal sealed class CesrStreamReaderTests
     {
         byte[] json = "{\"v\":\"x\"}"u8.ToArray();
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
             await ReadAllAsync(PipeReader.Create(new ReadOnlySequence<byte>(json))));
     }
 
@@ -180,7 +177,7 @@ internal sealed class CesrStreamReaderTests
         byte[] stream = BuildTextStream(body);
         byte[] truncated = stream[..^4];
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
             await ReadAllTextAsync(PipeReader.Create(new ReadOnlySequence<byte>(truncated))));
     }
 
@@ -194,7 +191,7 @@ internal sealed class CesrStreamReaderTests
     {
         byte[] opCode = "_AAB"u8.ToArray();
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
             await ReadAllTextAsync(PipeReader.Create(new ReadOnlySequence<byte>(opCode))));
     }
 
@@ -282,7 +279,7 @@ internal sealed class CesrStreamReaderTests
     {
         byte[] noVersionString = Encoding.ASCII.GetBytes("{\"x\":\"" + new string('a', 80) + "\"}");
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () =>
             await ReadAllTextAsync(PipeReader.Create(new ReadOnlySequence<byte>(noVersionString))));
     }
 
@@ -464,9 +461,9 @@ internal sealed class CesrStreamReaderTests
     private static async ValueTask WriteInHalvesAsync(PipeWriter writer, byte[] data)
     {
         int half = data.Length / 2;
-        await writer.WriteAsync(data.AsMemory(0, half));
+        _ = await writer.WriteAsync(data.AsMemory(0, half));
         await Task.Yield();
-        await writer.WriteAsync(data.AsMemory(half));
+        _ = await writer.WriteAsync(data.AsMemory(half));
         await writer.CompleteAsync();
     }
 

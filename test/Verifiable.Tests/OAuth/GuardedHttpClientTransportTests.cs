@@ -1,8 +1,4 @@
-using System;
 using System.Net;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth;
@@ -43,7 +39,7 @@ internal sealed class GuardedHttpClientTransportTests
 
         //An authorization request pointing the wallet at the cloud metadata
         //service — the classic SSRF target. SecureDefault blocks link-local.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         HttpResponseData response = await send(
             new Uri("https://169.254.169.254/latest/meta-data/"),
             Form, NoHeaders, context, TestContext.CancellationToken).ConfigureAwait(false);
@@ -66,7 +62,7 @@ internal sealed class GuardedHttpClientTransportTests
 
         //Plain http is denied by the https-only default; loopback is denied by
         //the private-range rule. Either way the throwing handler is never hit.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         HttpResponseData response = await send(
             new Uri("http://127.0.0.1:8080/cb"),
             Form, NoHeaders, context, TestContext.CancellationToken).ConfigureAwait(false);
@@ -88,7 +84,7 @@ internal sealed class GuardedHttpClientTransportTests
         //The deployment's transport endpoint genuinely is a loopback HTTPS listener, so
         //the policy is relaxed for exactly that — the same principled choice the
         //HTTP-backed flow tests make. The fetch now proceeds to the stub.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
         HttpResponseData response = await send(
@@ -110,7 +106,7 @@ internal sealed class GuardedHttpClientTransportTests
         //Every loopback test host now serves HTTPS; the loopback policy relaxes only
         //BlockPrivateAndLoopback, never the https-only scheme gate. A plain-http target
         //must still be denied before any network contact — the throwing handler is never hit.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
         HttpResponseData response = await send(

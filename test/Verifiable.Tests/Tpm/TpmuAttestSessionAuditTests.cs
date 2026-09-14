@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Tests.TestInfrastructure;
@@ -64,7 +63,7 @@ internal sealed class TpmuAttestSessionAuditTests
         Assert.IsNull(parsed.Attested.Quote, "The quote arm must be absent for a session-audit attestation.");
         Assert.IsNull(parsed.Attested.Certify, "The certify arm must be absent for a session-audit attestation.");
         Assert.IsNotNull(parsed.Attested.SessionAudit, "The sessionAudit arm must be present.");
-        Assert.IsTrue(parsed.Attested.SessionAudit!.ExclusiveSession.IsYes, "exclusiveSession must round-trip as YES.");
+        Assert.IsTrue(parsed.Attested.SessionAudit.ExclusiveSession.IsYes, "exclusiveSession must round-trip as YES.");
         Assert.IsTrue(parsed.Attested.SessionAudit.SessionDigest.AsReadOnlySpan().SequenceEqual(SampleSessionDigest), "sessionDigest must round-trip.");
     }
 
@@ -96,7 +95,7 @@ internal sealed class TpmuAttestSessionAuditTests
         Assert.IsTrue(parsed.GetRawBytes().SequenceEqual(attestImage), "The retained raw bytes must be exactly the marshaled attestation.");
         Assert.AreEqual(TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT, parsed.AttestationData.Type, "The wrapped attestation's type must be TPM_ST_ATTEST_SESSION_AUDIT.");
         Assert.IsNotNull(parsed.AttestationData.Attested.SessionAudit, "The sessionAudit arm must be reachable through Tpm2bAttest.");
-        Assert.IsTrue(parsed.AttestationData.Attested.SessionAudit!.ExclusiveSession.IsNo, "exclusiveSession must round-trip as NO.");
+        Assert.IsTrue(parsed.AttestationData.Attested.SessionAudit.ExclusiveSession.IsNo, "exclusiveSession must round-trip as NO.");
         Assert.IsTrue(parsed.AttestationData.Attested.SessionAudit.SessionDigest.AsReadOnlySpan().SequenceEqual(SampleSessionDigest), "sessionDigest must round-trip.");
     }
 

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
@@ -101,7 +99,7 @@ namespace Verifiable.Core.Did.Methods.Key
         /// the <see cref="PublicKeyMemory.Equals(PublicKeyMemory)"/> method, which compares
         /// both the key material and associated metadata.
         /// </remarks>
-        public bool Equals(KeyDidBuildState other)
+        public readonly bool Equals(KeyDidBuildState other)
         {
             return EncodedKey == other.EncodedKey
                 && PublicKey.Equals(other.PublicKey)
@@ -116,7 +114,7 @@ namespace Verifiable.Core.Did.Methods.Key
         /// </summary>
         /// <param name="obj">The object to compare with the current instance.</param>
         /// <returns><c>true</c> if the specified object is a <see cref="KeyDidBuildState"/> and is equal to the current instance; otherwise, <c>false</c>.</returns>
-        public override bool Equals(object? obj)
+        public override readonly bool Equals(object? obj)
         {
             return obj is KeyDidBuildState other && Equals(other);
         }
@@ -129,7 +127,7 @@ namespace Verifiable.Core.Did.Methods.Key
         /// The hash code is computed from the encoded key, public key, crypto suite, and key inputs count
         /// to ensure consistent hashing behavior for equal instances.
         /// </remarks>
-        public override int GetHashCode()
+        public override readonly int GetHashCode()
         {
             return HashCode.Combine(EncodedKey, PublicKey, VerificationMethodTypeInfo, DidId, KeyInputs?.Count ?? 0, CurrentVerificationMethodIndex);
         }

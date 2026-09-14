@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Json;
@@ -115,7 +114,7 @@ internal sealed class VcalmSchemaValidationTests
             VcalmSchemaValidatorRegistry.JsonSchemaType, EmailSchema, ConformingDocument, TestContext.CancellationToken);
         Assert.AreEqual(CredentialSchemaValidationOutcome.Success, result.Outcome);
 
-        await Assert.ThrowsExactlyAsync<KeyNotFoundException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<KeyNotFoundException>(async () =>
             await registry.ValidateAsync("VendorMechanism", EmailSchema, ConformingDocument, TestContext.CancellationToken));
     }
 

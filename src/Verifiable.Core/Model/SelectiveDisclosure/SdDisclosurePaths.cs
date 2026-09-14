@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
@@ -72,7 +70,7 @@ public sealed class SdDisclosurePaths
         {
             byDisclosure[disclosure] = path;
             pathToDisclosure[path] = disclosure;
-            paths.Add(path);
+            _ = paths.Add(path);
         }
 
         DisclosureToPath = byDisclosure;

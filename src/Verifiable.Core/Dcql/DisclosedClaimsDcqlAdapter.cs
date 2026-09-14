@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 

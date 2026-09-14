@@ -1,5 +1,3 @@
-using System;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -222,7 +220,7 @@ internal sealed class StatusWordTests
     [TestMethod]
     public void CreateThrowsOnDuplicate()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             StatusWord.Create(0x9000, "Duplicate."));
     }
 

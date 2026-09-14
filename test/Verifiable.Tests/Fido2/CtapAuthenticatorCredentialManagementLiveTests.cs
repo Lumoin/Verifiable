@@ -1,13 +1,9 @@
-using System;
-using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 using static Verifiable.Tests.TestInfrastructure.CtapCredentialManagementFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -38,7 +34,7 @@ internal sealed class CtapAuthenticatorCredentialManagementLiveTests
     [TestMethod]
     public async Task DeleteCredentialCausesSubsequentGetAssertionAllowListToReturnNoCredentials()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("cm-live-delete-then-ga",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("cm-live-delete-then-ga", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] credentialIdBytes = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE0), TestContext.CancellationToken);
 

@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Text;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tests.TestInfrastructure;
 

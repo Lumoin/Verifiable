@@ -1,8 +1,3 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Verifiable.Fido2;
 
 /// <summary>
@@ -36,14 +31,14 @@ public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialReq
         //First transformation: the relying party identifier.
         _ = With((options, builder, state) =>
         {
-            options.RpId = state!.RpId;
+            options.RpId = state.RpId;
 
             return ValueTask.FromResult(options);
         })
         //Second transformation: the challenge, via the entropy seam unless the caller supplied one.
         .With((options, builder, state) =>
         {
-            options.Challenge = state!.Challenge ?? Fido2ChallengeGeneration.Generate(state.Pool);
+            options.Challenge = state.Challenge ?? Fido2ChallengeGeneration.Generate(state.Pool);
 
             return ValueTask.FromResult(options);
         })
@@ -51,14 +46,14 @@ public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialReq
         //empty (the discoverable-credential path, row 3914) when none are supplied.
         .With((options, builder, state) =>
         {
-            options.AllowCredentials = Fido2OptionsDescriptors.ProjectDescriptors(state!.AllowedCredentials);
+            options.AllowCredentials = Fido2OptionsDescriptors.ProjectDescriptors(state.AllowedCredentials);
 
             return ValueTask.FromResult(options);
         })
         //Fourth transformation: user verification, defaulting to Preferred per the CR's own IDL default.
         .With((options, builder, state) =>
         {
-            options.UserVerification = state!.UserVerification ?? UserVerificationRequirement.Preferred;
+            options.UserVerification = state.UserVerification ?? UserVerificationRequirement.Preferred;
 
             return ValueTask.FromResult(options);
         })
@@ -66,21 +61,21 @@ public sealed class Fido2AssertionOptionsBuilder: Builder<PublicKeyCredentialReq
         //authenticatorAttachment for the row-4470 compatibility mapping to set.
         .With((options, builder, state) =>
         {
-            options.Hints = state!.Hints ?? [];
+            options.Hints = state.Hints ?? [];
 
             return ValueTask.FromResult(options);
         })
         //Sixth transformation: timeout — pass-through only, no spec-mandated default exists.
         .With((options, builder, state) =>
         {
-            options.Timeout = state!.Timeout;
+            options.Timeout = state.Timeout;
 
             return ValueTask.FromResult(options);
         })
         //Seventh transformation: the two assertion-side named extension-input carve-outs.
         .With((options, builder, state) =>
         {
-            options.AppId = state!.AppId;
+            options.AppId = state.AppId;
             options.LargeBlob = state.LargeBlob;
 
             return ValueTask.FromResult(options);

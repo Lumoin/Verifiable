@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
@@ -140,18 +139,18 @@ public static class WebHttpsTransform
                     $"The DID identifier '{identifier}' has an invalid path segment '{segment}'.", nameof(identifier));
             }
 
-            location.Append('/');
-            location.Append(MapSegment(segment, policy.SegmentMapping));
+            _ = location.Append('/');
+            _ = location.Append(MapSegment(segment, policy.SegmentMapping));
         }
 
         if(pathSegmentCount == 0 && policy.WellKnownWhenNoPath)
         {
-            location.Append('/');
-            location.Append(WellKnownSegment);
+            _ = location.Append('/');
+            _ = location.Append(WellKnownSegment);
         }
 
-        location.Append('/');
-        location.Append(policy.DocumentFileName);
+        _ = location.Append('/');
+        _ = location.Append(policy.DocumentFileName);
 
         return $"{scheme}://{location}";
 
@@ -181,7 +180,7 @@ public static class WebHttpsTransform
     {
         string candidate = Uri.UnescapeDataString(host);
 
-        if(candidate.StartsWith('['))
+        if(candidate.StartsWith('[', StringComparison.Ordinal))
         {
             //A bracketed IPv6 literal: the address is between the brackets, anything after ']' is a port.
             int close = candidate.IndexOf(']', StringComparison.Ordinal);
@@ -194,7 +193,7 @@ public static class WebHttpsTransform
             int firstColon = candidate.IndexOf(':', StringComparison.Ordinal);
             if(firstColon >= 0)
             {
-                int lastColon = candidate.LastIndexOf(':');
+                int lastColon = candidate.LastIndexOf(':', StringComparison.Ordinal);
                 if(firstColon == lastColon)
                 {
                     candidate = candidate[..firstColon];

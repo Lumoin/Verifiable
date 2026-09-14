@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using System.Diagnostics;
 using Verifiable.Cryptography.Pki;
 

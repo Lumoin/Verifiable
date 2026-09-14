@@ -5,7 +5,6 @@ using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
@@ -105,11 +104,11 @@ internal sealed class FederationEntityConfigurationEndpointTests
 
         //Each of the four well-known endpoints serves a 200 response at its
         //own path under the tenant's segment.
-        await AssertEndpointReturnsAsync(host,
+        _ = await AssertEndpointReturnsAsync(host,
             $"/connect/{segment}/jwks",
             expectedContentType: WellKnownMediaTypes.Application.Json).ConfigureAwait(false);
 
-        await AssertEndpointReturnsAsync(host,
+        _ = await AssertEndpointReturnsAsync(host,
             $"/connect/{segment}/.well-known/openid-configuration",
             expectedContentType: WellKnownMediaTypes.Application.Json).ConfigureAwait(false);
 
@@ -307,13 +306,13 @@ internal sealed class FederationEntityConfigurationEndpointTests
             "EC metadata must include an openid_provider block.");
 
         Assert.IsTrue(
-            ((IReadOnlyDictionary<string, object>)openIdProviderObj!).TryGetValue(
+            ((IReadOnlyDictionary<string, object>)openIdProviderObj).TryGetValue(
                 WellKnownFederationClaimNames.ClientRegistrationTypesSupported, out object? typesObj)
             && typesObj is IReadOnlyList<object>,
             "openid_provider must advertise client_registration_types_supported.");
 
         List<string> values = [];
-        foreach(object item in (IReadOnlyList<object>)typesObj!)
+        foreach(object item in (IReadOnlyList<object>)typesObj)
         {
             values.Add((string)item);
         }
@@ -521,6 +520,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
         JsonValueKind.Null => null,
         JsonValueKind.Object => MaterializeJsonObject(element),
         JsonValueKind.Array => MaterializeJsonArray(element),
+        JsonValueKind.Undefined => null,
         _ => null
     };
 
@@ -563,7 +563,7 @@ internal sealed class FederationEntityConfigurationEndpointTests
         Assert.IsNotNull(result.Statement,
             $"EC must parse as an EntityStatement. Failure: {result.FailureReason}");
 
-        return result.Statement!;
+        return result.Statement;
     }
 
 

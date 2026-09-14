@@ -1,6 +1,5 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -8,11 +7,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -360,7 +354,7 @@ internal sealed class TpmSimulatorNvTests
 
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
-        var simulator = new TpmSimulator("tpm-nv",selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var simulator = new TpmSimulator("tpm-nv", selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -47,7 +42,7 @@ internal sealed class CryptoEventSinkTests
 
     /// <summary>
     /// A <see cref="CryptoEvent"/> factory's <c>OccurredAt</c> is the exact instant its passed
-    /// <see cref="TimeProvider"/> reports — never <see cref="DateTimeOffset.UtcNow"/> or any other clock.
+    /// <see cref="TimeProvider"/> reports — never <c>DateTimeOffset.UtcNow</c> or any other clock.
     /// </summary>
     [TestMethod]
     public void SignatureProducedEventOccurredAtIsThePassedTimeProvidersInstant()

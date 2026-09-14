@@ -1,7 +1,6 @@
 using System.Diagnostics;
-using Verifiable.Foundation.Automata;
-
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Foundation.Automata;
 
 namespace Verifiable.OAuth.Oid4Vp.Server.States;
 

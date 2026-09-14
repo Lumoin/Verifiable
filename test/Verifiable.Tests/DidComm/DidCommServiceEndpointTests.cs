@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
-using Verifiable.DidComm;
 using Verifiable.DidComm.Routing;
 
 namespace Verifiable.Tests.DidComm;
@@ -27,7 +22,7 @@ namespace Verifiable.Tests.DidComm;
 [TestClass]
 internal sealed class DidCommServiceEndpointTests
 {
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string DidPrefix = "did:example";
     private const string Recipient = "did:example:recipient";
@@ -336,11 +331,11 @@ internal sealed class DidCommServiceEndpointTests
         var service = new Service
         {
             Type = WellKnownDidCommServiceNames.DidCommMessagingServiceType,
-            ServiceEndpoints = new List<object>
-            {
+            ServiceEndpoints =
+            [
                 "https://bare-in-array.example",
                 new Dictionary<string, object> { [WellKnownDidCommServiceNames.Uri] = "https://obj-in-array.example" }
-            }
+            ]
         };
 
         Assert.AreEqual(
@@ -356,12 +351,12 @@ internal sealed class DidCommServiceEndpointTests
         var service = new Service
         {
             Type = WellKnownDidCommServiceNames.DidCommMessagingServiceType,
-            ServiceEndpoints = new List<object>
-            {
+            ServiceEndpoints =
+            [
                 new Dictionary<string, object> { [WellKnownDidCommServiceNames.Uri] = "https://a.example" },
                 new Dictionary<string, object> { [WellKnownDidCommServiceNames.RoutingKeys] = new List<string> { "did:example:m1" } },
                 new Dictionary<string, object> { [WellKnownDidCommServiceNames.Uri] = "https://c.example" }
-            }
+            ]
         };
 
         Assert.AreEqual(

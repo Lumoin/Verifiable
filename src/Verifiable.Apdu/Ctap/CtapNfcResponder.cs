@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Apdu.Ctap;
 
@@ -509,7 +506,7 @@ public sealed class CtapNfcResponder: IDisposable
         int wanted = requestedLe <= 0 ? ApduConstants.MaxShortResponseData : requestedLe;
         int chunkSize = Math.Min(wanted, data.Length);
         ReadOnlySpan<byte> chunk = data.Span[..chunkSize];
-        ReadOnlyMemory<byte> remainder = data.Slice(chunkSize);
+        ReadOnlyMemory<byte> remainder = data[chunkSize..];
 
         if(remainder.Length == 0)
         {

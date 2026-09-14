@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 

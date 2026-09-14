@@ -1,19 +1,14 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
@@ -206,6 +201,23 @@ internal sealed class JAdESMultiServerWireFlowTests
 
                 case JAdESUnsignedHeaderElementArchiveTimestamp:
                     sawArchiveTimestamp = true;
+                    break;
+
+                case JAdESUnsignedHeaderElementSignaturePolicyStore:
+                case JAdESUnsignedHeaderElementCounterSignature:
+                case JAdESUnsignedHeaderElementCertificateValues:
+                case JAdESUnsignedHeaderElementRevocationValues:
+                case JAdESUnsignedHeaderElementAttributeCertificateValues:
+                case JAdESUnsignedHeaderElementAttributeRevocationValues:
+                case JAdESUnsignedHeaderElementAnyValidationData:
+                case JAdESUnsignedHeaderElementTimestampValidationData:
+                case JAdESUnsignedHeaderElementCertificateReferences:
+                case JAdESUnsignedHeaderElementRevocationReferences:
+                case JAdESUnsignedHeaderElementAttributeCertificateReferences:
+                case JAdESUnsignedHeaderElementAttributeRevocationReferences:
+                case JAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case JAdESUnsignedHeaderElementReferencesTimestamp:
+                case JAdESUnsignedHeaderElementUnknown:
                     break;
             }
         }

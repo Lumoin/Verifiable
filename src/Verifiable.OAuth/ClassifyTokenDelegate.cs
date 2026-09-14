@@ -1,8 +1,6 @@
 using Verifiable.Core;
 using Verifiable.JCose;
 
-using Verifiable.OAuth.Server;
-
 namespace Verifiable.OAuth;
 
 /// <summary>

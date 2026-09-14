@@ -1,19 +1,14 @@
-using System;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -147,14 +142,14 @@ internal sealed class StatusListTokenResolversTests
         string? offeredUri = null;
         string? offeredType = null;
         string? offeredKeyId = null;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext context, CancellationToken cancellationToken)
         {
             offeredUri = context.StatusListUri;
             offeredType = context.Header.TryGetValue(TypeHeaderParameter, out object? type) ? type as string : null;
             offeredKeyId = context.Header.TryGetValue(KeyIdHeaderParameter, out object? keyId) ? keyId as string : null;
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
-        };
+        }
 
         ScriptedOutboundTransport transport = Serving(ListUrl, StatusListJwtMediaType, compactJws);
         ResolvedStatusListToken? resolved = await ResolverOver(transport.Delegate, resolveIssuerKey, Clock())(
@@ -274,7 +269,7 @@ internal sealed class StatusListTokenResolversTests
         using PublicKeyMemory issuerPublic = issuerKeys.PublicKey;
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
 
-        OutboundTransportDelegate failing = (request, context, cancellationToken) =>
+        static ValueTask<OutboundResponse> failing(OutboundRequest request, Verifiable.Core.ExchangeContext context, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The Status Provider refused the connection.");
         ResolveVerifiedStatusListTokenDelegate resolve = ResolverOver(failing, KeyOf(issuerPublic), Clock());
 

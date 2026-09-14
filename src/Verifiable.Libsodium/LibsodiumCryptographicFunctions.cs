@@ -1,11 +1,8 @@
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
@@ -38,6 +35,19 @@ public static class LibsodiumCryptographicFunctions
     /// Identifies this class as the provider class for CBOM/telemetry attribution.
     /// </summary>
     private static ProviderClass ProviderCls { get; } = new(nameof(LibsodiumCryptographicFunctions));
+
+    /// <summary>
+    /// Whether Ed25519 secret-key scratch memory used by <see cref="SignEd25519Async"/> and
+    /// <see cref="LibsodiumKeyMaterialCreator.CreateEd25519Keys"/> is sodium-guarded native memory
+    /// (<see langword="true"/>, every platform except browser-wasm) or a pinned, zero-on-return
+    /// managed buffer (<see langword="false"/>, browser-wasm only, where WebAssembly's linear memory
+    /// has no guard-page or memory-locking primitive, so for the duration of the operation the
+    /// expanded secret key sits in the page's JS-visible linear memory, zeroed on release). A
+    /// browser-wasm smoke asserts this is <see langword="false"/> there as a guard against the posture
+    /// silently flipping either way; a future toolchain that makes real guarded memory available on
+    /// browser-wasm is the signal to revisit it.
+    /// </summary>
+    public static bool UsesSodiumGuardedScratchMemory => SodiumScratchPool.IsGuardedNativeMemory;
 
 
     /// <summary>
@@ -74,7 +84,7 @@ public static class LibsodiumCryptographicFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+            _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
         }
 
         IMemoryOwner<byte> memoryPooledSignature = signaturePool.Rent(LibsodiumCrypto.Ed25519SignatureLength);
@@ -88,14 +98,16 @@ public static class LibsodiumCryptographicFunctions
 
         /// <summary>
         /// Expands the 32-byte seed into libsodium's 64-byte secret key form inside a
-        /// <see cref="SodiumGuardedScratchPool"/> owner from
+        /// <see cref="SodiumScratchPool"/> owner from
         /// <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/>, signs, and disposes the owner (which
         /// wipes and frees it) before this method returns. The expanded 64-byte form never touches
-        /// managed memory: it is reached only by pinning the owner's native memory and passing the raw
-        /// pointer to the crypto imports. The scratch is always sodium-guarded regardless of which pool
-        /// the caller supplied for the signature output — <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/>
-        /// rents from exactly the pool it is given, so a caller-supplied general-purpose pool would drop
-        /// that guarding silently.
+        /// managed memory off browser-wasm: it is reached only by pinning the owner's native memory and
+        /// passing the raw pointer to the crypto imports. On browser-wasm the pinned owner's memory IS
+        /// managed (WebAssembly's linear memory has no guard-page primitive for anything to sit behind)
+        /// but is still zeroed on dispose. The scratch always gets the strongest posture the platform
+        /// can offer regardless of which pool the caller supplied for the signature output —
+        /// <see cref="LibsodiumCrypto.AllocateSecretKeyScratch"/> rents from exactly the pool it is
+        /// given, so a caller-supplied general-purpose pool would drop that guarding silently.
         /// </summary>
         /// <param name="seed">The 32-byte RFC 8032 Ed25519 seed.</param>
         /// <param name="message">The data to sign.</param>
@@ -103,7 +115,7 @@ public static class LibsodiumCryptographicFunctions
         static void SignWithSeed(ReadOnlySpan<byte> seed, ReadOnlySpan<byte> message, Span<byte> signature)
         {
             using IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumCrypto.AllocateSecretKeyScratch(
-                SodiumGuardedScratchPool.Instance, "libsodium failed to allocate secure scratch memory for Ed25519 signing.");
+                SodiumScratchPool.Instance, "libsodium failed to allocate secure scratch memory for Ed25519 signing.");
             using MemoryHandle secretKeyScratchHandle = secretKeyScratchOwner.Memory.Pin();
 
             nint secretKeyScratch;
@@ -180,7 +192,7 @@ public static class LibsodiumCryptographicFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+            _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
         }
 
         int verifyResult = LibsodiumCrypto.VerifyDetached(signature.Span, dataToVerify.Span, publicKeyMaterial.Span);

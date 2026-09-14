@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth.Federation;
@@ -41,7 +40,7 @@ internal sealed class FederationHttpClientTransportTests
         FetchedEntityStatement? result = await fetch(
             subject.Identifier,
             new Uri("https://example.test/.well-known/openid-federation"),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "Mock handler should produce a parseable fetched statement.");
@@ -67,7 +66,7 @@ internal sealed class FederationHttpClientTransportTests
         FetchedEntityStatement? result = await fetch(
             subject.Identifier,
             new Uri("https://example.test/.well-known/openid-federation"),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(result, "404 response should produce null.");
@@ -90,7 +89,7 @@ internal sealed class FederationHttpClientTransportTests
         FetchEntityStatementDelegate fetch =
             FederationHttpClientTransport.BuildFetchEntityStatement(httpClient);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
         {
             Redirects = RedirectMode.PolicyChecked,

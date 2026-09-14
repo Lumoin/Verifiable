@@ -1,13 +1,8 @@
-using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -45,7 +40,7 @@ internal class HwTpmCreatePrimaryTests
         {
             HasTpm = true;
             Tpm = TpmDevice.Open(BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
-        }        
+        }
     }
 
 
@@ -71,7 +66,7 @@ internal class HwTpmCreatePrimaryTests
 
     [TestMethod]
     public async Task CreatePrimaryEccSigningKeySucceeds()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -122,7 +117,7 @@ internal class HwTpmCreatePrimaryTests
 
     [TestMethod]
     public async Task CreatePrimaryRsaSigningKeySucceeds()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -169,7 +164,7 @@ internal class HwTpmCreatePrimaryTests
 
     [TestMethod]
     public async Task CreatePrimaryWithPasswordSucceeds()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -215,7 +210,7 @@ internal class HwTpmCreatePrimaryTests
 
     [TestMethod]
     public async Task CreatePrimarySameTemplateProducesSameKey()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -265,5 +260,5 @@ internal class HwTpmCreatePrimaryTests
         Assert.IsNotNull(secondKeyName);
         Assert.AreSequenceEqual(firstKeyName, secondKeyName, "Same template should produce same key name.");
         TestContext.WriteLine($"Both keys have same name: {Convert.ToHexString(firstKeyName)}");
-    }    
+    }
 }

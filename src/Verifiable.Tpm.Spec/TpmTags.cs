@@ -1,4 +1,3 @@
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tpm.Spec;

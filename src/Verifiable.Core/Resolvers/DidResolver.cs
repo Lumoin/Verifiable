@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Core.Resolvers;
@@ -343,7 +337,7 @@ public sealed class DidResolver
 
                 //Kept as if/else rather than a ternary: the "expand" branch is a multi-property object
                 //initializer, which a ternary would make harder to read, not easier.
-                if(vm.Id is not null && vm.Id.StartsWith('#'))
+                if(vm.Id is not null && vm.Id.StartsWith('#', StringComparison.Ordinal))
                 {
                     expandedVms[i] = new VerificationMethod
                     {
@@ -373,7 +367,7 @@ public sealed class DidResolver
 
                 //Kept as if/else rather than a ternary, for the same reason as the verification-method
                 //loop above: the "expand" branch is a multi-property object initializer.
-                if(idStr is not null && idStr.StartsWith('#'))
+                if(idStr is not null && idStr.StartsWith('#', StringComparison.Ordinal))
                 {
                     //DidUrl.ParseAbsolute throws for invalid input; the expanded string is always
                     //valid because baseDid is a well-formed absolute DID from a prior parse step.
@@ -434,7 +428,7 @@ public sealed class DidResolver
             var reference = references[i];
             if(!reference.IsEmbeddedVerification
                 && reference.VerificationReferenceId is { } id
-                && id.StartsWith('#'))
+                && id.StartsWith('#', StringComparison.Ordinal))
             {
                 expanded ??= (T[])references.Clone();
                 expanded[i] = fromReference($"{baseDid}{id}");
@@ -520,7 +514,7 @@ public sealed class DidResolver
                 continue;
             }
 
-            string idString = service.Id.ToString()!;
+            string idString = service.Id.ToString();
             int hashIndex = idString.IndexOf('#', StringComparison.Ordinal);
             string idFragment = hashIndex >= 0 ? idString[(hashIndex + 1)..] : idString;
             if(string.Equals(idFragment, serviceParam, StringComparison.Ordinal))
@@ -549,7 +543,7 @@ public sealed class DidResolver
         DidDocumentMetadata? contentMetadata,
         string? verificationRelationship)
     {
-        string fragmentWithHash = fragment.StartsWith('#') ? fragment : $"#{fragment}";
+        string fragmentWithHash = fragment.StartsWith('#', StringComparison.Ordinal) ? fragment : $"#{fragment}";
 
         if(document.VerificationMethod is not null)
         {

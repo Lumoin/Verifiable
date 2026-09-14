@@ -1,12 +1,6 @@
-using System;
-using Verifiable.Cryptography;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 

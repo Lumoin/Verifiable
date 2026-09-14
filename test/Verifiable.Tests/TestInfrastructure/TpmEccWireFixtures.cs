@@ -1,6 +1,4 @@
-using System;
 using Verifiable.Cryptography;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.TestInfrastructure;
 

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
@@ -1284,7 +1283,7 @@ public static class Jws
     /// the verify overloads honour the contract that verification of untrusted input never throws on
     /// malformed content.
     /// </summary>
-    private readonly struct DecodedSegment : IDisposable
+    private readonly struct DecodedSegment: IDisposable
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="DecodedSegment"/> struct.
@@ -1386,9 +1385,9 @@ public static class Jws
         signingInputLength = checked(segment1.Length + 1 + segment2.Length);
         IMemoryOwner<byte> owner = pool.Rent(signingInputLength);
         Span<byte> span = owner.Memory.Span[..signingInputLength];
-        Encoding.ASCII.GetBytes(segment1, span);
+        _ = Encoding.ASCII.GetBytes(segment1, span);
         span[segment1.Length] = (byte)'.';
-        Encoding.ASCII.GetBytes(segment2, span[(segment1.Length + 1)..]);
+        _ = Encoding.ASCII.GetBytes(segment2, span[(segment1.Length + 1)..]);
         return owner;
     }
 
@@ -1413,7 +1412,7 @@ public static class Jws
         signingInputLength = checked(protectedSegment.Length + 1 + payload.Length);
         IMemoryOwner<byte> owner = pool.Rent(signingInputLength);
         Span<byte> span = owner.Memory.Span[..signingInputLength];
-        Encoding.ASCII.GetBytes(protectedSegment, span);
+        _ = Encoding.ASCII.GetBytes(protectedSegment, span);
         span[protectedSegment.Length] = (byte)'.';
         payload.CopyTo(span[(protectedSegment.Length + 1)..]);
         return owner;

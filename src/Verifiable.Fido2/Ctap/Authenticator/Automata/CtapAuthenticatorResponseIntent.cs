@@ -1,5 +1,3 @@
-using Verifiable.Fido2.Ctap;
-
 namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 
 /// <summary>

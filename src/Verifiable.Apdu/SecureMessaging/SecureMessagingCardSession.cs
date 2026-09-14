@@ -1,7 +1,4 @@
-using System;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 
@@ -243,7 +240,7 @@ public sealed class SecureMessagingCardSession: IDisposable
     {
         using IMemoryOwner<byte> paddedData = pool.Rent(
             Iso9797Padding.PaddedLength(responseData.Length, blockSize), AllocationKind.Pinned);
-        Iso9797Padding.Pad(responseData.Span, blockSize, paddedData.Memory.Span);
+        _ = Iso9797Padding.Pad(responseData.Span, blockSize, paddedData.Memory.Span);
 
         using IMemoryOwner<byte> iv = await ComputeInitializationVectorAsync(pool, cancellationToken).ConfigureAwait(false);
         (Ciphertext cryptogram, _) = await Encrypt(
@@ -359,7 +356,7 @@ public sealed class SecureMessagingCardSession: IDisposable
         SendSequenceCounter.Memory.Span.CopyTo(destination);
         int offset = blockSize;
 
-        Iso9797Padding.Pad(protectedCommand[..ApduConstants.CommandHeaderSize], blockSize, destination.Slice(offset, paddedHeaderLength));
+        _ = Iso9797Padding.Pad(protectedCommand[..ApduConstants.CommandHeaderSize], blockSize, destination.Slice(offset, paddedHeaderLength));
         offset += paddedHeaderLength;
 
         if(parsed.EncryptedObjectLength > 0)
@@ -512,7 +509,7 @@ public sealed class SecureMessagingCardSession: IDisposable
 
             switch(tag)
             {
-                case(CryptogramTag):
+                case CryptogramTag:
                 {
                     encryptedObjectStart = start;
                     encryptedObjectLength = reader.Consumed - start;
@@ -522,7 +519,7 @@ public sealed class SecureMessagingCardSession: IDisposable
 
                     break;
                 }
-                case(ExpectedLengthTag):
+                case ExpectedLengthTag:
                 {
                     expectedLengthObjectStart = start;
                     expectedLengthObjectLength = reader.Consumed - start;
@@ -530,7 +527,7 @@ public sealed class SecureMessagingCardSession: IDisposable
 
                     break;
                 }
-                case(MacTag):
+                case MacTag:
                 {
                     //Pin the MAC length to the profile (see the response parser): an attacker-supplied short or
                     //empty DO'8E' length otherwise lets a truncated MAC compare equal and bypasses the command

@@ -1,32 +1,26 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Net;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.Core.Model.Common;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Vcalm;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Vcalm;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -263,7 +257,7 @@ internal sealed class VcalmConformanceBridgeTests
         string issuerDid = issuerDidDocument.Id!.ToString();
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
 
         vcalm.VcalmCredentialIssuance = new VcalmCredentialIssuance
         {

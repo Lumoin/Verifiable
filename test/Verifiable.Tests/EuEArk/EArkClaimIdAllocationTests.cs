@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO;
 using System.Text.RegularExpressions;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Assessment.EArchiving;
@@ -148,11 +147,11 @@ internal sealed class EArkClaimIdAllocationTests
 
         //Nothing carries an empty description, which is what a ClaimId read out of a result would otherwise
         //print instead of naming its requirement.
-        foreach(var allocation in EveryEArchivingAllocation())
+        foreach(var (PropertyName, _, Description) in EveryEArchivingAllocation())
         {
             Assert.IsFalse(
-                string.IsNullOrWhiteSpace(allocation.Description),
-                $"{allocation.PropertyName} carries no description.");
+                string.IsNullOrWhiteSpace(Description),
+                $"{PropertyName} carries no description.");
         }
     }
 
@@ -166,15 +165,15 @@ internal sealed class EArkClaimIdAllocationTests
     public void ANumberedRequirementsCodeIsItsBandStartPlusItsOwnNumber()
     {
         int recomputed = 0;
-        foreach(var allocation in EveryEArchivingAllocation())
+        foreach(var (PropertyName, Code, Description) in EveryEArchivingAllocation())
         {
-            int expectedCode = ExpectedCodeOf(allocation.Description);
+            int expectedCode = ExpectedCodeOf(Description);
             if(expectedCode >= 0)
             {
                 Assert.AreEqual(
                     expectedCode,
-                    allocation.Code,
-                    $"{allocation.PropertyName} ({allocation.Description}) is not at the code its band arithmetic states.");
+                    Code,
+                    $"{PropertyName} ({Description}) is not at the code its band arithmetic states.");
                 ++recomputed;
             }
         }
@@ -272,13 +271,13 @@ internal sealed class EArkClaimIdAllocationTests
         Assert.AreEqual(2_860_000, AipClaimIds.NarrativeRangeStart);
         Assert.AreEqual(2_900_000, EArkClaimIds.HouseConventionRangeStart);
 
-        foreach(var allocation in EveryEArchivingAllocation())
+        foreach(var (PropertyName, Code, Description) in EveryEArchivingAllocation())
         {
-            int matchingBands = BandHelpers().Count(band => allocation.Code >= band.Start && allocation.Code <= band.End);
+            int matchingBands = BandHelpers().Count(band => Code >= band.Start && Code <= band.End);
             Assert.AreEqual(
                 1,
                 matchingBands,
-                $"{allocation.PropertyName} ({allocation.Description}) is recognised by {matchingBands} bands.");
+                $"{PropertyName} ({Description}) is recognised by {matchingBands} bands.");
         }
     }
 
@@ -412,7 +411,7 @@ internal sealed class EArkClaimIdAllocationTests
         if(isOverall || description.StartsWith("PRP-", StringComparison.Ordinal))
         {
             string[] parts = description.Split('-');
-            if(parts[1].StartsWith('A'))
+            if(parts[1].StartsWith('A', StringComparison.Ordinal))
             {
                 return -1;
             }

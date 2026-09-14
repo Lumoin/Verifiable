@@ -1,4 +1,4 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
@@ -6,9 +6,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -62,7 +59,7 @@ internal sealed class TimestampAcquisitionTests
         using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusGranted, token.AsReadOnlySpan());
 
         using AcquiredTimestampToken acquired = await TimestampAcquisition.VerifyResponseAsync(
-            response, digest,request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            response, digest, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(acquired.Token.IsTimestampToken, "The acquired token must carry the TimestampToken tag.");
         Assert.IsTrue(acquired.Info.IsRead, "The already-read TSTInfo facts must report Read.");
@@ -100,7 +97,7 @@ internal sealed class TimestampAcquisitionTests
         using PkiCertificateMemory response = WriteTimeStampResp(PkiStatusGranted, token.AsReadOnlySpan());
 
         using AcquiredTimestampToken acquired = await TimestampAcquisition.VerifyResponseAsync(
-            response, digest,request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            response, digest, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(acquired.Info.IsRead, "The RSA-3072/SHA-512 authority's token must read through the shipped acquisition path.");
         Assert.AreEqual(TestClock.CanonicalEpoch, acquired.Info.GenerationTime, "The token's genTime must be the authority's stated generation time.");
@@ -137,7 +134,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest,request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, request.RequestNonce, request.RequestedPolicyOid, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A request nonce with no matching token nonce must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.NonceMismatch, exception.FailureKind);
@@ -164,7 +161,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, requestDigest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, requestDigest, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A token minted over different octets than the request's digest names must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.MessageImprintMismatch, exception.FailureKind);
@@ -185,7 +182,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A rejection status must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseRejected, exception.FailureKind);
@@ -207,7 +204,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                response, digest, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
     }
@@ -225,7 +222,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                response, digest, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);
     }
@@ -253,7 +250,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A tampered signature must not verify.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.TokenNotVerified, exception.FailureKind);
@@ -424,7 +421,7 @@ internal sealed class TimestampAcquisitionTests
 
         TimestampAcquisitionException exception = await Assert.ThrowsExactlyAsync<TimestampAcquisitionException>(
             async () => await TimestampAcquisition.VerifyResponseAsync(
-                response, digest,requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+                response, digest, requestNonce: null, requestedPolicyOid: null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A granted response carrying a set PKIFailureInfo bit must fail closed.").ConfigureAwait(false);
 
         Assert.AreEqual(TimestampAcquisitionFailureKind.ResponseMalformed, exception.FailureKind);

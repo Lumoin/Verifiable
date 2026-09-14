@@ -1,12 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
-using Verifiable.Microsoft;
 using Verifiable.OAuth.Dpop;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Keys;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -67,7 +65,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
         //verification path specifically.
         using IMemoryOwner<byte> decoded = TestHostShell.Base64UrlDecoder(nonce, TestHostShell.MemoryPool);
         Memory<byte> bytes = decoded.Memory[..ComputeNonceByteLength("kid-1")];
-        int tamperOffset = bytes.Length - WellKnownDpopValues.NonceHmacTagByteLength / 2;
+        int tamperOffset = bytes.Length - (WellKnownDpopValues.NonceHmacTagByteLength / 2);
         bytes.Span[tamperOffset] ^= 0xFF;
         string tampered = TestHostShell.Base64UrlEncoder(bytes.Span);
 
@@ -135,7 +133,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
         await DefaultDpopNonceIssuance.IssueAsync(
             audience,
             TestTenant,
-            new ExchangeContext(),
+            [],
             (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
             selectHmacKey: null,
             (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
@@ -154,7 +152,7 @@ internal sealed class DefaultDpopNonceIssuanceAndValidationTests
             presentedNonce,
             expectedAudience,
             TestTenant,
-            new ExchangeContext(),
+            [],
             (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
             (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
             TimeProvider,

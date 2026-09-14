@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
@@ -473,7 +471,7 @@ public static class PdfIncrementalUpdateWriter
 
         int catalogOffset = writer.Count;
         AppendAscii(writer, string.Create(CultureInfo.InvariantCulture, $"{request.Catalog.ObjectNumber} {request.Catalog.Generation} obj\n<<"));
-        AppendBytes(writer, request.PriorDocument.Span.Slice(request.Catalog.EntriesStart, request.Catalog.EntriesEnd - request.Catalog.EntriesStart));
+        AppendBytes(writer, request.PriorDocument.Span[request.Catalog.EntriesStart..request.Catalog.EntriesEnd]);
         AppendAscii(writer, string.Create(CultureInfo.InvariantCulture, $" /DSS {dssObjectNumber} 0 R >>\nendobj\n"));
         objectOffsets.Add((request.Catalog.ObjectNumber, catalogOffset));
 

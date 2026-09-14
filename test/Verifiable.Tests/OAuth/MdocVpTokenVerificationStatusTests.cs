@@ -1,8 +1,7 @@
+using Lumoin.Veritas.Cbor;
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
-using Lumoin.Veritas.Cbor;
-using System.Net.Http;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
@@ -20,7 +19,6 @@ using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.TestInfrastructure.MdocTestFixtures;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.OAuth;
@@ -149,9 +147,9 @@ internal sealed class MdocVpTokenVerificationStatusTests
             Assert.IsNotNull(parsed.Credential.Status?.StatusList,
                 "Section 6.3's Status structure is carried on the MSO under the text-string key 'status'; the " +
                 "verifier must surface its status_list entry rather than drop it as an unknown member.");
-            Assert.AreEqual(CredentialIndex, parsed.Credential.Status!.StatusList!.Value.Index,
+            Assert.AreEqual(CredentialIndex, parsed.Credential.Status.StatusList.Value.Index,
                 "Section 6.3: idx is REQUIRED and must reach the verifier as the issued non-negative index.");
-            Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList!.Value.Uri,
+            Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList.Value.Uri,
                 "Section 6.3: uri is REQUIRED and must reach the verifier as the issued Status List Token URI.");
 
             Assert.IsTrue(parsed.CredentialSignatureValid,
@@ -198,9 +196,9 @@ internal sealed class MdocVpTokenVerificationStatusTests
 
             Assert.IsNotNull(parsed.Credential.Status?.StatusList,
                 "Section 6.3: idx 0 is a non-negative Integer and a valid entry, so the reference must be present.");
-            Assert.AreEqual(0, parsed.Credential.Status!.StatusList!.Value.Index,
+            Assert.AreEqual(0, parsed.Credential.Status.StatusList.Value.Index,
                 "Section 6.3: the surfaced idx must be the issued index 0, not a defaulted or shifted value.");
-            Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList!.Value.Uri,
+            Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList.Value.Uri,
                 "Section 6.3: uri is REQUIRED and must accompany idx 0 unchanged.");
         }
         finally
@@ -284,7 +282,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
 
             Assert.IsNotNull(issuerAuth.Mso.Status,
                 "identifier_list is a recognised Section 6.3 mechanism key, so the Status structure decodes.");
-            Assert.IsNull(issuerAuth.Mso.Status!.StatusList,
+            Assert.IsNull(issuerAuth.Mso.Status.StatusList,
                 "identifier_list carries no status_list mechanism, so no StatusListInfo decodes.");
 
             var issuerSigned = new MdocIssuerSignedView(
@@ -301,7 +299,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
 
             Assert.IsNotNull(parsed.Credential.Status,
                 "identifier_list is a status mechanism the issuer stated, so the credential carries a status claim.");
-            Assert.IsNull(parsed.Credential.Status!.StatusList,
+            Assert.IsNull(parsed.Credential.Status.StatusList,
                 "identifier_list carries no status_list mechanism, so there is no reference the verifier can resolve.");
             Assert.HasCount(1, parsed.Credential.Status.Mechanisms,
                 "The Status structure named exactly one mechanism, so exactly one is surfaced.");
@@ -366,9 +364,9 @@ internal sealed class MdocVpTokenVerificationStatusTests
                 "Reading the MSO's status member is parsing, not status evaluation: the reference must be " +
                 "reported so that Section 8.3's ordering — the token's own validation first, the Status List " +
                 "Token fetched only afterwards — is decided on complete information.");
-            Assert.AreEqual(CredentialIndex, parsed.Credential.Status!.StatusList!.Value.Index,
+            Assert.AreEqual(CredentialIndex, parsed.Credential.Status.StatusList.Value.Index,
                 "Section 6.3: the reported idx must be the issued index even when the document's verdicts fail.");
-            Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList!.Value.Uri,
+            Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList.Value.Uri,
                 "Section 6.3: the reported uri must be the issued URI even when the document's verdicts fail.");
         }
         finally
@@ -425,7 +423,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
             Assert.Contains($"\"{OAuthErrors.InvalidRequest}\"", refusalDetail!, StringComparison.Ordinal,
                 "A presentation whose status cannot be determined rides invalid_request, never access_denied.");
 
-            Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+            _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
                 "An mdoc whose status structure names no mechanism this verifier evaluates fails closed.");
             var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -487,17 +485,17 @@ internal sealed class MdocVpTokenVerificationStatusTests
             Assert.IsNull(refusalDetail,
                 "The relying party took the SHOULD's exception, so the Response URI answers the OID4VP 1.0 "
                 + "Section 8.2 success.");
-            Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+            _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
                 "A presentation the relying party chose to accept reaches the verified terminal state.");
             var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
 
             Assert.IsTrue(verified.Credentials.TryGetValue(
                 new CredentialQueryId(PidCredentialQueryId), out VpCredentialClaims? credential),
                 "The verified credentials are keyed by the DCQL credential query identifier the mdoc answered.");
-            Assert.IsNotNull(credential!.Status,
+            Assert.IsNotNull(credential.Status,
                 "Section 6.3 requires the Status structure to include at least one data item and the issuer "
                 + "included one, so the credential carries a status claim.");
-            Assert.IsNull(credential.Status!.StatusList,
+            Assert.IsNull(credential.Status.StatusList,
                 "The structure carries no status_list data item, so there is no reference to resolve.");
             Assert.HasCount(1, credential.Status.Mechanisms,
                 "The issuer named exactly one mechanism, so exactly one is surfaced.");
@@ -564,7 +562,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
             Assert.Contains($"\"{OAuthErrors.InvalidRequest}\"", refusalDetail!, StringComparison.Ordinal,
                 "Section 4.1.2.1: a malformed vp_token presentation is answered with invalid_request.");
 
-            Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+            _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
                 "An mdoc whose Status structure fails Section 6.3 fails closed.");
             var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -838,7 +836,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
 
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
-        writer.WriteStartMap(memberCount!.Value + 1);
+        writer.WriteStartMap(memberCount.Value + 1);
 
         while(reader.PeekState() != CborReaderState.EndMap)
         {
@@ -880,7 +878,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
 
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
-        writer.WriteStartMap(memberCount!.Value + 1);
+        writer.WriteStartMap(memberCount.Value + 1);
 
         while(reader.PeekState() != CborReaderState.EndMap)
         {
@@ -937,7 +935,7 @@ internal sealed class MdocVpTokenVerificationStatusTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 

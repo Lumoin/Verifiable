@@ -1,5 +1,4 @@
 using System.Text;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Xml;
 
 namespace Verifiable.Tests.Xml;
@@ -164,13 +163,13 @@ internal sealed class XmlReferenceLoopAndDepthTests
         var builder = new StringBuilder(NestedObjectCount * 16);
         for(int i = 0; i < NestedObjectCount; ++i)
         {
-            builder.Append("<Object>");
+            _ = builder.Append("<Object>");
         }
 
-        builder.Append("""<Manifest xmlns="http://www.w3.org/2000/09/xmldsig#" Id="deep"><Reference><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>AQ==</DigestValue></Reference></Manifest>""");
+        _ = builder.Append("""<Manifest xmlns="http://www.w3.org/2000/09/xmldsig#" Id="deep"><Reference><DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/><DigestValue>AQ==</DigestValue></Reference></Manifest>""");
         for(int i = 0; i < NestedObjectCount; ++i)
         {
-            builder.Append("</Object>");
+            _ = builder.Append("</Object>");
         }
 
         string nestedObjects = builder.ToString();

@@ -197,11 +197,11 @@ internal sealed class WebFingerServerResponseTests
     public async Task WF26_TheResolverReceivesEveryRelOccurrenceTheRequestCarried()
     {
         List<string>? captured = null;
-        ResolveWebFingerResourceDelegate resolve = (resource, relFilters, registration, context, ct) =>
+        ValueTask<JsonResourceDescriptor?> resolve(string resource, IReadOnlyList<string> relFilters, IRegistrationRecord registration, ExchangeContext context, CancellationToken ct)
         {
             captured = [.. relFilters];
             return ValueTask.FromResult<JsonResourceDescriptor?>(BuildDescriptor(resource));
-        };
+        }
         using EndpointServer server = WebFingerHttpApplication.BuildServer(resolve);
 
         RequestFields fields = ResourceFields(Resource);
@@ -286,11 +286,11 @@ internal sealed class WebFingerServerResponseTests
     public async Task WF50_TheResolverMayVaryTheResponsePerRequestContext()
     {
         const string signalKey = "test.webfinger.signal";
-        ResolveWebFingerResourceDelegate resolve = (resource, relFilters, registration, context, ct) =>
+        static ValueTask<JsonResourceDescriptor?> resolve(string resource, IReadOnlyList<string> relFilters, IRegistrationRecord registration, ExchangeContext context, CancellationToken ct)
         {
             string signal = context.TryGetValue(signalKey, out object? value) && value is string s ? s : "default";
             return ValueTask.FromResult<JsonResourceDescriptor?>(new JsonResourceDescriptor { Subject = $"acct:{signal}@example.com" });
-        };
+        }
         using EndpointServer server = WebFingerHttpApplication.BuildServer(resolve);
 
         ExchangeContext contextA = new() { [signalKey] = "alice" };
@@ -326,7 +326,7 @@ internal sealed class WebFingerServerResponseTests
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await server.DispatchAsync(
-            wrongPath, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            wrongPath, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,
             "The endpoint MUST match only the well-known WebFinger path — another path is not served, even with a resolver that would answer.");
@@ -341,11 +341,11 @@ internal sealed class WebFingerServerResponseTests
     public async Task WF12_EmptyResourceParameterYields400()
     {
         bool resolverConsulted = false;
-        ResolveWebFingerResourceDelegate resolve = (resource, relFilters, registration, context, ct) =>
+        ValueTask<JsonResourceDescriptor?> resolve(string resource, IReadOnlyList<string> relFilters, IRegistrationRecord registration, ExchangeContext context, CancellationToken ct)
         {
             resolverConsulted = true;
             return ValueTask.FromResult<JsonResourceDescriptor?>(BuildDescriptor(resource));
-        };
+        }
         using EndpointServer server = WebFingerHttpApplication.BuildServer(resolve);
 
         RequestFields fields = new();
@@ -366,8 +366,7 @@ internal sealed class WebFingerServerResponseTests
     [TestMethod]
     public async Task WF46_CorsHeaderIsPresentEvenWhenTheResolverThrows()
     {
-        ResolveWebFingerResourceDelegate faulting =
-            (resource, relFilters, registration, context, ct) => throw new InvalidOperationException("resolver failure");
+        static ValueTask<JsonResourceDescriptor?> faulting(string resource, IReadOnlyList<string> relFilters, IRegistrationRecord registration, ExchangeContext context, CancellationToken ct) => throw new InvalidOperationException("resolver failure");
         using EndpointServer server = WebFingerHttpApplication.BuildServer(faulting);
 
         ServerHttpResponse response = await Dispatch(server, ResourceFields(Resource)).ConfigureAwait(false);
@@ -435,7 +434,7 @@ internal sealed class WebFingerServerResponseTests
 
     /// <summary>Dispatches a fresh request against <paramref name="server"/> through the real <see cref="EndpointServer.DispatchAsync"/>.</summary>
     private ValueTask<ServerHttpResponse> Dispatch(EndpointServer server, RequestFields fields, RequestHeaders? headers = null) =>
-        server.DispatchAsync(BuildRequest(fields, headers), new ExchangeContext(), TestContext.CancellationToken);
+        server.DispatchAsync(BuildRequest(fields, headers), [], TestContext.CancellationToken);
 
 
     /// <summary>WF-46: asserts the §5 CORS header is present on <paramref name="response"/>.</summary>
@@ -452,6 +451,6 @@ internal sealed class WebFingerServerResponseTests
 
         Assert.IsNotNull(parsed, "The endpoint's own serialized body MUST parse through the shipped JRD parser.");
 
-        return parsed!;
+        return parsed;
     }
 }

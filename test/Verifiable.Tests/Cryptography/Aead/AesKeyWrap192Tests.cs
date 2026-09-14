@@ -112,7 +112,7 @@ internal sealed class AesKeyWrap192Tests
         kekBytes[0] ^= 0x01;
         using SymmetricKeyMemory wrongKek = KeyFromBytes(kekBytes);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using SymmetricKeyMemory _ = await UnwrapFor(driver)(
                 wrongKek, Convert.FromHexString(Wrapped192With192), Pool, TestContext.CancellationToken).ConfigureAwait(false);

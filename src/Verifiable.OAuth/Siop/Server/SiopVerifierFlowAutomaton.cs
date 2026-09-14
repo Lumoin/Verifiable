@@ -1,5 +1,4 @@
 using Verifiable.Foundation.Automata;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Server.States;
 
 namespace Verifiable.OAuth.Siop.Server;

@@ -1,14 +1,11 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -250,8 +247,46 @@ internal sealed class DiscoveryEndpointTests
     }
 
 
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §7.5.2</see>: "The plain code challenge method, defined in [RFC7636], is
+    /// explicitly forbidden in OAuth 2.1." <see cref="PolicyProfile.Fapi20"/> resolves
+    /// <see cref="PkceMethodSet.S256Only"/>, and the advertisement matches that policy.
+    /// </summary>
     [TestMethod]
-    public async Task DiscoveryEmitsCodeChallengeMethodsAsS256Only()
+    public async Task DiscoveryEmitsCodeChallengeMethodsAsS256OnlyUnderFapi20()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20);
+
+        ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
+            .ConfigureAwait(false);
+
+        Assert.AreEqual(200, response.StatusCode, response.Body);
+
+        using JsonDocument body = JsonDocument.Parse(response.Body);
+        JsonElement methods = body.RootElement.GetProperty(
+            AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported);
+
+        Assert.AreEqual(JsonValueKind.Array, methods.ValueKind);
+        List<string> values = EnumerateStrings(methods);
+        Assert.HasCount(1, values,
+            "OAuth 2.1 §7.5.2 forbids the plain PKCE method under the FAPI 2.0 policy.");
+        Assert.AreEqual("S256", values[0]);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc8414#section-2">RFC 8414 §2</see>: "JSON array
+    /// containing a list of Proof Key for Code Exchange (PKCE) [RFC7636] code challenge methods
+    /// supported by this authorization server." The advertisement reflects the RESOLVED policy
+    /// rather than a fixed value: <see cref="PolicyProfile.Rfc6749WithPkce"/> resolves
+    /// <see cref="PkceMethodSet.S256AndPlain"/>, and the advertisement names both methods, matching
+    /// the deployment that actually accepts <c>plain</c> at PAR and authorize.
+    /// </summary>
+    [TestMethod]
+    public async Task DiscoveryEmitsCodeChallengeMethodsAsS256AndPlainUnderRfc6749WithPkce()
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
@@ -268,9 +303,10 @@ internal sealed class DiscoveryEndpointTests
 
         Assert.AreEqual(JsonValueKind.Array, methods.ValueKind);
         List<string> values = EnumerateStrings(methods);
-        Assert.HasCount(1, values,
-            "OAuth 2.1 §7.5.1 forbids the plain PKCE method; the library advertises S256 only.");
-        Assert.AreEqual("S256", values[0]);
+        Assert.Contains("S256", values);
+        Assert.Contains("plain", values);
+        Assert.HasCount(2, values,
+            "The RFC 6749 + RFC 7636 baseline policy accepts both methods; the advertisement must name both, no more.");
     }
 
 
@@ -585,7 +621,7 @@ internal sealed class DiscoveryEndpointTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
         //Wire the server's DPoP proof validation — the gate for advertising the algs.
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         ServerHttpResponse response = await DispatchDiscoveryAsync(host, material)
             .ConfigureAwait(false);
@@ -826,7 +862,7 @@ internal sealed class DiscoveryEndpointTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -839,7 +875,7 @@ internal sealed class DiscoveryEndpointTests
             WellKnownEndpointNames.MetadataOAuthAuthorizationServer,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

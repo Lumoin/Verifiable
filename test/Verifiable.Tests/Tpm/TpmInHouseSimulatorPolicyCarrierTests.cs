@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -13,9 +10,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1032,7 +1026,7 @@ internal sealed class TpmInHouseSimulatorPolicyCarrierTests
             AppendUInt32(body, 4);
             AppendTpm2b(body, DistinctDigest(0x10));
             AppendTpm2b(body, DistinctDigest(0x20));
-            AppendUInt16(body, (ushort)OverWideDigestSize);
+            AppendUInt16(body, OverWideDigestSize);
             body.AddRange(DistinctOctets(0x30, 5));
 
             TpmRcConstants code = await SubmitFramedAsync(

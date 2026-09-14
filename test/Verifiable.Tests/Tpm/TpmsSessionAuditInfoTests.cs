@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;

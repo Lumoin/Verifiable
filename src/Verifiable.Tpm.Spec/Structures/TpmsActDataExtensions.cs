@@ -51,12 +51,12 @@ public static class TpmsActDataExtensions
         }
 
         uint hours = actData.Timeout / 3600;
-        uint remainingMinutes = (actData.Timeout % 3600) / 60;
+        uint remainingMinutes = actData.Timeout % 3600 / 60;
         return remainingMinutes > 0
             ? $"{hours}h {remainingMinutes}m remaining"
             : $"{hours} hours remaining";
     }
-    
+
     /// <summary>
     /// Gets a description of the ACT state.
     /// </summary>

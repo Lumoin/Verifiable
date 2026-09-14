@@ -1,6 +1,6 @@
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
@@ -17,7 +17,7 @@ internal sealed class DidResolverTests
 
     //DID resolution does no network I/O at this layer, so a default context suffices;
     //it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -128,7 +128,7 @@ internal sealed class DidResolverTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await resolver.ResolveAsync(
                 "did:example:123", Context, cancellationToken: cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -228,8 +228,8 @@ internal sealed class DidResolverTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
-        Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream);
-        Assert.AreEqual("did:example:123#key-1", ((VerificationMethod)result.ContentStream!).Id);
+        _ = Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream);
+        Assert.AreEqual("did:example:123#key-1", ((VerificationMethod)result.ContentStream).Id);
     }
 
     [TestMethod]
@@ -320,7 +320,7 @@ internal sealed class DidResolverTests
             "did:example:123#key-1", Context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful);
-        Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream);
+        _ = Assert.IsInstanceOfType<VerificationMethod>(result.ContentStream);
     }
 
     [TestMethod]
@@ -471,28 +471,28 @@ internal sealed class DidResolverTests
     [TestMethod]
     public void FromResolversThrowsForPrefixWithoutDidScheme()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             DidMethodSelectors.FromResolvers(("web", ResolveExampleDidAsync)));
     }
 
     [TestMethod]
     public void FromResolversThrowsForNullDelegate()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             DidMethodSelectors.FromResolvers((ExampleDidPrefix, null!)));
     }
 
     [TestMethod]
     public void FromDereferencersThrowsForPrefixWithoutDidScheme()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             DidMethodSelectors.FromDereferencers(("web", DereferenceExampleDidAsync)));
     }
 
     [TestMethod]
     public void FromDereferencersThrowsForNullDelegate()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             DidMethodSelectors.FromDereferencers((ExampleDidPrefix, null!)));
     }
 

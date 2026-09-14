@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Threading;
 
 namespace Verifiable.Cryptography.Aead;
 
@@ -135,7 +134,7 @@ public sealed class ContentEncryptionKey: IDisposable
     public SymmetricKeyMemory UseKey()
     {
         int count = Interlocked.Increment(ref useCount);
-        Lifetime?.SetTag(CryptoTelemetry.ContentEncryptionKey.UseCount, count);
+        _ = (Lifetime?.SetTag(CryptoTelemetry.ContentEncryptionKey.UseCount, count));
 
         SymmetricKeyMemory? local = Interlocked.Exchange(ref inner, null);
         if(local is null)
@@ -165,7 +164,7 @@ public sealed class ContentEncryptionKey: IDisposable
 
         if(Lifetime is not null)
         {
-            Lifetime.SetTag(CryptoTelemetry.ContentEncryptionKey.FinalUseCount, useCount);
+            _ = Lifetime.SetTag(CryptoTelemetry.ContentEncryptionKey.FinalUseCount, useCount);
             Lifetime.Stop();
         }
 

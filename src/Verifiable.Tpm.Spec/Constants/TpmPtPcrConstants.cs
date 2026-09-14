@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Tpm.Spec.Constants;
@@ -14,7 +13,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// </para>
 /// </remarks>
 [SuppressMessage("Design", "CA1069:Enums values should not be duplicated", Justification = "TPM 2.0 specification allows duplicate values for compatibility and other reasons.")]
-public enum TpmPtPcrConstants : uint
+public enum TpmPtPcrConstants: uint
 {
     /// <summary>
     /// bottom of the range of TPM_PT_PCR properties

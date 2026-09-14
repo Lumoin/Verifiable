@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
@@ -45,7 +44,7 @@ public static class TpmCryptographicProjections
 
         switch(signature.Type)
         {
-            case(TpmAlgIdConstants.TPM_ALG_ECDSA):
+            case TpmAlgIdConstants.TPM_ALG_ECDSA:
             {
                 //IEEE P1363: r and s each left-padded to the curve order size, concatenated.
                 IMemoryOwner<byte> owner = pool.Rent(2 * ecdsaComponentSize);
@@ -55,8 +54,8 @@ public static class TpmCryptographicProjections
 
                 return new Signature(owner, tag);
             }
-            case(TpmAlgIdConstants.TPM_ALG_RSASSA):
-            case(TpmAlgIdConstants.TPM_ALG_RSAPSS):
+            case TpmAlgIdConstants.TPM_ALG_RSASSA:
+            case TpmAlgIdConstants.TPM_ALG_RSAPSS:
             {
                 //RSA: the signature is the raw octet string from TPM2B_PUBLIC_KEY_RSA.
                 ReadOnlySpan<byte> rsa = signature.RsaSignature.Buffer;

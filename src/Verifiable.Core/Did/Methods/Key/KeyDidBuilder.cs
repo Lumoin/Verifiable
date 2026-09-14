@@ -1,12 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -142,7 +136,7 @@ namespace Verifiable.Core.Did.Methods.Key
                 var verificationMethods = new List<VerificationMethod>();
                 var fragmentGenerator = builder.FragmentGenerator;
 
-                for(int i = 0; i < buildState!.KeyInputs.Count; i++)
+                for(int i = 0; i < buildState.KeyInputs.Count; i++)
                 {
                     buildState.CurrentVerificationMethodIndex = i;
                     var keyInput = buildState.KeyInputs[i];
@@ -166,7 +160,7 @@ namespace Verifiable.Core.Did.Methods.Key
             .With((didDocument, builder, buildState) =>
             {
                 //Set the main DID identifier.
-                didDocument.Id = new KeyDidMethod(buildState!.DidId);
+                didDocument.Id = new KeyDidMethod(buildState.DidId);
 
                 var fragmentGenerator = builder.FragmentGenerator;
 
@@ -180,7 +174,7 @@ namespace Verifiable.Core.Did.Methods.Key
                     string verificationMethodId = $"{buildState.DidId}#{fragment}";
 
                     //The signing/key-agreement relationship assignment is the shared standard step.
-                    didDocument.WithStandardVerificationRelationships(keyInput.PublicKey, verificationMethodId);
+                    _ = didDocument.WithStandardVerificationRelationships(keyInput.PublicKey, verificationMethodId);
                 }
 
                 return ValueTask.FromResult(didDocument);

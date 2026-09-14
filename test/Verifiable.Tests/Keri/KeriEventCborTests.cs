@@ -1,7 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Keri;
@@ -69,8 +67,8 @@ internal sealed class KeriEventCborTests
         using MintedEvent minted = MintInceptionCbor();
         MessageFieldMap fields = KeriEventCbor.DecodeFieldMap(minted.Serialization);
 
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.SigningKeys]);
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.Backers]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.SigningKeys]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.Backers]);
     }
 
 
@@ -88,7 +86,7 @@ internal sealed class KeriEventCborTests
         using IMemoryOwner<byte> owner = buffer.Detach();
         ReadOnlyMemory<byte> notAMap = owner.Memory;
 
-        Assert.ThrowsExactly<CborContentException>(() => KeriEventCbor.DecodeFieldMap(notAMap));
+        _ = Assert.ThrowsExactly<CborContentException>(() => KeriEventCbor.DecodeFieldMap(notAMap));
     }
 
 

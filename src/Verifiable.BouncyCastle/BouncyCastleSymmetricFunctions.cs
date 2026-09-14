@@ -3,7 +3,6 @@ using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Macs;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
@@ -183,9 +182,9 @@ public static class BouncyCastleSymmetricFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.BlockCipherMac.Algorithm, algorithm.ToString());
-            activity.SetTag(CryptoTelemetry.BlockCipherMac.InputLength, message.Length);
-            activity.SetTag(CryptoTelemetry.BlockCipherMac.OutputLength, outputByteLength);
+            _ = activity.SetTag(CryptoTelemetry.BlockCipherMac.Algorithm, algorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.BlockCipherMac.InputLength, message.Length);
+            _ = activity.SetTag(CryptoTelemetry.BlockCipherMac.OutputLength, outputByteLength);
         }
 
         IMemoryOwner<byte> owner = ComputeMacCore(message.Span, keyBytes.Span, outputByteLength, algorithm, pool);
@@ -226,8 +225,8 @@ public static class BouncyCastleSymmetricFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.BlockCipherMac.Algorithm, algorithm.ToString());
-            activity.SetTag(CryptoTelemetry.BlockCipherMac.InputLength, message.Length);
+            _ = activity.SetTag(CryptoTelemetry.BlockCipherMac.Algorithm, algorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.BlockCipherMac.InputLength, message.Length);
         }
 
         bool isValid;
@@ -237,7 +236,7 @@ public static class BouncyCastleSymmetricFunctions
             owner.Memory.Span.Clear();
         }
 
-        activity?.SetTag(CryptoTelemetry.BlockCipherMac.Valid, isValid);
+        _ = (activity?.SetTag(CryptoTelemetry.BlockCipherMac.Valid, isValid));
         activity?.Stop();
 
         VerificationOutcome outcome = isValid ? VerificationOutcome.Valid : VerificationOutcome.Invalid;
@@ -268,9 +267,9 @@ public static class BouncyCastleSymmetricFunctions
     private static void SetCipherAttributes(Activity activity, ProviderOperation operation, CryptoAlgorithm algorithm, int inputLength)
     {
         CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-        activity.SetTag(CryptoTelemetry.SymmetricCipher.Algorithm, algorithm.ToString());
-        activity.SetTag(CryptoTelemetry.SymmetricCipher.InputLength, inputLength);
-        activity.SetTag(CryptoTelemetry.SymmetricCipher.OutputLength, inputLength);
+        _ = activity.SetTag(CryptoTelemetry.SymmetricCipher.Algorithm, algorithm.ToString());
+        _ = activity.SetTag(CryptoTelemetry.SymmetricCipher.InputLength, inputLength);
+        _ = activity.SetTag(CryptoTelemetry.SymmetricCipher.OutputLength, inputLength);
     }
 
 
@@ -365,7 +364,7 @@ public static class BouncyCastleSymmetricFunctions
             byte[] macArray = new byte[mac.GetMacSize()];
             try
             {
-                mac.DoFinal(macArray, 0);
+                _ = mac.DoFinal(macArray, 0);
 
                 IMemoryOwner<byte> owner = pool.Rent(outputByteLength);
                 macArray.AsSpan(0, outputByteLength).CopyTo(owner.Memory.Span);

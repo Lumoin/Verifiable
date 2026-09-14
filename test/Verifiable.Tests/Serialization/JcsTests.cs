@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Verifiable.Core.Model.Credentials;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.Serialization;
@@ -235,14 +234,14 @@ internal sealed class JcsTests
     [TestMethod]
     public void CanonicalizeThrowsForNullString()
     {
-        Assert.Throws<ArgumentNullException>(() => Jcs.Canonicalize((string)null!));
+        _ = Assert.Throws<ArgumentNullException>(() => Jcs.Canonicalize((string)null!));
     }
 
 
     [TestMethod]
     public void CanonicalizeThrowsForInvalidJson()
     {
-        Assert.Throws<JsonException>(() => Jcs.Canonicalize("not valid json"));
+        _ = Assert.Throws<JsonException>(() => Jcs.Canonicalize("not valid json"));
     }
 
 
@@ -308,11 +307,11 @@ internal sealed class JcsTests
         Assert.AreEqual(/*lang=json,strict*/ """{"alpha":"first","middle":"middle","zebra":"last"}""", result);
     }
 
-        
+
     [TestMethod]
     public void SerializeThrowsForNullValue()
     {
-        Assert.Throws<ArgumentNullException>(() => Jcs.Serialize(null!, VerifiableJsonContext.Default.VerifiableCredential));
+        _ = Assert.Throws<ArgumentNullException>(() => Jcs.Serialize(null, VerifiableJsonContext.Default.VerifiableCredential));
     }
 
 

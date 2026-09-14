@@ -1,10 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.EventLogs;
@@ -108,7 +101,7 @@ internal sealed class AcdcDi2iChainFlowTests
             //anchors: the delegate's KEL verifies only when the delegator anchors the delegating seal, so this fetch
             //is the cooperative-delegation check. A broken delegation makes the near credential unverifiable.
             IReadOnlyList<KeriSeal> delegatorSeals = ToSeals(delegatorAnchors);
-            DelegationSealResolver resolveSeal = delegatedEvent => KeriDelegation.FindDelegationSeal(delegatorSeals, delegatedEvent);
+            KeriKeyEventSeal? resolveSeal(KeriKeyEvent delegatedEvent) => KeriDelegation.FindDelegationSeal(delegatorSeals, delegatedEvent);
             (AcdcMessage? nearMessage, _) =
                 await VerifyAcdcAsync(httpClient, BaseOf(delegateHost, "/acdc"), BaseOf(delegateHost, "/kel"), resolveSeal, disposables, cancellationToken).ConfigureAwait(false);
             if(nearMessage is null)
@@ -116,12 +109,12 @@ internal sealed class AcdcDi2iChainFlowTests
                 return false;
             }
 
-            Assert.IsInstanceOfType<ExpandedAcdcSection>(nearMessage.Edge, "The near credential discloses its edge section.");
-            AcdcEdgeGroup edgeSection = AcdcEdgeReader.Read(((ExpandedAcdcSection)nearMessage.Edge!).Detail);
+            _ = Assert.IsInstanceOfType<ExpandedAcdcSection>(nearMessage.Edge, "The near credential discloses its edge section.");
+            AcdcEdgeGroup edgeSection = AcdcEdgeReader.Read(((ExpandedAcdcSection)nearMessage.Edge).Detail);
 
             //The delegate's verified KEL confirms its delegator; map the near Issuer to that delegator for DI2I.
             string? confirmedDelegator = await ReadConfirmedDelegatorAsync(httpClient, BaseOf(delegateHost, "/kel"), nearMessage.Issuer, disposables, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
-            AcdcDelegationResolver resolveDelegation = aid => string.Equals(aid, nearMessage.Issuer, StringComparison.Ordinal) ? confirmedDelegator : null;
+            string? resolveDelegation(string aid) => string.Equals(aid, nearMessage.Issuer, StringComparison.Ordinal) ? confirmedDelegator : null;
 
             Assert.IsTrue(delegateHost.WasRequested("/acdc") && delegateHost.WasRequested("/kel"), "The near credential and KEL MUST be fetched over the delegate socket.");
             Assert.IsTrue(delegatorHost.WasRequested("/acdc") && delegatorHost.WasRequested("/kel"), "The far credential and KEL MUST be fetched over the delegator socket.");
@@ -132,7 +125,7 @@ internal sealed class AcdcDi2iChainFlowTests
                 edgeSection,
                 nearMessage.Issuer,
                 nodeSaid => string.Equals(nodeSaid, resolved.Said, StringComparison.Ordinal) ? resolved : null,
-                resolveDelegation);
+resolveDelegation);
         }
         finally
         {

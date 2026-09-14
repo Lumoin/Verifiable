@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -114,7 +110,7 @@ internal static class WebPlusProofs
                     return new WebPlusProofVerificationResult(error, FrozenSet<string>.Empty);
                 }
 
-                satisfiedKeys.Add(kid!);
+                _ = satisfiedKeys.Add(kid!);
             }
 
             return new WebPlusProofVerificationResult(null, satisfiedKeys.ToFrozenSet(StringComparer.Ordinal));

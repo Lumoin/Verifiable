@@ -1,6 +1,4 @@
-using System;
 using Verifiable.Core.StatusList;
-using Verifiable.Cryptography;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 

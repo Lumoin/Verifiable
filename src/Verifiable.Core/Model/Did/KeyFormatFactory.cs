@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -77,7 +76,7 @@ namespace Verifiable.Core.Model.Did
         /// <summary>
         /// Returns a delegate that creates a <see cref="KeyFormat"/> based on the provided <paramref name="format"/> and <paramref name="keyMaterial"/>.
         /// </summary>
-        public static KeyFormatCreator DefaultKeyFormatCreator { get; set; } = (Type format, PublicKeyMemory keyMaterial, BaseMemoryPool pool) =>
+        public static KeyFormatCreator DefaultKeyFormatCreator { get; set; } = (format, keyMaterial, pool) =>
         {
             Tag tag = keyMaterial.Tag;
             CryptoAlgorithm cryptoAlgorithm = tag.Get<CryptoAlgorithm>();

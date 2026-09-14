@@ -1,9 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -146,7 +141,7 @@ public static class BbsShuffledRelabeling
 
         int messageByteCount = System.Text.Encoding.UTF8.GetByteCount(canonicalId);
         using IMemoryOwner<byte> messageOwner = pool.Rent(messageByteCount);
-        System.Text.Encoding.UTF8.GetBytes(canonicalId, messageOwner.Memory.Span);
+        _ = System.Text.Encoding.UTF8.GetBytes(canonicalId, messageOwner.Memory.Span);
         ReadOnlyMemory<byte> messageMemory = messageOwner.Memory[..messageByteCount];
 
         (HmacValue hmac, _) = await hmacCompute(

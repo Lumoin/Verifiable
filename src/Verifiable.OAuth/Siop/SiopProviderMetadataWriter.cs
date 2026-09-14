@@ -1,5 +1,4 @@
 using System.Text;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Siop;
 
@@ -46,7 +45,7 @@ public static class SiopProviderMetadataWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             //§6.1 authorization_endpoint (REQUIRED) — first member, matching the §6.1 and
@@ -110,7 +109,7 @@ public static class SiopProviderMetadataWriter
                     metadata.IdTokenTypesSupported, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

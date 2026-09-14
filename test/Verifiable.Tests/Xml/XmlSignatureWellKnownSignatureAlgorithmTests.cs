@@ -1,4 +1,3 @@
-using System.Linq;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Xml;

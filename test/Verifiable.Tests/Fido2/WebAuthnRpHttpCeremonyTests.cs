@@ -1,18 +1,12 @@
-using System;
 using System.Buffers;
 using System.Net;
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
-using Verifiable.Foundation;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -59,17 +53,17 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-authenticator", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await RegisterOverRealTransportsAsync(httpClient, harness, pool, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(1, skin.AttestationResultRequestCount, "The RP MUST see exactly one attestation result request cross the socket.");
         Assert.IsNotNull(skin.StoredCredential, "A successful registration MUST store a credential record.");
-        uint registeredSignCount = skin.StoredCredential!.SignCount;
+        uint registeredSignCount = skin.StoredCredential.SignCount;
 
-        await AssertOverRealTransportsAsync(httpClient, harness, pool, tamperSignature: false, cancellationToken).ConfigureAwait(false);
+        _ = await AssertOverRealTransportsAsync(httpClient, harness, pool, tamperSignature: false, cancellationToken).ConfigureAwait(false);
         Assert.AreEqual(1, skin.AssertionResultRequestCount, "The RP MUST see exactly one assertion result request cross the socket.");
-        Assert.IsGreaterThan(registeredSignCount, skin.StoredCredential!.SignCount, "A successful assertion MUST bump the stored sign count.");
+        Assert.IsGreaterThan(registeredSignCount, skin.StoredCredential.SignCount, "A successful assertion MUST bump the stored sign count.");
     }
 
 
@@ -89,7 +83,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-tamper-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-tamper-authenticator", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await RegisterOverRealTransportsAsync(httpClient, harness, pool, cancellationToken).ConfigureAwait(false);
@@ -118,7 +112,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         await using MinimalHttpHost host = await MinimalHttpHost.StartAsync(skin.HandleAsync, cancellationToken).ConfigureAwait(false);
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(host.Certificate, host.BaseAddress);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-malformed-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("webauthn-rp-http-malformed-authenticator", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await RegisterOverRealTransportsAsync(httpClient, harness, pool, cancellationToken).ConfigureAwait(false);
@@ -163,7 +157,7 @@ internal sealed class WebAuthnRpHttpCeremonyTests
         }
 
         using HttpClient httpClient = LoopbackTls.CreatePinnedHttpClient(certificate, baseAddress);
-        await Assert.ThrowsExactlyAsync<HttpRequestException>(
+        _ = await Assert.ThrowsExactlyAsync<HttpRequestException>(
             () => PostAsync(httpClient, WebAuthnRelyingPartyCeremonySkin.AttestationOptionsPath, jsonBody: null, cancellationToken));
     }
 

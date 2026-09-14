@@ -6,14 +6,11 @@ using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Provider;
@@ -123,8 +120,8 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, "P-256");
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, "P-256");
         }
 
         var secCurve = SecNamedCurves.GetByName("secp256r1");
@@ -178,7 +175,7 @@ public static class BouncyCastleKeyAgreementFunctions
             ephemeralUncompressed.AsSpan().CopyTo(epkOwner.Memory.Span);
             Array.Clear(ephemeralUncompressed, 0, ephemeralUncompressed.Length);
 
-            PublicKeyMemory epk = new PublicKeyMemory(epkOwner, CryptoTags.P256ExchangePublicKey);
+            PublicKeyMemory epk = new(epkOwner, CryptoTags.P256ExchangePublicKey);
 
             return new EphemeralKeyAgreementResult(sharedSecret, epk);
         }
@@ -225,8 +222,8 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, "P-256");
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, "P-256");
         }
 
         var curve = SecNamedCurves.GetByName("secp256r1");
@@ -363,7 +360,7 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "X25519");
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "X25519");
         }
 
         var keyPairGenerator = new X25519KeyPairGenerator();
@@ -432,7 +429,7 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "X25519");
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "X25519");
         }
 
         //The span ctor copies the scalar into BouncyCastle's own buffer — no naked
@@ -490,8 +487,8 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
         }
 
         X9ECParameters curve = SecNamedCurves.GetByName(curveName)
@@ -555,8 +552,8 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
         }
 
         X9ECParameters curve = SecNamedCurves.GetByName(curveName)
@@ -606,8 +603,8 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
         }
 
         X9ECParameters curve = ECNamedCurveTable.GetByName(curveName)
@@ -671,8 +668,8 @@ public static class BouncyCastleKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(curveName));
         }
 
         X9ECParameters curve = ECNamedCurveTable.GetByName(curveName)
@@ -905,9 +902,9 @@ public static class BouncyCastleKeyAgreementFunctions
             //ChaCha20-Poly1305 emits ciphertext (1:1 with plaintext) then the 16-byte tag; the combined
             //buffer splits at the plaintext length regardless of how the calls partition their writes.
             int written = aead.ProcessBytes(plaintext.Span, combinedOwner.Memory.Span);
-            aead.DoFinal(combinedOwner.Memory.Span[written..]);
+            _ = aead.DoFinal(combinedOwner.Memory.Span[written..]);
 
-            combinedOwner.Memory.Span.Slice(0, plaintext.Length).CopyTo(ciphertextOwner.Memory.Span[..plaintext.Length]);
+            combinedOwner.Memory.Span[..plaintext.Length].CopyTo(ciphertextOwner.Memory.Span[..plaintext.Length]);
             combinedOwner.Memory.Span.Slice(plaintext.Length, XChaCha20TagLength).CopyTo(tagOwner.Memory.Span[..XChaCha20TagLength]);
         }
         catch
@@ -1010,7 +1007,7 @@ public static class BouncyCastleKeyAgreementFunctions
             int written = aead.ProcessBytes(
                 combinedInputOwner.Memory.Span[..(ciphertextSpan.Length + tagSpan.Length)],
                 plaintextOwner.Memory.Span);
-            aead.DoFinal(plaintextOwner.Memory.Span[written..]);
+            _ = aead.DoFinal(plaintextOwner.Memory.Span[written..]);
         }
         catch(InvalidCipherTextException invalidCipherText)
         {
@@ -1096,7 +1093,7 @@ public static class BouncyCastleKeyAgreementFunctions
         for(int i = 0; i < 4; i++)
         {
             BinaryPrimitives.WriteUInt32LittleEndian(subkey.Slice(i * 4, 4), state[i]);
-            BinaryPrimitives.WriteUInt32LittleEndian(subkey.Slice(16 + i * 4, 4), state[12 + i]);
+            BinaryPrimitives.WriteUInt32LittleEndian(subkey.Slice(16 + (i * 4), 4), state[12 + i]);
         }
     }
 
@@ -1721,7 +1718,7 @@ public static class BouncyCastleKeyAgreementFunctions
             yBigEndian[i] = yLittleEndian[X25519SharedSecretSize - 1 - i];
         }
 
-        BigInteger y = new BigInteger(1, yBigEndian);
+        BigInteger y = new(1, yBigEndian);
 
         //u = (1 + y) / (1 - y) (mod p) = (1 + y) * (1 - y)^{-1} (mod p).
         BigInteger one = BigInteger.One;

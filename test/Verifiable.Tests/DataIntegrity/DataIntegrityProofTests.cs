@@ -1,17 +1,15 @@
 using System.Security.Cryptography;
-using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity;
@@ -641,7 +639,7 @@ internal sealed class DataIntegrityProofTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 

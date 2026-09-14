@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -225,28 +223,28 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
         }
 
         var builder = new StringBuilder();
-        builder.Append('[');
+        _ = builder.Append('[');
         for(int clauseIndex = 0; clauseIndex < Clauses.Length; clauseIndex++)
         {
             if(clauseIndex > 0)
             {
-                builder.Append(',');
+                _ = builder.Append(',');
             }
 
             if(Clauses.Length > 1)
             {
-                builder.Append('[');
+                _ = builder.Append('[');
             }
 
             AppendClause(builder, Clauses[clauseIndex]);
 
             if(Clauses.Length > 1)
             {
-                builder.Append(']');
+                _ = builder.Append(']');
             }
         }
 
-        builder.Append(']');
+        _ = builder.Append(']');
 
         return builder.ToString();
     }
@@ -345,13 +343,13 @@ public sealed class KeriThreshold: IEquatable<KeriThreshold>
         {
             if(i > 0)
             {
-                builder.Append(',');
+                _ = builder.Append(',');
             }
 
             //The explicit ToString() is deliberate: Fraction is a readonly struct with no
             //StringBuilder.Append(Fraction) overload, so Append(clause[i]) directly would resolve to
             //Append(object) and box the struct; converting to string first avoids that box.
-            builder.Append('"').Append(clause[i].ToString()).Append('"');
+            _ = builder.Append('"').Append(clause[i].ToString()).Append('"');
         }
     }
 

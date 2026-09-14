@@ -1,6 +1,5 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
+using System.Collections.Immutable;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -61,7 +60,7 @@ internal sealed class GlobalTokenRevocationServerTests
 
         //Exercise the PRODUCTION JSON parser (Verifiable.Json) end-to-end — the
         //body's sub_id is parsed by the default parser, not a test lambda.
-        host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
+        _ = host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
         host.Server.OAuth().RevokeSubjectTokensAsync = (subId, _, _, _) =>
         {
             revokedSubject = subId;
@@ -74,7 +73,7 @@ internal sealed class GlobalTokenRevocationServerTests
             "POST",
             new RequestFields(),
             SubIdJson,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(204, response.StatusCode, response.Body);
@@ -119,7 +118,7 @@ internal sealed class GlobalTokenRevocationServerTests
             "POST",
             new RequestFields(),
             SubIdJson,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
@@ -159,7 +158,7 @@ internal sealed class GlobalTokenRevocationServerTests
                 "POST",
                 new RequestFields(),
                 SubIdJson,
-                new ExchangeContext(),
+                [],
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             return response.StatusCode;
@@ -203,7 +202,7 @@ internal sealed class GlobalTokenRevocationServerTests
             "POST",
             new RequestFields(),
             "not json",
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
@@ -249,7 +248,7 @@ internal sealed class GlobalTokenRevocationServerTests
             "POST",
             new RequestFields(),
             SubIdJson,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
@@ -280,7 +279,7 @@ internal sealed class GlobalTokenRevocationServerTests
             "POST",
             new RequestFields(),
             SubIdJson,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,

@@ -1,8 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
@@ -120,7 +118,7 @@ internal static class CmsSignedDataTestFactory
         var signer = new CmsSigner(signerCertificate) { IncludeOption = X509IncludeOption.EndCertOnly };
         if(withSigningTime)
         {
-            signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
+            _ = signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
         }
 
         signedCms.ComputeSignature(signer);
@@ -248,14 +246,14 @@ internal static class CmsSignedDataTestFactory
             ? new CmsSigner(signerCertificate)
             : new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, signerCertificate, privateKey: null, rsaSignaturePadding);
         signer.IncludeOption = X509IncludeOption.EndCertOnly;
-        signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
+        _ = signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
 
         //The certificate hash goes into a stack span; the ESS DER is encoded straight into the attribute.
         Span<byte> certificateHash = stackalloc byte[Sha256Length];
-        SHA256.HashData(signerCertificate.RawData, certificateHash);
+        _ = SHA256.HashData(signerCertificate.RawData, certificateHash);
         var writer = new AsnWriter(AsnEncodingRules.DER);
         WriteSigningCertificateV2(writer, certificateHash, explicitHashAlgorithm: false);
-        signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
+        _ = signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
 
         signedCms.ComputeSignature(signer);
 
@@ -282,7 +280,7 @@ internal static class CmsSignedDataTestFactory
         //it is read back through BouncyCastle and hashed into a stack span — no owned buffer.
         SignerInformation bcSigner = new BcCmsSignedData(cades.Encode()).GetSignerInfos().GetSigners().Cast<SignerInformation>().First();
         Span<byte> imprint = stackalloc byte[Sha256Length];
-        SHA256.HashData(bcSigner.GetSignature(), imprint);
+        _ = SHA256.HashData(bcSigner.GetSignature(), imprint);
         SignedCms token = BuildTimeStampToken(imprint, timestampTime, tsaCertificate);
 
         //An unsigned attribute is not covered by the signature, so attaching the token leaves it valid.
@@ -348,12 +346,12 @@ internal static class CmsSignedDataTestFactory
             signer.DigestAlgorithm = new Oid(DigestAlgorithmOid(named));
         }
 
-        signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
+        _ = signer.SignedAttributes.Add(new Pkcs9SigningTime(signingTime.UtcDateTime));
         if(includeSigningCertificate)
         {
             //The certificate hash goes into a stack span; the ESS DER is encoded straight into the attribute.
             Span<byte> certificateHash = stackalloc byte[Sha256Length];
-            SHA256.HashData(signerCertificate.RawData, certificateHash);
+            _ = SHA256.HashData(signerCertificate.RawData, certificateHash);
             if(bindWrongCertificate)
             {
                 certificateHash[0] ^= 0xFF;
@@ -361,7 +359,7 @@ internal static class CmsSignedDataTestFactory
 
             var writer = new AsnWriter(AsnEncodingRules.DER);
             WriteSigningCertificateV2(writer, certificateHash, explicitHashAlgorithm);
-            signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
+            _ = signer.SignedAttributes.Add(new AsnEncodedData(new Oid(SigningCertificateV2Oid), writer.Encode()));
         }
 
         signedCms.ComputeSignature(signer);

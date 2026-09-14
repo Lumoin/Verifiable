@@ -6,8 +6,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp.Formats;
-using Verifiable.OAuth.Oid4Vp.States;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp;
 

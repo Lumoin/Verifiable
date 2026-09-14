@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Text;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server.Pipeline;

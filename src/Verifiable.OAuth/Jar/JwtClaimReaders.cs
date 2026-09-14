@@ -125,6 +125,11 @@ internal static class JwtClaimReaders
                 result = (long)d;
                 return true;
             }
+            default:
+            {
+                //No other runtime type is a whole-number JSON numeric value this reader accepts.
+                break;
+            }
         }
 
         result = 0;

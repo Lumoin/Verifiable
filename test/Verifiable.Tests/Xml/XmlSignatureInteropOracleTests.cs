@@ -1,4 +1,3 @@
-using System.IO;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography.Xml;
@@ -7,7 +6,6 @@ using System.Xml;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.Xml;
 
 namespace Verifiable.Tests.Xml;

@@ -1,12 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Resolvers;
 using Verifiable.Core.Did.Methods.Web;
+using Verifiable.Core.Resolvers;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
@@ -28,7 +28,7 @@ internal sealed class WebDidResolverTests
 {
     //did:web resolution only computes a URL — no network I/O — so a default context
     //suffices; it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -73,7 +73,7 @@ internal sealed class WebDidResolverTests
     [TestMethod]
     public void ResolveThrowsForNonDidWebIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebDidResolver.Resolve("did:key:z6Mk..."));
     }
 
@@ -91,20 +91,20 @@ internal sealed class WebDidResolverTests
     [DataRow("did:web:example.com:.")]             //Literal current dot-segment.
     public void ResolveThrowsForIpHostOrUnsafePathSegment(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebDidResolver.Resolve(did));
     }
 
     [TestMethod]
     public void ResolveThrowsForEmptyString()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebDidResolver.Resolve(""));
     }
 
     [TestMethod]
     public void ResolveThrowsForNull()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             WebDidResolver.Resolve(null!));
     }
 
@@ -284,7 +284,7 @@ internal sealed class WebDidResolverTests
 
         await foreach(var _ in replayer.ReplayAsync(BuildEntries([(did, resolution)]), context, TestContext.CancellationToken).ConfigureAwait(false)) { }
 
-        Assert.IsInstanceOfType<ActiveLogState<DidResolutionResult>>(log[0].State);
+        _ = Assert.IsInstanceOfType<ActiveLogState<DidResolutionResult>>(log[0].State);
     }
 
     [TestMethod]

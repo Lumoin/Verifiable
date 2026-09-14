@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Ctap;
 
@@ -273,7 +269,7 @@ internal sealed class CtapNfcResponderTests
 
         responder.Dispose();
 
-        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ObjectDisposedException>(async () =>
             await responder.TransceiveAsync(shortFormMsg.AsReadOnlyMemory(), pool, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 

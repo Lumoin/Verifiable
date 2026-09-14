@@ -1,8 +1,4 @@
-using System;
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Apdu;
 
@@ -148,7 +144,7 @@ public static class ApduCommandExtensions
         CommandApdu command,
         ApduResponseParser<TResponse> parser,
         BaseMemoryPool pool,
-        CancellationToken cancellationToken) where TResponse: IApduWireType
+        CancellationToken cancellationToken) where TResponse : IApduWireType
     {
         using(command)
         {

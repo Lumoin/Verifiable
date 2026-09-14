@@ -83,7 +83,7 @@ public static class ClientIdMetadataMaterialization
 
             if(!ClientIdentifierUrl.IsMatch(wireClientId, record.ClientId))
             {
-                Activity.Current?.AddEvent(new ActivityEvent(ClientIdMismatchEventName));
+                _ = (Activity.Current?.AddEvent(new ActivityEvent(ClientIdMismatchEventName)));
 
                 return Fail(context, fields);
             }
@@ -93,7 +93,7 @@ public static class ClientIdMetadataMaterialization
 
             if(!resolution.IsResolved || resolution.Document is null)
             {
-                Activity.Current?.AddEvent(new ActivityEvent(ResolutionFailureEventName(resolution.Outcome)));
+                _ = (Activity.Current?.AddEvent(new ActivityEvent(ResolutionFailureEventName(resolution.Outcome))));
 
                 return Fail(context, fields);
             }
@@ -148,6 +148,8 @@ public static class ClientIdMetadataMaterialization
     {
         ClientIdMetadataResolutionOutcome.PolicyDenied => PolicyDeniedEventName,
         ClientIdMetadataResolutionOutcome.FetchFailed => FetchFailedEventName,
+        ClientIdMetadataResolutionOutcome.InvalidDocument => InvalidDocumentEventName,
+
         _ => InvalidDocumentEventName
     };
 }

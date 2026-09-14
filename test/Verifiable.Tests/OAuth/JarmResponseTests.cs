@@ -144,16 +144,16 @@ internal sealed class JarmResponseTests
         }, issuer: "https://attacker.example.com").ConfigureAwait(false);
 
         bool isResolverInvoked = false;
-        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3)
         {
             isResolverInvoked = true;
 
             return ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
-        };
+        }
 
         JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
             responseJwt, Issuer, ClientId, AllowedAlgorithms, TimeProvider.GetUtcNow(),
-            resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
+resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsIssuerValid);
@@ -181,20 +181,19 @@ internal sealed class JarmResponseTests
         }).ConfigureAwait(false);
 
         bool isResolverInvoked = false;
-        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3)
         {
             isResolverInvoked = true;
 
             return ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
-        };
+        }
 
-        KnownAuthorizationServerIssuerResolver isKnownAuthorizationServerIssuer =
-            issuer => string.Equals(issuer, "https://other-as.example.com", StringComparison.Ordinal);
+        bool isKnownAuthorizationServerIssuer(string issuer) => string.Equals(issuer, "https://other-as.example.com", StringComparison.Ordinal);
 
         JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
             responseJwt, Issuer, ClientId, AllowedAlgorithms, TimeProvider.GetUtcNow(),
-            resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
-            isKnownAuthorizationServerIssuer,
+resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
+isKnownAuthorizationServerIssuer,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsIssuerValid);
@@ -217,8 +216,7 @@ internal sealed class JarmResponseTests
             ["code"] = "PyyFaux2o7Q0YfXBU32jhw.5FXSQpvr8akv9CeRDSd0QA"
         }).ConfigureAwait(false);
 
-        KnownAuthorizationServerIssuerResolver isKnownAuthorizationServerIssuer =
-            issuer => string.Equals(issuer, Issuer, StringComparison.Ordinal);
+        static bool isKnownAuthorizationServerIssuer(string issuer) => string.Equals(issuer, Issuer, StringComparison.Ordinal);
 
         JarmResponseValidationResult result = await ValidateAsync(
             responseJwt, serverPublic, Issuer, ClientId, isKnownAuthorizationServerIssuer).ConfigureAwait(false);
@@ -334,12 +332,12 @@ internal sealed class JarmResponseTests
         using PrivateKeyMemory serverPrivate = keys.PrivateKey;
 
         string[] misconfiguredAllowList = ["none", WellKnownJwaValues.Es256];
-        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3) =>
             ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
 
         JarmResponseValidationResult result = await JarmResponseValidation.ValidateAsync(
             unsignedJwt, Issuer, ClientId, misconfiguredAllowList, TimeProvider.GetUtcNow(),
-            resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
+resolver, PayloadDeserializer, TestSetup.Base64UrlDecoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAlgorithmAllowed);
@@ -357,7 +355,7 @@ internal sealed class JarmResponseTests
         using PublicKeyMemory serverPublic = keys.PublicKey;
         using PrivateKeyMemory serverPrivate = keys.PrivateKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             _ = await IssueAsync(serverPrivate, new Dictionary<string, object>
             {
@@ -428,7 +426,7 @@ internal sealed class JarmResponseTests
         string expectedClientId,
         KnownAuthorizationServerIssuerResolver? isKnownAuthorizationServerIssuer = null)
     {
-        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3) =>
             ValueTask.FromResult<PublicKeyMemory?>(serverPublic);
 
         return await JarmResponseValidation.ValidateAsync(

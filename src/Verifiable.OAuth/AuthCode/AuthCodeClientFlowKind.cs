@@ -1,5 +1,3 @@
-using Verifiable.OAuth.Server;
-
 namespace Verifiable.OAuth.AuthCode;
 
 /// <summary>
@@ -52,7 +50,7 @@ public sealed class AuthCodeClientFlowKind: StatefulFlowKind
 
         var pda = AuthCodeFlowAutomaton.CreateFromSnapshot(state, stepCount, timeProvider);
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
         return (pda.CurrentState, pda.StepCount);
     }

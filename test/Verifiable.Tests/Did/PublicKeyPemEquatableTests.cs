@@ -231,7 +231,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4f7jGC8Y4A8L2Y9XZGx8QY4Y8A8L2Y9XZGx8QY4Y8A8L
         [TestMethod]
         public void ConstructorThrowsOnNullKey()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyPem(null!));
+            _ = Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyPem(null!));
         }
 
 

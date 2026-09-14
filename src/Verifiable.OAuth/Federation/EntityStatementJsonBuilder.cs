@@ -1,9 +1,7 @@
-using System.Buffers;
 using System.Globalization;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -165,11 +163,7 @@ public static class EntityStatementJsonBuilder
 
                 if(!openIdProviderBlock.ContainsKey(WellKnownFederationClaimNames.ClientRegistrationTypesSupported))
                 {
-                    List<object> types = new(clientRegistrationTypesSupported.Count);
-                    foreach(string registrationType in clientRegistrationTypesSupported)
-                    {
-                        types.Add(registrationType);
-                    }
+                    List<object> types = [.. clientRegistrationTypesSupported];
 
                     openIdProviderBlock[WellKnownFederationClaimNames.ClientRegistrationTypesSupported] = types;
                 }
@@ -343,11 +337,7 @@ public static class EntityStatementJsonBuilder
             //The chain is a JSON array of compact Entity Statement JWS
             //strings; box each into the object-typed list the JSON walker
             //emits as a string array.
-            List<object> chainList = new(trustChain.Count);
-            foreach(string statement in trustChain)
-            {
-                chainList.Add(statement);
-            }
+            List<object> chainList = [.. trustChain];
 
             payload[WellKnownFederationClaimNames.TrustChain] = chainList;
         }
@@ -402,11 +392,7 @@ public static class EntityStatementJsonBuilder
 
         //The §8.7.3 keys array is a JSON array of JWK objects; box each into
         //the object-typed list the JSON walker emits as an array of objects.
-        List<object> keysList = new(contribution.Keys.Count);
-        foreach(IReadOnlyDictionary<string, object> key in contribution.Keys)
-        {
-            keysList.Add(key);
-        }
+        List<object> keysList = [.. contribution.Keys];
 
         Dictionary<string, object> payload = new(StringComparer.Ordinal)
         {

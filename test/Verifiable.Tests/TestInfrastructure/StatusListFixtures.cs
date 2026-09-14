@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
@@ -110,7 +109,7 @@ internal static class StatusListFixtures
     {
         int invocations = 0;
 
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             invocations++;
 
@@ -122,7 +121,7 @@ internal static class StatusListFixtures
                 ResolvedAt = resolvedAt,
                 IsTokenOwned = false
             });
-        };
+        }
 
         return (resolver, () => invocations);
     }
@@ -140,12 +139,12 @@ internal static class StatusListFixtures
     {
         List<StatusListResolutionContext> contexts = [];
 
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             contexts.Add(context);
 
             return inner(context, cancellationToken);
-        };
+        }
 
         return (resolver, contexts);
     }
@@ -164,12 +163,12 @@ internal static class StatusListFixtures
     {
         List<StatusListKeyResolutionContext> contexts = [];
 
-        ResolveStatusListIssuerKeyDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolver(StatusListKeyResolutionContext context, CancellationToken cancellationToken)
         {
             contexts.Add(context);
 
             return inner(context, cancellationToken);
-        };
+        }
 
         return (resolver, contexts);
     }

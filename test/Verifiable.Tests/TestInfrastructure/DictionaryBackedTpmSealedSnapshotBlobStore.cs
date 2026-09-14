@@ -1,10 +1,5 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
-using Verifiable.Foundation;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -86,7 +81,7 @@ internal sealed class DictionaryBackedTpmSealedSnapshotBlobStore
     /// <param name="cancellationToken">A cancellation token.</param>
     public ValueTask DeleteSealedBlobAsync(string runId, CancellationToken cancellationToken)
     {
-        SealedBlobsByRunId.Remove(runId);
+        _ = SealedBlobsByRunId.Remove(runId);
 
         return ValueTask.CompletedTask;
     }

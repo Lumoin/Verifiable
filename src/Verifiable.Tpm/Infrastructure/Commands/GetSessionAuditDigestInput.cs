@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -211,7 +208,7 @@ public sealed class GetSessionAuditDigestInput: ITpmCommandInput, IDisposable
         qualifyingData.CopyTo(owner.Memory.Span);
 
         return new GetSessionAuditDigestInput(
-            privacyAdminHandle, signHandle, sessionHandle, owner, owner.Memory.Slice(0, qualifyingData.Length), signatureScheme, schemeHashAlg);
+            privacyAdminHandle, signHandle, sessionHandle, owner, owner.Memory[..qualifyingData.Length], signatureScheme, schemeHashAlg);
     }
 
     /// <summary>

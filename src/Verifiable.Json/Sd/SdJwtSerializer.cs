@@ -1,12 +1,9 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Cryptography;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Json.Sd;
 
@@ -121,7 +118,7 @@ public static class SdJwtSerializer
 
                 int length = root.GetArrayLength();
 
-                if(length < 2 || length > 3)
+                if(length is < 2 or > 3)
                 {
                     throw new FormatException($"Disclosure array must have 2 or 3 elements, got {length}.");
                 }
@@ -230,20 +227,20 @@ public static class SdJwtSerializer
         ArgumentNullException.ThrowIfNull(encoder);
 
         var builder = new StringBuilder();
-        builder.Append(token.IssuerSigned);
-        builder.Append(SdConstants.JwtSeparator);
+        _ = builder.Append(token.IssuerSigned);
+        _ = builder.Append(SdConstants.JwtSeparator);
 
         foreach(SdDisclosure disclosure in token.Disclosures)
         {
-            builder.Append(SerializeDisclosure(disclosure, encoder));
-            builder.Append(SdConstants.JwtSeparator);
+            _ = builder.Append(SerializeDisclosure(disclosure, encoder));
+            _ = builder.Append(SdConstants.JwtSeparator);
         }
 
         if(token.KeyBinding is not null)
         {
             builder.Length--;
-            builder.Append(SdConstants.JwtSeparator);
-            builder.Append(token.KeyBinding);
+            _ = builder.Append(SdConstants.JwtSeparator);
+            _ = builder.Append(token.KeyBinding);
         }
 
         return builder.ToString();
@@ -447,13 +444,13 @@ public static class SdJwtSerializer
         ArgumentNullException.ThrowIfNull(encoder);
 
         var builder = new StringBuilder();
-        builder.Append(token.IssuerSigned);
-        builder.Append(SdConstants.JwtSeparator);
+        _ = builder.Append(token.IssuerSigned);
+        _ = builder.Append(SdConstants.JwtSeparator);
 
         foreach(SdDisclosure disclosure in token.Disclosures)
         {
-            builder.Append(SerializeDisclosure(disclosure, encoder));
-            builder.Append(SdConstants.JwtSeparator);
+            _ = builder.Append(SerializeDisclosure(disclosure, encoder));
+            _ = builder.Append(SdConstants.JwtSeparator);
         }
 
         return builder.ToString();
@@ -508,11 +505,11 @@ public static class SdJwtSerializer
     /// <returns><see langword="true"/> when <paramref name="c"/> is in the Base64URL alphabet.</returns>
     private static bool IsBase64UrlChar(char c)
     {
-        return (c >= 'A' && c <= 'Z') ||
-               (c >= 'a' && c <= 'z') ||
-               (c >= '0' && c <= '9') ||
-               c == '-' ||
-               c == '_';
+        return c is (>= 'A' and <= 'Z') or
+               (>= 'a' and <= 'z') or
+               (>= '0' and <= '9') or
+               '-' or
+               '_';
     }
 
 

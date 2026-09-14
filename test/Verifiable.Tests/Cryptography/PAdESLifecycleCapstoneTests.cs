@@ -1,11 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -270,11 +266,11 @@ internal sealed class PAdESLifecycleCapstoneTests
     private static void AssertMintedBoundSignature(PAdESLifecycleResult leg, byte[] expectedSignerCertificate)
     {
         Assert.IsNotNull(leg.VerifiedSignature, $"A TOTAL-PASSED leg must mint. Reason: {leg.Reason}");
-        Verified<PAdESVerifiedSignatureFacts> verified = leg.VerifiedSignature!.Value;
+        Verified<PAdESVerifiedSignatureFacts> verified = leg.VerifiedSignature.Value;
         Assert.IsTrue(verified.IsVerified);
         Assert.IsTrue(verified.IsIdentityBound, "The pipeline-gated mint must be identity-bound, never asserted.");
-        Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
-        var bound = (BoundProvenance)verified.Provenance!;
+        _ = Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
+        var bound = (BoundProvenance)verified.Provenance;
         Assert.AreEqual(ResolutionSource.CertificateDigest, bound.Source);
         Assert.IsTrue(verified.Value.SigningCertificate.AsReadOnlySpan().SequenceEqual(expectedSignerCertificate));
     }

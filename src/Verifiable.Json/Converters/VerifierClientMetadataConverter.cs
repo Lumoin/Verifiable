@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.Json.Converters;
@@ -68,7 +65,7 @@ public sealed class VerifierClientMetadataConverter: JsonConverter<VerifierClien
             }
 
             string propertyName = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
 
             //Match against the well-known member names via their Is* helpers. The names
             //are static readonly (not const), so this is a guarded switch, not case labels.
@@ -87,7 +84,7 @@ public sealed class VerifierClientMetadataConverter: JsonConverter<VerifierClien
                 }
                 case var name when Oid4VpClientMetadataParameterNames.IsVpFormatsSupported(name):
                 {
-                    var typeInfo = (JsonTypeInfo<VpFormatsSupported>)options.GetTypeInfo(typeof(VpFormatsSupported));
+                    var typeInfo = options.GetTypeInfo<VpFormatsSupported>();
                     vpFormatsSupported = JsonSerializer.Deserialize(ref reader, typeInfo);
                     break;
                 }
@@ -104,7 +101,7 @@ public sealed class VerifierClientMetadataConverter: JsonConverter<VerifierClien
                 default:
                 {
                     //Preserve any unrecognised members as additional parameters (raw JSON values).
-                    additionalParameters ??= new Dictionary<string, object>(StringComparer.Ordinal);
+                    additionalParameters ??= new(StringComparer.Ordinal);
                     additionalParameters[propertyName] = ReadRawElement(ref reader);
                     break;
                 }
@@ -190,7 +187,7 @@ public sealed class VerifierClientMetadataConverter: JsonConverter<VerifierClien
         if(value.VpFormatsSupported is not null)
         {
             writer.WritePropertyName(Oid4VpClientMetadataParameterNames.VpFormatsSupported);
-            var typeInfo = (JsonTypeInfo<VpFormatsSupported>)options.GetTypeInfo(typeof(VpFormatsSupported));
+            var typeInfo = options.GetTypeInfo<VpFormatsSupported>();
             JsonSerializer.Serialize(writer, value.VpFormatsSupported, typeInfo);
         }
 

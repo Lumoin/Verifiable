@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;

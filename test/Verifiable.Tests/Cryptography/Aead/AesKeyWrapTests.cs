@@ -98,9 +98,9 @@ internal sealed class AesKeyWrapTests
         using SymmetricKeyMemory kek = KeyFromHex(Kek256);
 
         byte[] tampered = Convert.FromHexString(Wrapped256With256);
-        tampered[tampered.Length - 1] ^= 0x01;
+        tampered[^1] ^= 0x01;
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using SymmetricKeyMemory _ = await UnwrapFor(driver)(
                 kek, tampered, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -117,7 +117,7 @@ internal sealed class AesKeyWrapTests
         //initial value will not match.
         using SymmetricKeyMemory wrongKek = KeyFromHex(Kek128);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using SymmetricKeyMemory _ = await UnwrapFor(driver)(
                 wrongKek, Convert.FromHexString(Wrapped128With256), Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -133,7 +133,7 @@ internal sealed class AesKeyWrapTests
         using SymmetricKeyMemory kek = KeyFromHex(Kek256);
         using SymmetricKeyMemory tooShort = KeyFromHex("0011223344556677");
 
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
         {
             using Ciphertext _ = await WrapFor(driver)(
                 kek, tooShort, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -148,7 +148,7 @@ internal sealed class AesKeyWrapTests
     {
         using SymmetricKeyMemory kek = KeyFromHex(Kek256);
 
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
         {
             using SymmetricKeyMemory _ = await UnwrapFor(driver)(
                 kek, Convert.FromHexString("00112233445566778899AABBCCDDEEFF"), Pool, TestContext.CancellationToken).ConfigureAwait(false);

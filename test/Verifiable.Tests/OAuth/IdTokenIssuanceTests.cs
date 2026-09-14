@@ -1,13 +1,11 @@
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -47,7 +45,7 @@ internal sealed class IdTokenIssuanceTests
     public async Task TokenEndpointEmitsIdTokenWhenOpenIdScopeRequested()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(
+        _ = host.SeedTestSubject(
             subject: SubjectId,
             name: "Alice",
             email: "alice@example.com",
@@ -81,7 +79,7 @@ internal sealed class IdTokenIssuanceTests
     public async Task TokenEndpointOmitsIdTokenWhenOpenIdScopeAbsent()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -103,7 +101,7 @@ internal sealed class IdTokenIssuanceTests
     public async Task IdTokenOmitsProfileClaimsWhenProfileScopeAbsent()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(
+        _ = host.SeedTestSubject(
             subject: SubjectId,
             name: "Alice",
             email: "alice@example.com");
@@ -199,7 +197,7 @@ internal sealed class IdTokenIssuanceTests
     public async Task IdTokenIssMatchesIssuerUriAndAudMatchesClientId()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -222,7 +220,7 @@ internal sealed class IdTokenIssuanceTests
     public async Task ResolveSubjectIdentifierIsConsultedOnIdTokenIssuance()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         host.Server.OAuth().ResolveSubjectIdentifierAsync =
             (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
 
@@ -250,7 +248,7 @@ internal sealed class IdTokenIssuanceTests
     public async Task IdTokenCarriesExpStrictlyAfterIatWithIatAtRequestTime()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -289,7 +287,7 @@ internal sealed class IdTokenIssuanceTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -299,7 +297,7 @@ internal sealed class IdTokenIssuanceTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -320,7 +318,7 @@ internal sealed class IdTokenIssuanceTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

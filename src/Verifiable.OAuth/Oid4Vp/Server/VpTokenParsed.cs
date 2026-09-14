@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;
-using Verifiable.Core.Model.Dcql;
-using Verifiable.Core.Model.SelectiveDisclosure;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 

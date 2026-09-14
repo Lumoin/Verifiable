@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;
@@ -113,14 +108,14 @@ public sealed class AsicContainerCreationException: Exception
 
 
     /// <summary>Initializes a new <see cref="AsicContainerCreationException"/> with an unclassified fault.</summary>
-    public AsicContainerCreationException(): this(AsicContainerCreationFailureKind.NoDataObject, "The container could not be created.")
+    public AsicContainerCreationException() : this(AsicContainerCreationFailureKind.NoDataObject, "The container could not be created.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="AsicContainerCreationException"/> with an unclassified fault.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public AsicContainerCreationException(string message): this(AsicContainerCreationFailureKind.NoDataObject, message)
+    public AsicContainerCreationException(string message) : this(AsicContainerCreationFailureKind.NoDataObject, message)
     {
     }
 
@@ -137,7 +132,7 @@ public sealed class AsicContainerCreationException: Exception
     /// <summary>Initializes a new <see cref="AsicContainerCreationException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public AsicContainerCreationException(AsicContainerCreationFailureKind failureKind, string message): base(message)
+    public AsicContainerCreationException(AsicContainerCreationFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -1352,6 +1347,9 @@ public static class AsicContainerCreation
     {
         AsicContainerShape.Simple => dataObjects[0].MediaType ?? AsicWellKnown.AsicSimpleMediaType,
         AsicContainerShape.Extended => AsicWellKnown.AsicExtendedMediaType,
+        AsicContainerShape.NotEvaluated => throw new AsicContainerCreationException(
+            AsicContainerCreationFailureKind.NoDataObject,
+            string.Create(CultureInfo.InvariantCulture, $"'{shape}' does not name a container shape clause 4.1.2 defines.")),
         _ => throw new AsicContainerCreationException(
             AsicContainerCreationFailureKind.NoDataObject,
             string.Create(CultureInfo.InvariantCulture, $"'{shape}' does not name a container shape clause 4.1.2 defines."))

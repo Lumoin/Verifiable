@@ -18,7 +18,7 @@ namespace Verifiable.Tests.Jwt
             yield return new object[] { WellKnownKeyTypeValues.Ec, new Func<string, bool>(WellKnownKeyTypeValues.IsEc) };
             yield return new object[] { WellKnownKeyTypeValues.Oct, new Func<string, bool>(WellKnownKeyTypeValues.IsOct) };
             yield return new object[] { WellKnownKeyTypeValues.Okp, new Func<string, bool>(WellKnownKeyTypeValues.IsOkp) };
-            yield return new object[] { WellKnownKeyTypeValues.Rsa, new Func<string, bool>(WellKnownKeyTypeValues.IsRsa) };            
+            yield return new object[] { WellKnownKeyTypeValues.Rsa, new Func<string, bool>(WellKnownKeyTypeValues.IsRsa) };
         }
 
 

@@ -1,8 +1,7 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Cesr;
@@ -11,7 +10,6 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Keri;
 
@@ -91,7 +89,7 @@ internal sealed class KeriEventSaidTests
 
         int length = Encoding.UTF8.GetByteCount(tampered);
         using IMemoryOwner<byte> tamperedOwner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(tampered, tamperedOwner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(tampered, tamperedOwner.Memory.Span);
 
         Assert.IsFalse(await KeriEventSaid.VerifyAsync(tamperedOwner.Memory[..length], minted.Said, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None));
     }
@@ -191,7 +189,7 @@ internal sealed class KeriEventSaidTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return await CesrSaid.ComputeAsync(owner.Memory[..length], Code, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None).ConfigureAwait(false);
     }
@@ -203,7 +201,7 @@ internal sealed class KeriEventSaidTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return new MintedEvent(owner, length, said);
     }

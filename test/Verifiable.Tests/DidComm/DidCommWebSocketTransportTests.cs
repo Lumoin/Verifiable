@@ -1,16 +1,9 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -34,7 +27,7 @@ internal sealed class DidCommWebSocketTransportTests
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter (the WebSocket path
     //does not route through OutboundFetch, so no scheme/host policy applies to the loopback wss:// endpoint).
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //A non-nested anoncrypt message never triggers nested-signature resolution; this satisfies the parameter.
     private static DidResolver NestedSignerResolver { get; } = new DidResolver(DidMethodSelectors.FromResolvers(
@@ -137,10 +130,10 @@ internal sealed class DidCommWebSocketTransportTests
         Assert.IsTrue(unpacked.IsUnpacked, $"Bob MUST decrypt the message that crossed the WebSocket. Error: {unpacked.Error}.");
         Assert.AreEqual(DidCommEncryptionMode.Anoncrypt, unpacked.Mode);
         Assert.IsNotNull(unpacked.Message);
-        Assert.AreEqual(MessageId, unpacked.Message!.Id);
+        Assert.AreEqual(MessageId, unpacked.Message.Id);
         Assert.AreEqual(AliceDid, unpacked.Message.From);
         Assert.IsNotNull(unpacked.Message.Body);
-        Assert.IsTrue(unpacked.Message.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(unpacked.Message.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
 
         //Trust rides on the envelope, not the socket (DIDComm v2.1 §WebSockets L1136): a wrong key MUST fail to

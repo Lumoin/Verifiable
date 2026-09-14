@@ -1,17 +1,11 @@
-using System;
 using System.Net;
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Buffers;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;

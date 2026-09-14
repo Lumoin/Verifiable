@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
@@ -50,7 +46,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-capstone-a",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-capstone-a", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         //Setup, fully unprotected (no PIN, alwaysUv still off): mint a credential the up:false carve-out
@@ -180,7 +176,7 @@ internal sealed class CtapAuthenticatorConfigFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-capstone-b",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-capstone-b", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         //Setup, fully unprotected: mint a credential the closing ga leg (after the policy is raised) can

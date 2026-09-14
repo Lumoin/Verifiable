@@ -1,12 +1,10 @@
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -53,7 +51,7 @@ internal sealed class StepUpAccessTokenClaimsTests
     public async Task AcrAndAuthTimeEmittedOnAccessTokenFromStampedAuthContext()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -85,7 +83,7 @@ internal sealed class StepUpAccessTokenClaimsTests
     public async Task AcrOmittedOnAccessTokenWhenNoAuthContextStamped()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -112,7 +110,7 @@ internal sealed class StepUpAccessTokenClaimsTests
     public async Task AccessTokenAcrReflectsTheAuthenticationThatIssuedIt()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -144,7 +142,7 @@ internal sealed class StepUpAccessTokenClaimsTests
     public async Task RefreshedAccessTokenCarriesOriginalAcrAndAuthTime()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -181,7 +179,7 @@ internal sealed class StepUpAccessTokenClaimsTests
     public async Task AcrAndAuthTimeSurviveRefreshRotation()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -229,7 +227,7 @@ internal sealed class StepUpAccessTokenClaimsTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            refreshFields, new ExchangeContext(),
+            refreshFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -257,7 +255,7 @@ internal sealed class StepUpAccessTokenClaimsTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -267,7 +265,7 @@ internal sealed class StepUpAccessTokenClaimsTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetAuthTime(authTime);
         if(acr is not null)
@@ -295,7 +293,7 @@ internal sealed class StepUpAccessTokenClaimsTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

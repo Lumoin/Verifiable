@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -301,6 +299,9 @@ public static class PreservationAugmentation
 
                 case AlgorithmReliabilityVerdict.Unknown:
                     unlistedUse ??= context.AlgorithmUses[i];
+                    break;
+
+                case AlgorithmReliabilityVerdict.Reliable:
                     break;
 
                 default:

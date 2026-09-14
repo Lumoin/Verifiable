@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Algorithms;
@@ -83,7 +82,7 @@ public sealed class TpmtHa: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, Size);
+            return Storage.Memory.Span[..Size];
         }
     }
 
@@ -100,7 +99,7 @@ public sealed class TpmtHa: IDisposable, ITpmWireType
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return Storage.Memory.Slice(0, Size);
+        return Storage.Memory[..Size];
     }
 
     /// <summary>
@@ -152,7 +151,7 @@ public sealed class TpmtHa: IDisposable, ITpmWireType
 
         IMemoryOwner<byte> storage = pool.Rent(size);
         ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(storage.Memory.Span.Slice(0, size));
+        source.CopyTo(storage.Memory.Span[..size]);
 
         return new TpmtHa(hashAlg, storage, size);
     }

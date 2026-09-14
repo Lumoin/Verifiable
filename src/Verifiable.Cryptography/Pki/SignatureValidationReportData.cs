@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -73,7 +71,7 @@ public enum CertificateChainReportKind
 /// lets a test or a de-duplicating consumer treat two such findings as one.
 /// </remarks>
 [DebuggerDisplay("FormatFailureReportData: {Reason}")]
-public sealed class FormatFailureReportData : SignatureValidationReportData, IEquatable<FormatFailureReportData>
+public sealed class FormatFailureReportData: SignatureValidationReportData, IEquatable<FormatFailureReportData>
 {
     /// <summary>Initializes a new <see cref="FormatFailureReportData"/>.</summary>
     /// <param name="reason">What the format checking building block (clause 5.2.2) could state about the parse failure.</param>
@@ -124,7 +122,7 @@ public sealed class FormatFailureReportData : SignatureValidationReportData, IEq
 /// the failure.
 /// </summary>
 [DebuggerDisplay("HashFailureReportData: {FailingObjectIdentifiers.Count} failing objects")]
-public sealed class HashFailureReportData : SignatureValidationReportData
+public sealed class HashFailureReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="HashFailureReportData"/>.</summary>
     /// <param name="failingObjectIdentifiers">The identifiers of the elements whose hashes did not match; never empty when the sub-indication is reported.</param>
@@ -143,7 +141,7 @@ public sealed class HashFailureReportData : SignatureValidationReportData
 /// validation process".
 /// </summary>
 [DebuggerDisplay("SigningCertificateReportData: {SigningCertificate}")]
-public sealed class SigningCertificateReportData : SignatureValidationReportData
+public sealed class SigningCertificateReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="SigningCertificateReportData"/>.</summary>
     /// <param name="signingCertificate">A non-owning reference to the DER-encoded signing certificate the cryptographic verification used.</param>
@@ -164,7 +162,7 @@ public sealed class SigningCertificateReportData : SignatureValidationReportData
 /// "the time and, if available, the reason of revocation".
 /// </summary>
 [DebuggerDisplay("CertificateRevocationReportData: revoked at {RevocationTime}, reason {RevocationReason}")]
-public sealed class CertificateRevocationReportData : SignatureValidationReportData
+public sealed class CertificateRevocationReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="CertificateRevocationReportData"/>.</summary>
     /// <param name="certificateChain">A non-owning reference to the chain used in the validation, signing certificate first.</param>
@@ -201,7 +199,7 @@ public sealed class CertificateRevocationReportData : SignatureValidationReportD
 /// successful validation").
 /// </summary>
 [DebuggerDisplay("CertificateChainReportData: {Kind}, {CertificateChain.Count} certificates")]
-public sealed class CertificateChainReportData : SignatureValidationReportData
+public sealed class CertificateChainReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="CertificateChainReportData"/>.</summary>
     /// <param name="certificateChain">A non-owning reference to the chain, signing certificate first.</param>
@@ -225,7 +223,7 @@ public sealed class CertificateChainReportData : SignatureValidationReportData
 /// validation process" together with "the set of constraints that have not been met by the chain".
 /// </summary>
 [DebuggerDisplay("ChainConstraintsFailureReportData: {UnsatisfiedConstraints.Count} unmet constraints")]
-public sealed class ChainConstraintsFailureReportData : SignatureValidationReportData
+public sealed class ChainConstraintsFailureReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="ChainConstraintsFailureReportData"/>.</summary>
     /// <param name="certificateChain">A non-owning reference to the chain the constraints were applied to.</param>
@@ -249,7 +247,7 @@ public sealed class ChainConstraintsFailureReportData : SignatureValidationRepor
 /// regarding the reason") together with the last chain built that Table 13 of clause 5.2.6.3 adds.
 /// </summary>
 [DebuggerDisplay("CertificateChainGeneralFailureReportData: {Reason}")]
-public sealed class CertificateChainGeneralFailureReportData : SignatureValidationReportData
+public sealed class CertificateChainGeneralFailureReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="CertificateChainGeneralFailureReportData"/>.</summary>
     /// <param name="certificateChain">A non-owning reference to the last chain built; empty when no chain was built at all.</param>
@@ -274,7 +272,7 @@ public sealed class CertificateChainGeneralFailureReportData : SignatureValidati
 /// met by the signature".
 /// </summary>
 [DebuggerDisplay("UnsatisfiedSignatureConstraintsReportData: {UnsatisfiedConstraints.Count} unmet constraints")]
-public sealed class UnsatisfiedSignatureConstraintsReportData : SignatureValidationReportData
+public sealed class UnsatisfiedSignatureConstraintsReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="UnsatisfiedSignatureConstraintsReportData"/>.</summary>
     /// <param name="unsatisfiedConstraints">The per-constraint outcomes for the signature elements constraints the signature did not meet.</param>
@@ -296,7 +294,7 @@ public sealed class UnsatisfiedSignatureConstraintsReportData : SignatureValidat
 /// known, the time up to which the algorithm or key size were considered secure".
 /// </summary>
 [DebuggerDisplay("CryptographicConstraintsFailureReportData: {UnreliableAlgorithms.Count} offending materials")]
-public sealed class CryptographicConstraintsFailureReportData : SignatureValidationReportData
+public sealed class CryptographicConstraintsFailureReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="CryptographicConstraintsFailureReportData"/>.</summary>
     /// <param name="unreliableAlgorithms">One entry per offending piece of material, naming the material, the algorithm and key size it used, and the instant up to which the cryptographic constraints considered that algorithm reliable. Every entry's <see cref="AlgorithmReliabilityAssessment.IsReliable"/> is <see langword="false"/>.</param>
@@ -320,7 +318,7 @@ public sealed class CryptographicConstraintsFailureReportData : SignatureValidat
 /// enters into it.
 /// </remarks>
 [DebuggerDisplay("PolicyProcessingErrorReportData: {Problem}")]
-public sealed class PolicyProcessingErrorReportData : SignatureValidationReportData, IEquatable<PolicyProcessingErrorReportData>
+public sealed class PolicyProcessingErrorReportData: SignatureValidationReportData, IEquatable<PolicyProcessingErrorReportData>
 {
     /// <summary>Initializes a new <see cref="PolicyProcessingErrorReportData"/>.</summary>
     /// <param name="problem">What the validation context initialization building block (clause 5.2.4) could state about the policy-processing failure.</param>
@@ -369,7 +367,7 @@ public sealed class PolicyProcessingErrorReportData : SignatureValidationReportD
 /// respect the ordering constraints" checked in step 4)e) of clause 5.5.4.
 /// </summary>
 [DebuggerDisplay("TimestampOrderFailureReportData: {TimestampTokens.Count} tokens")]
-public sealed class TimestampOrderFailureReportData : SignatureValidationReportData
+public sealed class TimestampOrderFailureReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="TimestampOrderFailureReportData"/>.</summary>
     /// <param name="timestampTokens">Non-owning references to the DER-encoded RFC 3161 time-stamp tokens whose generation times violate the ordering constraints.</param>
@@ -388,7 +386,7 @@ public sealed class TimestampOrderFailureReportData : SignatureValidationReportD
 /// in the validation process" together with "the revocation data that is concerned by the failure".
 /// </summary>
 [DebuggerDisplay("RevocationOutOfBoundsReportData: {RevocationData.Count} revocation data items")]
-public sealed class RevocationOutOfBoundsReportData : SignatureValidationReportData
+public sealed class RevocationOutOfBoundsReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="RevocationOutOfBoundsReportData"/>.</summary>
     /// <param name="certificateChain">A non-owning reference to the chain used in the validation.</param>
@@ -412,7 +410,7 @@ public sealed class RevocationOutOfBoundsReportData : SignatureValidationReportD
 /// missing", with additional information on the problem where the process can supply it.
 /// </summary>
 [DebuggerDisplay("MissingProofOfExistenceReportData: {ObjectsMissingProofs.Count} objects")]
-public sealed class MissingProofOfExistenceReportData : SignatureValidationReportData
+public sealed class MissingProofOfExistenceReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="MissingProofOfExistenceReportData"/>.</summary>
     /// <param name="objectsMissingProofs">The identities of the objects for which the set of proofs of existence holds nothing at or before the required instant.</param>
@@ -437,7 +435,7 @@ public sealed class MissingProofOfExistenceReportData : SignatureValidationRepor
 /// clause 5.2.6.3 adds.
 /// </summary>
 [DebuggerDisplay("TryLaterReportData: retry at {SuggestedRetryTime}")]
-public sealed class TryLaterReportData : SignatureValidationReportData
+public sealed class TryLaterReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="TryLaterReportData"/>.</summary>
     /// <param name="suggestedRetryTime">The instant at or after which fresher revocation status information is expected — typically the <c>nextUpdate</c> field of the CRL or OCSP response consulted, per Table 13; <see langword="null"/> when no such instant was available.</param>
@@ -467,7 +465,7 @@ public sealed class TryLaterReportData : SignatureValidationReportData
 /// caused the failure", when available.
 /// </summary>
 [DebuggerDisplay("SignedDataNotFoundReportData: {SignedDataIdentifiers.Count} identifiers")]
-public sealed class SignedDataNotFoundReportData : SignatureValidationReportData
+public sealed class SignedDataNotFoundReportData: SignatureValidationReportData
 {
     /// <summary>Initializes a new <see cref="SignedDataNotFoundReportData"/>.</summary>
     /// <param name="signedDataIdentifiers">The identifiers of the signed data items that could not be obtained; empty when the process had none to report.</param>
@@ -491,7 +489,7 @@ public sealed class SignedDataNotFoundReportData : SignatureValidationReportData
 /// — is its identity: two custom diagnostics reading the same are the same finding.
 /// </remarks>
 [DebuggerDisplay("CustomDiagnosticReportData: {Diagnostic}")]
-public sealed class CustomDiagnosticReportData : SignatureValidationReportData, IEquatable<CustomDiagnosticReportData>
+public sealed class CustomDiagnosticReportData: SignatureValidationReportData, IEquatable<CustomDiagnosticReportData>
 {
     /// <summary>Initializes a new <see cref="CustomDiagnosticReportData"/>.</summary>
     /// <param name="diagnostic">The reason, in terms a Driving Application can present to a verifier.</param>

@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography;
 using Verifiable.Json;

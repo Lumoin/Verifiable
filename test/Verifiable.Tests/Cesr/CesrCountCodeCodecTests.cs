@@ -1,6 +1,4 @@
 using System.Buffers;
-using System.Collections.Generic;
-using Lumoin.Base;
 using Verifiable.Cesr;
 
 namespace Verifiable.Tests.Cesr;
@@ -88,7 +86,7 @@ internal sealed class CesrCountCodeCodecTests
     public void RejectsCountAboveTableMaximum()
     {
         //The small count code soft size is two characters, so its maximum count is 64^2 - 1 = 4095.
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.EncodeText("-A", 4096));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.EncodeText("-A", 4096));
     }
 
 
@@ -96,10 +94,10 @@ internal sealed class CesrCountCodeCodecTests
     public void RejectsReservedAndOpCodeSelectors()
     {
         //A numeral second character selects an as-yet-unspecified count code table.
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.DecodeText("-0AB"));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.DecodeText("-0AB"));
 
         //The '_' first character is the op code selector, not a count code.
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.DecodeText("_AAB"));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.DecodeText("_AAB"));
     }
 
 
@@ -107,7 +105,7 @@ internal sealed class CesrCountCodeCodecTests
     public void RejectsTruncatedCountCode()
     {
         //A large count code is eight characters; a shorter span must be rejected rather than misread.
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.DecodeText("--AAA"));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrCountCodeCodec.DecodeText("--AAA"));
     }
 
 

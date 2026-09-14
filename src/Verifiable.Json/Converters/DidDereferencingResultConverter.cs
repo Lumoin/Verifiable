@@ -1,7 +1,5 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 
@@ -63,14 +61,14 @@ public class DidDereferencingResultConverter: JsonConverter<DidDereferencingResu
             }
 
             DidDereferencingMetadata dereferencingMetadata = root.TryGetProperty("dereferencingMetadata"u8, out JsonElement metadataElement)
-                ? metadataElement.Deserialize((JsonTypeInfo<DidDereferencingMetadata>)options.GetTypeInfo(typeof(DidDereferencingMetadata))) ?? new DidDereferencingMetadata()
+                ? metadataElement.Deserialize(options.GetTypeInfo<DidDereferencingMetadata>()) ?? new DidDereferencingMetadata()
                 : new DidDereferencingMetadata();
 
             DidDocumentMetadata? contentMetadata = null;
             if(root.TryGetProperty("contentMetadata"u8, out JsonElement contentMetadataElement)
                 && contentMetadataElement.ValueKind == JsonValueKind.Object)
             {
-                contentMetadata = contentMetadataElement.Deserialize((JsonTypeInfo<DidDocumentMetadata>)options.GetTypeInfo(typeof(DidDocumentMetadata)));
+                contentMetadata = contentMetadataElement.Deserialize(options.GetTypeInfo<DidDocumentMetadata>());
             }
 
             return new DidDereferencingResult
@@ -96,12 +94,12 @@ public class DidDereferencingResultConverter: JsonConverter<DidDereferencingResu
         DidContentStreamJson.Write(writer, value.ContentStream, options);
 
         writer.WritePropertyName("dereferencingMetadata"u8);
-        JsonSerializer.Serialize(writer, value.DereferencingMetadata, options.GetTypeInfo(typeof(DidDereferencingMetadata)));
+        JsonSerializer.Serialize(writer, value.DereferencingMetadata, options.GetTypeInfo<DidDereferencingMetadata>());
 
         if(value.ContentMetadata is not null)
         {
             writer.WritePropertyName("contentMetadata"u8);
-            JsonSerializer.Serialize(writer, value.ContentMetadata, options.GetTypeInfo(typeof(DidDocumentMetadata)));
+            JsonSerializer.Serialize(writer, value.ContentMetadata, options.GetTypeInfo<DidDocumentMetadata>());
         }
 
         writer.WriteEndObject();
@@ -119,7 +117,7 @@ public class DidDereferencingResultConverter: JsonConverter<DidDereferencingResu
             && element.TryGetProperty("id"u8, out _)
             && element.TryGetProperty("@context"u8, out _))
         {
-            DidDocument? document = element.Deserialize((JsonTypeInfo<DidDocument>)options.GetTypeInfo(typeof(DidDocument)));
+            DidDocument? document = element.Deserialize(options.GetTypeInfo<DidDocument>());
             if(document is not null)
             {
                 return document;

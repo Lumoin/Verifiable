@@ -126,7 +126,7 @@ internal sealed class AcdcRuleReaderTests
     [TestMethod]
     public void RejectsRuleWithoutLegal()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
             """{"permittedUse":{"d":"Edddddddddddddddddddddddddddddddddddddddddddd","u":"0ABhY2Rjc3BlY3dvcmtyYXc0"}}""")));
     }
 
@@ -137,7 +137,7 @@ internal sealed class AcdcRuleReaderTests
     [TestMethod]
     public void RejectsReservedFieldsOutOfOrder()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
             """{"u":"0ABhY2Rjc3BlY3dvcmtyYXcw","d":"Edddddddddddddddddddddddddddddddddddddddddddd"}""")));
     }
 
@@ -149,7 +149,7 @@ internal sealed class AcdcRuleReaderTests
     [TestMethod]
     public void RejectsReservedFieldAfterMember()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
             """{"warrantyDisclaimer":"Issuer provides this ACDC on an AS IS basis.","l":"Trailing legal language."}""")));
     }
 
@@ -161,7 +161,7 @@ internal sealed class AcdcRuleReaderTests
     [TestMethod]
     public void RejectsNonRuleReservedField()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
             """{"i":"ECsGDKWAYtHBCkiDrzajkxs3Iw2g-dls3bLUsRP4yVdT","l":"Legal language."}""")));
     }
 
@@ -172,7 +172,7 @@ internal sealed class AcdcRuleReaderTests
     [TestMethod]
     public void RejectsUuidWithoutSaid()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
             """{"u":"0ABhY2Rjc3BlY3dvcmtyYXcw","l":"Legal language."}""")));
     }
 
@@ -183,7 +183,7 @@ internal sealed class AcdcRuleReaderTests
     [TestMethod]
     public void RejectsNonBlockNonStringMember()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRuleReader.Read(Decode(
             """{"warrantyDisclaimer":[1,2,3]}""")));
     }
 

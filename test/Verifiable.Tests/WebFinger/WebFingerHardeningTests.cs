@@ -27,15 +27,15 @@ internal sealed class WebFingerHardeningTests
     [TestMethod]
     public void ComputeQueryUriRejectsAHostThatWouldReAnchorTheAuthorityOrTruncateThePath()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebFingerClient.ComputeQueryUri("trusted.example.com@evil.example.com", "acct:alice@trusted.example.com", []));
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebFingerClient.ComputeQueryUri("example.com/evil", "acct:alice@example.com", []));
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebFingerClient.ComputeQueryUri("example.com#fragment", "acct:alice@example.com", []));
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebFingerClient.ComputeQueryUri("example.com?query", "acct:alice@example.com", []));
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebFingerClient.ComputeQueryUri("example.com evil", "acct:alice@example.com", []));
     }
 
@@ -110,11 +110,11 @@ internal sealed class WebFingerHardeningTests
     [TestMethod]
     public async Task AGuardedFetchPolicyDenialSurfacesAsPolicyDeniedNotNotFound()
     {
-        OutboundTransportDelegate transport = (request, context, cancellationToken) =>
+        static ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("the transport MUST NOT be reached when the policy denies the target");
         WebFingerResolveDelegate resolve = WebFingerClient.BuildResolving(transport, WebFingerJrdJsonParsing.ParseJrd);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         WebFingerResolutionResult result = await resolve(

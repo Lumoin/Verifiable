@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -100,7 +99,7 @@ public sealed class Tpm2bSignatureCtx: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, Length);
+            return Storage.Memory.Span[..Length];
         }
     }
 
@@ -157,7 +156,7 @@ public sealed class Tpm2bSignatureCtx: IDisposable, ITpmWireType
 
         //Copy context bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(size);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, size));
+        sourceBytes.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bSignatureCtx(storage, size);
     }

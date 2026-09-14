@@ -1,9 +1,7 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp.Wallet;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 
 namespace Verifiable.OAuth.Client;

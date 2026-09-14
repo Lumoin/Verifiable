@@ -1,19 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -568,7 +561,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         //The first persistent-object handle (TPM_HT_PERSISTENT, Part 2, clause 7.2, Table 33): a well-formed
         //handle of a kind no authorization slot may name.
         const uint PersistentObjectHandle = 0x81000000u;
-        byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 1, sessionIndex: 0, PersistentObjectHandle);
+        static byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 1, sessionIndex: 0, PersistentObjectHandle);
 
         //The command's own carriers live inside this block so every one of them is released before the balance
         //below is read; only the SIMULATOR's outstanding rentals are what the assertion is about.
@@ -621,7 +614,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
         long baseline = trackingPool.OutstandingCount;
 
-        byte[] Rewrite(byte[] command) => WithAppendedSession(command, handleCount: 2, sessionHandle: 0u, TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT);
+        static byte[] Rewrite(byte[] command) => WithAppendedSession(command, handleCount: 2, sessionHandle: 0u, TpmaSession.CONTINUE_SESSION | TpmaSession.DECRYPT);
 
         //The command's own carriers live inside this block so every one of them is released before the balance
         //below is read; only the SIMULATOR's outstanding rentals are what the assertion is about.
@@ -682,7 +675,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
         //The first persistent-object handle (TPM_HT_PERSISTENT, Part 2, clause 7.2, Table 33): a well-formed
         //handle of a kind no authorization slot may name.
         const uint PersistentObjectHandle = 0x81000000u;
-        byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 3, sessionIndex: 0, PersistentObjectHandle);
+        static byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 3, sessionIndex: 0, PersistentObjectHandle);
 
         //The command's own carriers live inside this block so every one of them is released before the balance
         //below is read; only the SIMULATOR's outstanding rentals are what the assertion is about.
@@ -743,7 +736,7 @@ internal sealed class TpmInHouseSimulatorAttestCompanionSessionTests
 
         long baseline = trackingPool.OutstandingCount;
 
-        byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 3, sessionIndex: 1, sessionHandle: 0u);
+        static byte[] Rewrite(byte[] command) => WithSessionHandle(command, handleCount: 3, sessionIndex: 1, sessionHandle: 0u);
 
         //The command's own carriers live inside this block so every one of them is released before the balance
         //below is read; only the SIMULATOR's outstanding rentals are what the assertion is about.

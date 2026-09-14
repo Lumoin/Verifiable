@@ -1,9 +1,7 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -59,7 +57,7 @@ internal sealed class ResolveCapabilitiesAsyncTests
         using VerifierKeyMaterial keys = host.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetServer(host.Server);
 
         EndpointChain chain = await EndpointChain.BuildForRequestAsync(
@@ -102,14 +100,16 @@ internal sealed class ResolveCapabilitiesAsyncTests
         using VerifierKeyMaterial keys = host.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ExchangeContext contextWithoutVeto = new();
+        ExchangeContext contextWithoutVeto = [];
         contextWithoutVeto.SetServer(host.Server);
         EndpointChain chainWithoutVeto = await EndpointChain.BuildForRequestAsync(
             keys.Registration, contextWithoutVeto, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
-        ExchangeContext contextWithVeto = new();
-        contextWithVeto["test.vetoJwks"] = true;
+        ExchangeContext contextWithVeto = new()
+        {
+            ["test.vetoJwks"] = true
+        };
         contextWithVeto.SetServer(host.Server);
         EndpointChain chainWithVeto = await EndpointChain.BuildForRequestAsync(
             keys.Registration, contextWithVeto, TestContext.CancellationToken)
@@ -165,7 +165,7 @@ internal sealed class ResolveCapabilitiesAsyncTests
         using VerifierKeyMaterial keys = host.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetServer(host.Server);
 
         //Build the chain — if the filter order were wrong (URI-resolve first,

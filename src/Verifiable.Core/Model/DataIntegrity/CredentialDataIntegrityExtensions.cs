@@ -1,13 +1,6 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
@@ -251,7 +244,7 @@ public static class CredentialDataIntegrityExtensions
             using var hashDataOwner = memoryPool.Rent(combinedLength);
             var hashData = hashDataOwner.Memory.Span;
             proofOptionsDigest.AsReadOnlySpan().CopyTo(hashData);
-            credentialDigest.AsReadOnlySpan().CopyTo(hashData.Slice(proofOptionsDigest.Length));
+            credentialDigest.AsReadOnlySpan().CopyTo(hashData[proofOptionsDigest.Length..]);
 
             //Sign using the private key (uses CryptoFunctionRegistry internally via Tag).
             using var signature = await privateKey.SignAsync(hashDataOwner.Memory, memoryPool)
@@ -663,7 +656,7 @@ public static class CredentialDataIntegrityExtensions
                 return null;
             }
 
-            successorByPreviousId.TryGetValue(current.Id, out current);
+            _ = successorByPreviousId.TryGetValue(current.Id, out current);
         }
 
         //Fewer proofs than input means the chain is disconnected (a dangling segment).

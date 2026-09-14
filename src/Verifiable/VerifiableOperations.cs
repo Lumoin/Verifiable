@@ -1,18 +1,12 @@
-using System;
-using System.Buffers;
+using Lumoin.Base;
 using System.Buffers.Text;
-using System.Collections.Generic;
-using System.IO;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Globalization;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Core;
-using Verifiable.Cryptography.Cbom;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Cbom;
 using Verifiable.Cryptography.Context;
 using Verifiable.Foundation;
 using Verifiable.JCose;
@@ -80,7 +74,7 @@ internal static partial class VerifiableOperations
 
         if(!infoResult.IsSuccess)
         {
-            return Result.Failure<string, string>(infoResult.Error!);
+            return Result.Failure<string, string>(infoResult.Error);
         }
 
         return Result.Success<string, string>(JsonSerializer.Serialize(infoResult.Value, TpmJsonContext.Default.TpmInfo));
@@ -99,7 +93,7 @@ internal static partial class VerifiableOperations
         var infoResult = await GetTpmInfoAsJsonAsync(pool, rng).ConfigureAwait(false);
         if(!infoResult.IsSuccess)
         {
-            return Result.Failure<string, string>(infoResult.Error!);
+            return Result.Failure<string, string>(infoResult.Error);
         }
 
         try
@@ -313,22 +307,22 @@ internal static partial class VerifiableOperations
     public static Result<string, string> CreateDid(int id, string param, string? extraParam = null)
     {
         var result = new StringBuilder();
-        result.Append("Created DID document with ID: ");
-        result.Append(id.ToString(CultureInfo.InvariantCulture));
-        result.AppendLine();
-        result.Append("Parameter: ");
-        result.Append(param);
-        result.AppendLine();
+        _ = result.Append("Created DID document with ID: ");
+        _ = result.Append(id.ToString(CultureInfo.InvariantCulture));
+        _ = result.AppendLine();
+        _ = result.Append("Parameter: ");
+        _ = result.Append(param);
+        _ = result.AppendLine();
 
         if(!string.IsNullOrEmpty(extraParam))
         {
-            result.Append("Extra parameter: ");
-            result.Append(extraParam);
-            result.AppendLine();
+            _ = result.Append("Extra parameter: ");
+            _ = result.Append(extraParam);
+            _ = result.AppendLine();
         }
 
         //TODO: Implement actual DID creation logic.
-        result.AppendLine("Note: This is a placeholder. Actual DID creation is not yet implemented.");
+        _ = result.AppendLine("Note: This is a placeholder. Actual DID creation is not yet implemented.");
 
         return Result.Success<string, string>(result.ToString());
     }

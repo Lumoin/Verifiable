@@ -1,14 +1,10 @@
-using System.Collections.Immutable;
-using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.Cryptography;
+using System.Collections.Immutable;
+using System.Text.Json;
 using Verifiable.Json;
-using Verifiable.Server;
-using Verifiable.Vcalm;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.OAuth;
+using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Vcalm;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -109,7 +105,7 @@ internal sealed class VcalmWorkflowEndpointTests
         string workflowId = await CreateWorkflowAndGetIdAsync(app, segment, ValidTwoStepWorkflow).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmWorkflowByIdAsync(
-            segment, workflowId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, workflowId, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         using JsonDocument doc = JsonDocument.Parse(response.Body);
@@ -137,7 +133,7 @@ internal sealed class VcalmWorkflowEndpointTests
         string segment = RegisterAdministration(app);
 
         ServerHttpResponse response = await app.DispatchVcalmWorkflowByIdAsync(
-            segment, "urn:uuid:never-created", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "urn:uuid:never-created", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode, "§3.6.2: an unknown workflow id is 404.");
     }
@@ -161,7 +157,7 @@ internal sealed class VcalmWorkflowEndpointTests
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, "POST",
-            new RequestFields(), invalid, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), invalid, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "§3.6.1: a final step that carries a nextStep is invalid input.");
@@ -182,7 +178,7 @@ internal sealed class VcalmWorkflowEndpointTests
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, "POST",
-            new RequestFields(), invalid, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), invalid, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "§3.6.1: an initialStep that does not name a defined step is invalid input.");
@@ -208,7 +204,7 @@ internal sealed class VcalmWorkflowEndpointTests
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, "POST",
-            new RequestFields(), cyclic, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), cyclic, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "§3.6.1: a nextStep cycle has no final step and is invalid input.");
@@ -221,7 +217,7 @@ internal sealed class VcalmWorkflowEndpointTests
         VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, AdministrationCapabilities);
         RegisteredMaterials.Add(material);
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         Dictionary<string, VcalmWorkflowConfiguration> workflowStore = new(StringComparer.Ordinal);
         app.Server.Vcalm().StoreVcalmWorkflowAsync = (workflowId, configuration, _, _) =>
@@ -241,7 +237,7 @@ internal sealed class VcalmWorkflowEndpointTests
     private async Task<ServerHttpResponse> CreateWorkflowAsync(TestHostShell app, string segment, string body) =>
         await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
 
     private async Task<string> CreateWorkflowAndGetIdAsync(TestHostShell app, string segment, string body)

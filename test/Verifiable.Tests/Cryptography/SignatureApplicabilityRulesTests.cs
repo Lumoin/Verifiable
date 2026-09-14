@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
@@ -455,7 +452,7 @@ internal sealed class SignatureApplicabilityRulesTests
         using PkiCertificateMemory certificate = CreateCertificateMemory(CertificateUnderTestBytes);
         QualifiedCertificateFacts facts = CreateFacts(hasQcCompliance: true, qcTypes: [EuQualifiedCertificateType.ElectronicSignature]);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await SignatureApplicabilityRules.CheckTechnicalApplicabilityAsync(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () => await SignatureApplicabilityRules.CheckTechnicalApplicabilityAsync(
             trustedList, certificate, facts,
             CreateConclusion(SignatureValidationIndication.TotalPassed, bestSignatureTime: null),
             ByteEqualityMatch, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
@@ -539,10 +536,10 @@ internal sealed class SignatureApplicabilityRulesTests
         Assert.HasCount(1, report.SubjectAlternativeNames, "REQ-4.5-01 b): the Subject Alternative Name data passes through.");
         Assert.HasCount(1, report.TimingInformation, "REQ-4.5-01 d): the timing information points pass through.");
         Assert.HasCount(1, report.SignedDataPresentations, "REQ-4.5-01 e): the signed data presentation passes through.");
-        Assert.ContainsSingle(attribute => attribute.Scope == SignatureAttributeScope.Signed, report.SignatureAttributes, "REQ-4.5-01 f): each attribute states whether it was signed.");
+        _ = Assert.ContainsSingle(attribute => attribute.Scope == SignatureAttributeScope.Signed, report.SignatureAttributes, "REQ-4.5-01 f): each attribute states whether it was signed.");
         Assert.AreEqual("ETSI TS 119 312", report.CryptographicSuites!.RulesSource, "REQ-4.5-01 h): the rules source is stated clearly.");
         Assert.AreEqual(TimeSpan.FromHours(3), report.SigningCertificateRevocationFreshness, "REQ-4.5-01 i): the observed revocation freshness passes through.");
-        Assert.ContainsSingle(warning => warning.Contains("does not comply", StringComparison.Ordinal), report.FormatComplianceWarnings, "REQ-4.2-03 g): the format-compliance warning with its reasons is carried, never an invalidation.");
+        _ = Assert.ContainsSingle(warning => warning.Contains("does not comply", StringComparison.Ordinal), report.FormatComplianceWarnings, "REQ-4.2-03 g): the format-compliance warning with its reasons is carried, never an invalidation.");
         Assert.IsNull(report.DetailedOutcome, "REQ-4.5-01 j): the detailed outcome is optional and none was attached.");
         Assert.IsTrue(report.TechnicalApplicability.IsTechnicallySuitable, "REQ-4.5-01 g): the overall status is the checking outcome.");
     }
@@ -612,30 +609,30 @@ internal sealed class SignatureApplicabilityRulesTests
         DateTimeOffset? notBefore = null,
         bool hasQcSscdStatement = false,
         IReadOnlyList<string>? subjectAttributeTypeOids = null) => new()
-    {
-        IssuerCountryCode = "FI",
-        IssuerOrganizationNames = ["Example Provider Oy"],
-        IssuerCommonNames = ["Example Provider Root CA"],
-        SubjectCountryCode = "FI",
-        SubjectOrganizationNames = ["Example Provider Oy"],
-        NotBefore = notBefore ?? new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
-        HasQcCompliance = hasQcCompliance,
-        QcTypes = qcTypes,
-        HasQcSscdStatement = hasQcSscdStatement,
-        QcLimitValue = null,
-        QcRetentionPeriodYears = null,
-        QcPdsLocations = [],
-        QcCcLegislationCountryCodes = [],
-        QcIdentityVerificationMethods = [],
-        QcQscdLegislationCountryCodes = [],
-        HasCertificatePoliciesExtension = true,
-        CertificatePolicyOids = [MatchingPolicyOid],
-        HasKeyUsageExtension = true,
-        SetKeyUsageBits = [KeyUsageBitName.NonRepudiation],
-        HasExtendedKeyUsageExtension = false,
-        ExtendedKeyUsageOids = [],
-        SubjectAttributeTypeOids = subjectAttributeTypeOids ?? [WellKnownOids.CountryName, WellKnownOids.OrganizationName, WellKnownOids.CommonName]
-    };
+        {
+            IssuerCountryCode = "FI",
+            IssuerOrganizationNames = ["Example Provider Oy"],
+            IssuerCommonNames = ["Example Provider Root CA"],
+            SubjectCountryCode = "FI",
+            SubjectOrganizationNames = ["Example Provider Oy"],
+            NotBefore = notBefore ?? new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            HasQcCompliance = hasQcCompliance,
+            QcTypes = qcTypes,
+            HasQcSscdStatement = hasQcSscdStatement,
+            QcLimitValue = null,
+            QcRetentionPeriodYears = null,
+            QcPdsLocations = [],
+            QcCcLegislationCountryCodes = [],
+            QcIdentityVerificationMethods = [],
+            QcQscdLegislationCountryCodes = [],
+            HasCertificatePoliciesExtension = true,
+            CertificatePolicyOids = [MatchingPolicyOid],
+            HasKeyUsageExtension = true,
+            SetKeyUsageBits = [KeyUsageBitName.NonRepudiation],
+            HasExtendedKeyUsageExtension = false,
+            ExtendedKeyUsageOids = [],
+            SubjectAttributeTypeOids = subjectAttributeTypeOids ?? [WellKnownOids.CountryName, WellKnownOids.OrganizationName, WellKnownOids.CommonName]
+        };
 
 
     /// <summary>Creates a trusted list with one provider carrying one CA/QC service granted from the given instant.</summary>
@@ -735,16 +732,16 @@ internal sealed class SignatureApplicabilityRulesTests
     private static TrustService CreateService(
         DateTimeOffset statusStartingTime,
         IReadOnlyList<TrustServiceAdditionalInformationType> additionalServiceInformation) => new()
-    {
-        ServiceTypeIdentifier = TrustServiceTypeIdentifier.CertificationAuthorityQualifiedCertificates,
-        ServiceNames = [new LocalizedText("en", "Example CA")],
-        DigitalIdentity = new ServiceDigitalIdentity { Entries = [new X509CertificateIdentity(CreateCertificateMemory(CertificateUnderTestBytes))] },
-        Status = TrustServiceStatus.Granted,
-        StatusStartingTime = statusStartingTime,
-        AdditionalServiceInformation = additionalServiceInformation,
-        Qualifications = [],
-        History = []
-    };
+        {
+            ServiceTypeIdentifier = TrustServiceTypeIdentifier.CertificationAuthorityQualifiedCertificates,
+            ServiceNames = [new LocalizedText("en", "Example CA")],
+            DigitalIdentity = new ServiceDigitalIdentity { Entries = [new X509CertificateIdentity(CreateCertificateMemory(CertificateUnderTestBytes))] },
+            Status = TrustServiceStatus.Granted,
+            StatusStartingTime = statusStartingTime,
+            AdditionalServiceInformation = additionalServiceInformation,
+            Qualifications = [],
+            History = []
+        };
 
 
     /// <summary>Rents a <see cref="PkiCertificateMemory"/> carrier over the given DER-stand-in bytes.</summary>

@@ -1,4 +1,3 @@
-using System;
 using CsCheck;
 using Verifiable.Apdu;
 

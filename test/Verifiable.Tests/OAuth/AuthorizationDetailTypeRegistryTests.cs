@@ -1,4 +1,3 @@
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
@@ -52,7 +51,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
         string? error = registry.ValidateShape(detail, default);
 
         Assert.IsNotNull(error);
-        Assert.Contains(PaymentInitiationType, error!);
+        Assert.Contains(PaymentInitiationType, error);
     }
 
 
@@ -155,7 +154,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
         AuthorizationDetailTypeRegistry registry = new();
         registry.Register(OpenIdCredentialAuthorizationDetailHandler.Handler);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             registry.Register(OpenIdCredentialAuthorizationDetailHandler.Handler));
     }
 
@@ -202,7 +201,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
         string? error = strict.ValidateShape(detail, default);
 
         Assert.IsNotNull(error);
-        Assert.Contains("unexpected", error!);
+        Assert.Contains("unexpected", error);
     }
 
 
@@ -225,7 +224,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
         string? error = strict.ValidateShape(detail, default);
 
         Assert.IsNotNull(error);
-        Assert.Contains("instructedAmount", error!);
+        Assert.Contains("instructedAmount", error);
     }
 
 
@@ -249,7 +248,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
         string? error = strict.ValidateShape(detail, default);
 
         Assert.IsNotNull(error);
-        Assert.Contains("locations", error!);
+        Assert.Contains("locations", error);
     }
 
 
@@ -274,7 +273,7 @@ internal sealed class AuthorizationDetailTypeRegistryTests
         string? error = strict.ValidateShape(detail, default);
 
         Assert.IsNotNull(error);
-        Assert.Contains("currency", error!);
+        Assert.Contains("currency", error);
 
         AuthorizationDetail valid = new()
         {

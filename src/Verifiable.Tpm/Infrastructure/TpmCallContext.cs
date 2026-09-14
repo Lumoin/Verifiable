@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using Verifiable.Tpm.Spec.Constants;
-
 namespace Verifiable.Tpm.Infrastructure;
 
 /// <summary>
@@ -142,10 +138,10 @@ public ref struct TpmCallContext
     /// <summary>
     /// Gets the cpHash bytes from the buffer.
     /// </summary>
-    public ReadOnlySpan<byte> CpHash => CpHashSlice.IsEmpty ? [] : CpHashBuffer.Slice(CpHashSlice.Offset, CpHashSlice.Length);
+    public readonly ReadOnlySpan<byte> CpHash => CpHashSlice.IsEmpty ? [] : CpHashBuffer.Slice(CpHashSlice.Offset, CpHashSlice.Length);
 
     /// <summary>
     /// Gets the rpHash bytes from the buffer.
     /// </summary>
-    public ReadOnlySpan<byte> RpHash => RpHashSlice.IsEmpty ? [] : RpHashBuffer.Slice(RpHashSlice.Offset, RpHashSlice.Length);
+    public readonly ReadOnlySpan<byte> RpHash => RpHashSlice.IsEmpty ? [] : RpHashBuffer.Slice(RpHashSlice.Offset, RpHashSlice.Length);
 }

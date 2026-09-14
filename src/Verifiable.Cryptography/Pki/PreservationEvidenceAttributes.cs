@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 
@@ -91,6 +89,7 @@ public static class PreservationEvidenceAttributeWellKnown
         PreservationEvidenceAttributeKind.PreservationServiceIdentifier => PreservationServiceIdentifierAttributeType,
         PreservationEvidenceAttributeKind.PreservationEvidencePolicy => PreservationEvidencePolicyAttributeType,
         PreservationEvidenceAttributeKind.PreservationProfile => PreservationProfileAttributeType,
+        PreservationEvidenceAttributeKind.None => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Annex H defines three attributes for preservation evidences and no others."),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Annex H defines three attributes for preservation evidences and no others.")
     };
 
@@ -106,6 +105,7 @@ public static class PreservationEvidenceAttributeWellKnown
         PreservationEvidenceAttributeKind.PreservationServiceIdentifier => PreservationServiceIdentifierElementName,
         PreservationEvidenceAttributeKind.PreservationEvidencePolicy => PreservationEvidencePolicyElementName,
         PreservationEvidenceAttributeKind.PreservationProfile => PreservationProfileElementName,
+        PreservationEvidenceAttributeKind.None => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Annex H defines three attributes for preservation evidences and no others."),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Annex H defines three attributes for preservation evidences and no others.")
     };
 

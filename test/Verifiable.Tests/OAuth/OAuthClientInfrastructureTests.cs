@@ -1,9 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
-using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -22,7 +19,7 @@ internal sealed class OAuthClientInfrastructureTests
     [TestMethod]
     public void CreateWithNullGenerateIdentifierAsyncThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => OAuthClientInfrastructure.Create(
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => OAuthClientInfrastructure.Create(
             sendFormPostAsync: (_, _, _, _, _) => throw new NotImplementedException(),
             saveStateAsync: (_, _, _) => ValueTask.CompletedTask,
             loadStateAsync: (_, _, _) => ValueTask.FromResult<FlowState?>(null),

@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Cryptography.Pki.Xml;
 
@@ -101,7 +96,7 @@ internal sealed class PreservationAsicExtensionTests
             PreservationAsicExtensionKind.None,
             PreservationAsicExtensionWellKnown.KindOf(new AsicManifestExtensionName(PreservationWellKnown.PreservationNamespace, "ContainerID ")));
 
-        Assert.AreEqual(PreservationAsicExtensionKind.None, PreservationAsicExtensionWellKnown.KindOf(default(AsicManifestExtensionName?)));
+        Assert.AreEqual(PreservationAsicExtensionKind.None, PreservationAsicExtensionWellKnown.KindOf(default));
     }
 
 

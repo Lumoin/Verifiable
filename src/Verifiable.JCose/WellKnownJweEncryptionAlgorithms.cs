@@ -64,7 +64,7 @@ namespace Verifiable.JCose
         /// </summary>
         /// <remarks>See more at <see href="https://www.rfc-editor.org/rfc/rfc7518#section-5.3">AES_256_GCM</see>.</remarks>
         public static string A256Gcm { get; } = Utf8Constants.ToInternedString(A256GcmUtf8);
-               
+
         /// <summary>The UTF-8 source literal of <see cref="XC20P"/>.</summary>
         public static ReadOnlySpan<byte> XC20PUtf8 => "XC20P"u8;
 
@@ -139,14 +139,14 @@ namespace Verifiable.JCose
         /// <returns>The equivalent static instance of <paramref name="algorithm"/>, or the original instance if none match.</returns>
         public static string GetCanonicalizedValue(string algorithm) => algorithm switch
         {
-            string _ when IsA128CbcHs256(algorithm) => A128CbcHs256,
-            string _ when IsA192CbcHs384(algorithm) => A192CbcHs384,
-            string _ when IsA256CbcHs512(algorithm) => A256CbcHs512,
-            string _ when IsA128Gcm(algorithm) => A128Gcm,
-            string _ when IsA192Gcm(algorithm) => A192Gcm,
-            string _ when IsA256Gcm(algorithm) => A256Gcm,
-            string _ when IsXC20P(algorithm) => XC20P,
-            string _ => algorithm
+            string when IsA128CbcHs256(algorithm) => A128CbcHs256,
+            string when IsA192CbcHs384(algorithm) => A192CbcHs384,
+            string when IsA256CbcHs512(algorithm) => A256CbcHs512,
+            string when IsA128Gcm(algorithm) => A128Gcm,
+            string when IsA192Gcm(algorithm) => A192Gcm,
+            string when IsA256Gcm(algorithm) => A256Gcm,
+            string when IsXC20P(algorithm) => XC20P,
+            string => algorithm
         };
 
 

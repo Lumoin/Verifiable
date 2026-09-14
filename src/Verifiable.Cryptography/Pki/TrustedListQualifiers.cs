@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -126,7 +125,7 @@ public abstract class QualifierCondition
 /// criteria tree — a child may itself be a <see cref="CriteriaListCondition"/>.
 /// </summary>
 [DebuggerDisplay("CriteriaListCondition: {Assert}, {Children.Count} children")]
-public sealed class CriteriaListCondition : QualifierCondition
+public sealed class CriteriaListCondition: QualifierCondition
 {
     /// <summary>Initializes a new <see cref="CriteriaListCondition"/>.</summary>
     /// <param name="assert">How <see cref="Children"/> combine.</param>
@@ -155,7 +154,7 @@ public sealed class CriteriaListCondition : QualifierCondition
 /// clause 5.5.9.2.2.1.
 /// </summary>
 [DebuggerDisplay("KeyUsageCondition: {Bits.Count} bits")]
-public sealed class KeyUsageCondition : QualifierCondition
+public sealed class KeyUsageCondition: QualifierCondition
 {
     /// <summary>Initializes a new <see cref="KeyUsageCondition"/>.</summary>
     /// <param name="bits">The asserted bits; all must match for this leaf to hold (the element itself has no <c>assert</c> attribute — it is always a conjunction of its own bits).</param>
@@ -173,7 +172,7 @@ public sealed class KeyUsageCondition : QualifierCondition
 /// A leaf condition matching a certificate's policy OIDs against a <c>PolicySet</c>, per clause 5.5.9.2.2.2.
 /// </summary>
 [DebuggerDisplay("PolicySetCondition: {PolicyOids.Count} policies")]
-public sealed class PolicySetCondition : QualifierCondition
+public sealed class PolicySetCondition: QualifierCondition
 {
     /// <summary>Initializes a new <see cref="PolicySetCondition"/>.</summary>
     /// <param name="policyOids">The dotted-decimal certificate policy object identifiers the set names.</param>
@@ -194,7 +193,7 @@ public sealed class PolicySetCondition : QualifierCondition
 /// ETSI TS 119 612 V2.4.1 additional-types schema, <c>ExtendedKeyUsage</c></see>).
 /// </summary>
 [DebuggerDisplay("ExtendedKeyUsageCondition: {KeyPurposeOids.Count} purposes")]
-public sealed class ExtendedKeyUsageCondition : QualifierCondition
+public sealed class ExtendedKeyUsageCondition: QualifierCondition
 {
     /// <summary>Initializes a new <see cref="ExtendedKeyUsageCondition"/>.</summary>
     /// <param name="keyPurposeOids">The dotted-decimal Extended Key Usage OIDs.</param>
@@ -215,7 +214,7 @@ public sealed class ExtendedKeyUsageCondition : QualifierCondition
 /// ETSI TS 119 612 V2.4.1 additional-types schema, <c>CertSubjectDNAttribute</c></see>).
 /// </summary>
 [DebuggerDisplay("CertSubjectDistinguishedNameAttributeCondition: {AttributeOids.Count} attributes")]
-public sealed class CertSubjectDistinguishedNameAttributeCondition : QualifierCondition
+public sealed class CertSubjectDistinguishedNameAttributeCondition: QualifierCondition
 {
     /// <summary>Initializes a new <see cref="CertSubjectDistinguishedNameAttributeCondition"/>.</summary>
     /// <param name="attributeOids">The dotted-decimal Subject RDN attribute type OIDs the certificate must (or, under <see cref="QualifierAssertion.None"/>, must not) carry.</param>
@@ -241,7 +240,7 @@ public sealed class CertSubjectDistinguishedNameAttributeCondition : QualifierCo
 /// the same unmodelled condition.
 /// </remarks>
 [DebuggerDisplay("OtherQualifierCondition: {LocalName}")]
-public sealed class OtherQualifierCondition : QualifierCondition, IEquatable<OtherQualifierCondition>
+public sealed class OtherQualifierCondition: QualifierCondition, IEquatable<OtherQualifierCondition>
 {
     /// <summary>Initializes a new <see cref="OtherQualifierCondition"/>.</summary>
     /// <param name="localName">The local (unqualified) element name the test-side XML binding found.</param>

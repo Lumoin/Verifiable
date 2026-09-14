@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Credentials;
@@ -71,7 +70,7 @@ namespace Verifiable.Json.Converters
                     }
 
                     string? propertyName = reader.GetString();
-                    reader.Read();
+                    _ = reader.Read();
 
                     switch(propertyName)
                     {

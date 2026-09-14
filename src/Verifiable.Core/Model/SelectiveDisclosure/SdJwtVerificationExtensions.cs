@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;

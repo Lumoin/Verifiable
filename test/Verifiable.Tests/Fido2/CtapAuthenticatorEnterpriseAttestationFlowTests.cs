@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -133,7 +129,7 @@ internal sealed class CtapAuthenticatorEnterpriseAttestationFlowTests
             "value 2 for an rp.id NOT on the vendor list must still grant epAtt: true (the independent, platform-vetted authorization source).");
 
         AttestationResult acceptedResult = await VerifyThroughRpAsync(vendorDecoded, rootPki, acceptsEnterpriseAttestation: true, pool, cancellationToken).ConfigureAwait(false);
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(acceptedResult, "the wire-minted certified attestation must verify against the seeded root anchor.");
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(acceptedResult, "the wire-minted certified attestation must verify against the seeded root anchor.");
 
         AttestationResult rejectedResult = await VerifyThroughRpAsync(vendorDecoded, rootPki, acceptsEnterpriseAttestation: false, pool, cancellationToken).ConfigureAwait(false);
         var rejected = Assert.IsInstanceOfType<RejectedAttestationResult>(rejectedResult, "the SAME bytes against AcceptsEnterpriseAttestation=false must be rejected, never silently accepted.");

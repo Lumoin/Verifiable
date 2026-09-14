@@ -1,15 +1,11 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -32,7 +28,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //A non-nested anoncrypt message never triggers nested-signature resolution, so this resolver is never
     //invoked; it satisfies the unpack overload's resolver parameter.
@@ -174,7 +170,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
 
         var recipients = new List<GeneralJweRecipientInput> { new(BobKid, recipientPublic) };
 
-        await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
             await message.PackAnoncryptAsync(
                 recipients,
                 WellKnownJweAlgorithms.EcdhEsA256Kw,
@@ -342,7 +338,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
         //read the value through the JSON reader (which unescapes it) rather than matching the raw string.
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(encrypted.AsReadOnlySpan(), "protected"u8);
         Assert.IsNotNull(protectedEncoded);
-        using IMemoryOwner<byte> typHeaderOwner = TestSetup.Base64UrlDecoder(protectedEncoded!, Pool);
+        using IMemoryOwner<byte> typHeaderOwner = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);
         string? typ = JwkJsonReader.ExtractStringValue(typHeaderOwner.Memory.Span, "typ"u8);
         Assert.AreEqual(DidCommMediaTypes.Encrypted, typ, "The anoncrypt protected header typ MUST be the encrypted media type.");
 
@@ -587,7 +583,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
     private static void AssertRecoveredMessage(DidCommMessage? recovered, IList<string>? expectedTo)
     {
         Assert.IsNotNull(recovered);
-        Assert.AreEqual(MessageId, recovered!.Id);
+        Assert.AreEqual(MessageId, recovered.Id);
         Assert.AreEqual(MessageType, recovered.Type);
         Assert.AreEqual(AliceDid, recovered.From);
 
@@ -598,15 +594,15 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
         else
         {
             Assert.IsNotNull(recovered.To);
-            Assert.HasCount(expectedTo.Count, recovered.To!);
+            Assert.HasCount(expectedTo.Count, recovered.To);
             for(int i = 0; i < expectedTo.Count; ++i)
             {
-                Assert.AreEqual(expectedTo[i], recovered.To![i]);
+                Assert.AreEqual(expectedTo[i], recovered.To[i]);
             }
         }
 
         Assert.IsNotNull(recovered.Body);
-        Assert.IsTrue(recovered.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(recovered.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 
@@ -617,7 +613,7 @@ internal sealed class DidCommEncryptedAnoncryptRoundTripTests
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(encrypted.AsReadOnlySpan(), "protected"u8);
         Assert.IsNotNull(protectedEncoded, "The encrypted envelope MUST carry a 'protected' member.");
 
-        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded!, Pool);
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);
 
         return Encoding.UTF8.GetString(headerOwner.Memory.Span);
     }

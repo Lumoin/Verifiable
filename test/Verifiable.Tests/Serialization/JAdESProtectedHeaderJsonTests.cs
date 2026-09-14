@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -57,8 +56,8 @@ internal sealed class JAdESProtectedHeaderJsonTests
         Assert.IsNotNull(decoded.B64);
         Assert.IsFalse(decoded.B64.Value);
         Assert.AreEqual(1700000000L, decoded.IssuedAt?.Value.ToUnixTimeSeconds());
-        Assert.IsInstanceOfType<JAdESHttpHeadersReference>(decoded.SigD);
-        Assert.AreSequenceEqual(ExpectedHttpHeaderNames, ((JAdESHttpHeadersReference)decoded.SigD!).HeaderNames);
+        _ = Assert.IsInstanceOfType<JAdESHttpHeadersReference>(decoded.SigD);
+        Assert.AreSequenceEqual(ExpectedHttpHeaderNames, ((JAdESHttpHeadersReference)decoded.SigD).HeaderNames);
     }
 
 

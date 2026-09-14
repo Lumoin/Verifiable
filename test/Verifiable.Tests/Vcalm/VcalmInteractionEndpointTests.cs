@@ -1,15 +1,14 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
+using Verifiable.Tests.OAuth;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
 using Verifiable.Vcalm.Exchange;
-using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -206,7 +205,7 @@ internal sealed class VcalmInteractionEndpointTests
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, interactionId, WellKnownMediaTypes.Application.Json,
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         Assert.AreEqual(WellKnownMediaTypes.Application.Json, response.ContentType,
@@ -239,7 +238,7 @@ internal sealed class VcalmInteractionEndpointTests
             });
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
-            segment, interactionId, "text/html", new ExchangeContext(), TestContext.CancellationToken)
+            segment, interactionId, "text/html", [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -247,7 +246,7 @@ internal sealed class VcalmInteractionEndpointTests
             "§3.7.4: an unrecognized Accept MUST return a text/html document.");
         Assert.IsTrue(response.Body.Contains("<html", StringComparison.OrdinalIgnoreCase),
             "§3.7.4: the text/html body is an HTML document directing a human to suitable software.");
-        Assert.IsFalse(response.Body.TrimStart().StartsWith('{'),
+        Assert.IsFalse(response.Body.TrimStart().StartsWith('{', StringComparison.Ordinal),
             "§3.7.4: the unrecognized-Accept response is HTML, NOT the JSON protocols map.");
     }
 
@@ -269,7 +268,7 @@ internal sealed class VcalmInteractionEndpointTests
             });
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
-            segment, "z8n38Dp7a", acceptHeader: null, new ExchangeContext(), TestContext.CancellationToken)
+            segment, "z8n38Dp7a", acceptHeader: null, [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -292,7 +291,7 @@ internal sealed class VcalmInteractionEndpointTests
 
         ServerHttpResponse response = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, "never-created", WellKnownMediaTypes.Application.Json,
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode, "§3.7.4: an unknown interaction id is 404.");
     }
@@ -322,12 +321,12 @@ internal sealed class VcalmInteractionEndpointTests
             + "\"referenceId\":\"417bcaf2-14d9-11f0-99d7-9f094678517b\"}";
 
         ServerHttpResponse response = await app.DispatchVcalmInviteRequestAsync(
-            segment, inviteId, body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, inviteId, body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         Assert.IsTrue(store.TryGetValue(inviteId, out VcalmInviteRequest? stored),
             "§3.7.5: the accepted invitation is recorded under the invite id.");
-        Assert.AreEqual("https://website.example/checkout/8372974", stored!.Url,
+        Assert.AreEqual("https://website.example/checkout/8372974", stored.Url,
             "§3.7.5: the stored invitation carries the url.");
         Assert.AreEqual("Checkout at ShopCo", stored.Purpose, "§3.7.5: the stored invitation carries the purpose.");
     }
@@ -343,7 +342,7 @@ internal sealed class VcalmInteractionEndpointTests
         string segment = RegisterCoordinator(app);
 
         ServerHttpResponse response = await app.DispatchVcalmInviteRequestAsync(
-            segment, "8372974", "\"not-an-object\"", new ExchangeContext(), TestContext.CancellationToken)
+            segment, "8372974", "\"not-an-object\"", [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
@@ -361,7 +360,7 @@ internal sealed class VcalmInteractionEndpointTests
         string segment = RegisterCoordinator(app);
 
         ServerHttpResponse response = await app.DispatchVcalmInviteRequestAsync(
-            segment, "8372974", "{\"purpose\":\"Checkout\"}", new ExchangeContext(), TestContext.CancellationToken)
+            segment, "8372974", "{\"purpose\":\"Checkout\"}", [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
@@ -396,7 +395,7 @@ internal sealed class VcalmInteractionEndpointTests
         //Fetch the §3.7.4 protocols map and read the vcapi URL.
         ServerHttpResponse protocolsResponse = await app.DispatchVcalmInteractionProtocolsAsync(
             segment, "interaction-1", WellKnownMediaTypes.Application.Json,
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, protocolsResponse.StatusCode, protocolsResponse.Body);
 
         using JsonDocument doc = JsonDocument.Parse(protocolsResponse.Body);
@@ -410,7 +409,7 @@ internal sealed class VcalmInteractionEndpointTests
         //§3.7.6: POST the empty initiating vcapi message to the §3.6.5 participate endpoint the vcapi URL
         //addresses — the §3.6 engine responds with a verifiablePresentationRequest (more needed).
         ServerHttpResponse participate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken)
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(200, participate.StatusCode, participate.Body);
@@ -446,7 +445,7 @@ internal sealed class VcalmInteractionEndpointTests
         VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, CoordinatorCapabilities);
         RegisteredMaterials.Add(material);
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         return material.Registration.TenantId.Value;
     }
@@ -457,7 +456,7 @@ internal sealed class VcalmInteractionEndpointTests
         VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, CoordinatorAndExchangeCapabilities);
         RegisteredMaterials.Add(material);
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         //Wire the §3.6 exchange seams so the vcapi URL the §3.7.4 map advertises addresses a real
         //participate endpoint (the §3.7.6 destination). The exchange-id -> flow-id resolver scans the
@@ -502,7 +501,7 @@ internal sealed class VcalmInteractionEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            new RequestFields(), "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
 

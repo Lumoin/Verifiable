@@ -1,8 +1,6 @@
-using System.Linq;
-
 namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
-    public sealed class Ed25519VerificationKey2018VerificationMethodTypeInfo : VerificationMethodTypeInfo
+    public sealed class Ed25519VerificationKey2018VerificationMethodTypeInfo: VerificationMethodTypeInfo
     {
 #pragma warning disable CS0618 // Type or member is obsolete
         public static Ed25519VerificationKey2018VerificationMethodTypeInfo Instance { get; } = new()

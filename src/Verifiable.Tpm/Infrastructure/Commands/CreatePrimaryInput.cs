@@ -1,12 +1,5 @@
-using System;
-using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 

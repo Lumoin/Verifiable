@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -1218,47 +1214,47 @@ public static class ArchiveTimestampV3
     /// were read from.
     /// </summary>
     private sealed class CmsArchiveMaterial
-{
-    /// <summary>Initializes a new <see cref="CmsArchiveMaterial"/>.</summary>
-    /// <param name="encapsulatedContentTypeEncoding">The whole encoding of <c>encapContentInfo.eContentType</c>, part 1) of the imprint input.</param>
-    /// <param name="encapsulatedContent">The content octets of <c>encapContentInfo.eContent</c>, whose hash is part 2).</param>
-    /// <param name="hasEncapsulatedContent">Whether the structure encapsulates its content as a primitive OCTET STRING.</param>
-    /// <param name="certificates">The whole encoding of every instance of <c>CertificateChoices</c> in <c>certificates</c>.</param>
-    /// <param name="revocationInformation">The whole encoding of every instance of <c>RevocationInfoChoice</c> in <c>crls</c>.</param>
-    /// <param name="signerInfoFields">The whole encodings of the signer's fields other than <c>unsignedAttrs</c>, in their order of appearance — part 3).</param>
-    /// <param name="unsignedAttributeValues">One entry per value of every unsigned attribute of the signer.</param>
-    public CmsArchiveMaterial(ReadOnlyMemory<byte> encapsulatedContentTypeEncoding, ReadOnlyMemory<byte> encapsulatedContent, bool hasEncapsulatedContent, IReadOnlyList<ReadOnlyMemory<byte>> certificates, IReadOnlyList<ReadOnlyMemory<byte>> revocationInformation, IReadOnlyList<ReadOnlyMemory<byte>> signerInfoFields, IReadOnlyList<UnsignedAttributeValueMaterial> unsignedAttributeValues)
     {
-        EncapsulatedContentTypeEncoding = encapsulatedContentTypeEncoding;
-        EncapsulatedContent = encapsulatedContent;
-        HasEncapsulatedContent = hasEncapsulatedContent;
-        Certificates = certificates;
-        RevocationInformation = revocationInformation;
-        SignerInfoFields = signerInfoFields;
-        UnsignedAttributeValues = unsignedAttributeValues;
+        /// <summary>Initializes a new <see cref="CmsArchiveMaterial"/>.</summary>
+        /// <param name="encapsulatedContentTypeEncoding">The whole encoding of <c>encapContentInfo.eContentType</c>, part 1) of the imprint input.</param>
+        /// <param name="encapsulatedContent">The content octets of <c>encapContentInfo.eContent</c>, whose hash is part 2).</param>
+        /// <param name="hasEncapsulatedContent">Whether the structure encapsulates its content as a primitive OCTET STRING.</param>
+        /// <param name="certificates">The whole encoding of every instance of <c>CertificateChoices</c> in <c>certificates</c>.</param>
+        /// <param name="revocationInformation">The whole encoding of every instance of <c>RevocationInfoChoice</c> in <c>crls</c>.</param>
+        /// <param name="signerInfoFields">The whole encodings of the signer's fields other than <c>unsignedAttrs</c>, in their order of appearance — part 3).</param>
+        /// <param name="unsignedAttributeValues">One entry per value of every unsigned attribute of the signer.</param>
+        public CmsArchiveMaterial(ReadOnlyMemory<byte> encapsulatedContentTypeEncoding, ReadOnlyMemory<byte> encapsulatedContent, bool hasEncapsulatedContent, IReadOnlyList<ReadOnlyMemory<byte>> certificates, IReadOnlyList<ReadOnlyMemory<byte>> revocationInformation, IReadOnlyList<ReadOnlyMemory<byte>> signerInfoFields, IReadOnlyList<UnsignedAttributeValueMaterial> unsignedAttributeValues)
+        {
+            EncapsulatedContentTypeEncoding = encapsulatedContentTypeEncoding;
+            EncapsulatedContent = encapsulatedContent;
+            HasEncapsulatedContent = hasEncapsulatedContent;
+            Certificates = certificates;
+            RevocationInformation = revocationInformation;
+            SignerInfoFields = signerInfoFields;
+            UnsignedAttributeValues = unsignedAttributeValues;
+        }
+
+        /// <summary>The whole encoding of <c>encapContentInfo.eContentType</c>, part 1) of the imprint input.</summary>
+        public ReadOnlyMemory<byte> EncapsulatedContentTypeEncoding { get; }
+
+        /// <summary>The content octets of <c>encapContentInfo.eContent</c>, whose hash is part 2).</summary>
+        public ReadOnlyMemory<byte> EncapsulatedContent { get; }
+
+        /// <summary>Whether the structure encapsulates its content as a primitive OCTET STRING.</summary>
+        public bool HasEncapsulatedContent { get; }
+
+        /// <summary>The whole encoding of every instance of <c>CertificateChoices</c> in <c>certificates</c>.</summary>
+        public IReadOnlyList<ReadOnlyMemory<byte>> Certificates { get; }
+
+        /// <summary>The whole encoding of every instance of <c>RevocationInfoChoice</c> in <c>crls</c>.</summary>
+        public IReadOnlyList<ReadOnlyMemory<byte>> RevocationInformation { get; }
+
+        /// <summary>The whole encodings of the signer's fields other than <c>unsignedAttrs</c>, in their order of appearance — part 3).</summary>
+        public IReadOnlyList<ReadOnlyMemory<byte>> SignerInfoFields { get; }
+
+        /// <summary>One entry per value of every unsigned attribute of the signer.</summary>
+        public IReadOnlyList<UnsignedAttributeValueMaterial> UnsignedAttributeValues { get; }
     }
-
-    /// <summary>The whole encoding of <c>encapContentInfo.eContentType</c>, part 1) of the imprint input.</summary>
-    public ReadOnlyMemory<byte> EncapsulatedContentTypeEncoding { get; }
-
-    /// <summary>The content octets of <c>encapContentInfo.eContent</c>, whose hash is part 2).</summary>
-    public ReadOnlyMemory<byte> EncapsulatedContent { get; }
-
-    /// <summary>Whether the structure encapsulates its content as a primitive OCTET STRING.</summary>
-    public bool HasEncapsulatedContent { get; }
-
-    /// <summary>The whole encoding of every instance of <c>CertificateChoices</c> in <c>certificates</c>.</summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> Certificates { get; }
-
-    /// <summary>The whole encoding of every instance of <c>RevocationInfoChoice</c> in <c>crls</c>.</summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> RevocationInformation { get; }
-
-    /// <summary>The whole encodings of the signer's fields other than <c>unsignedAttrs</c>, in their order of appearance — part 3).</summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> SignerInfoFields { get; }
-
-    /// <summary>One entry per value of every unsigned attribute of the signer.</summary>
-    public IReadOnlyList<UnsignedAttributeValueMaterial> UnsignedAttributeValues { get; }
-}
 
 
     /// <summary>

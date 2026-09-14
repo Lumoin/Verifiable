@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 namespace Verifiable.Tests.TestInfrastructure;

@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Server;
 
 namespace Verifiable.Vcalm;
 

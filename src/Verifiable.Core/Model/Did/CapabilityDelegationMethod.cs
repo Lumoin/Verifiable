@@ -85,7 +85,7 @@ public sealed class CapabilityDelegationMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="verificationReferenceId"/> is <c>null</c>.
     /// </exception>
-    public CapabilityDelegationMethod(string verificationReferenceId): base(verificationReferenceId)
+    public CapabilityDelegationMethod(string verificationReferenceId) : base(verificationReferenceId)
     {
     }
 
@@ -100,7 +100,7 @@ public sealed class CapabilityDelegationMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="embeddedVerification"/> is <c>null</c>.
     /// </exception>
-    public CapabilityDelegationMethod(VerificationMethod embeddedVerification): base(embeddedVerification)
+    public CapabilityDelegationMethod(VerificationMethod embeddedVerification) : base(embeddedVerification)
     {
     }
 }

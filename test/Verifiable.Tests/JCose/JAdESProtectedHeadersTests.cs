@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -56,7 +55,7 @@ internal sealed class JAdESProtectedHeadersTests
     [TestMethod]
     public void ConstructingWithEmptyAlgorithmThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESProtectedHeaders(string.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESProtectedHeaders(string.Empty));
     }
 
 
@@ -64,7 +63,7 @@ internal sealed class JAdESProtectedHeadersTests
     [TestMethod]
     public void ConstructingWithEmptyCriticalLabelsThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESProtectedHeaders(WellKnownJwaValues.Es256, criticalLabels: []));
     }
 
@@ -120,7 +119,7 @@ internal sealed class JAdESProtectedHeadersTests
         var signatureProductionPlace = new AdESSignatureProductionPlace { AddressLocality = "Espoo" };
         var signerAttributes = new AdESSignerAttributes(
             claimed: [new JAdESQualifyingAttribute("text/plain", "base64url", ["role=signer"])]);
-        using var payloadTimestamps = new AdESTimestampContainer([new AdESTimestampToken { Val = new byte[] { 0x30 } }]);
+        using var payloadTimestamps = new AdESTimestampContainer([new AdESTimestampToken { Val = "0"u8.ToArray() }]);
         using var signaturePolicyIdentifier = new AdESSignaturePolicyIdentifier(
             new AdESObjectIdentifier("https://example.org/jades/policy/1"));
         var sigD = new JAdESHttpHeadersReference(["digest"]);

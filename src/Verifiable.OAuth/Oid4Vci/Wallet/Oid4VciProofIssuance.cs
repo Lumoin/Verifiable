@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Text;

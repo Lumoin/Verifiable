@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2.Ctap;
 

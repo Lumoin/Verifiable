@@ -1,15 +1,11 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Web;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.Did.Methods.Web;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -45,7 +41,7 @@ internal sealed class WebDidResolverResolvingTests
         Assert.IsTrue(result.IsSuccessful, $"did:web MUST resolve. Error: {result.ResolutionMetadata.Error?.Type}.");
         Assert.AreEqual(DidResolutionKind.Document, result.Kind);
         Assert.IsNotNull(result.Document);
-        Assert.AreEqual(AliceDid, result.Document!.Id?.ToString());
+        Assert.AreEqual(AliceDid, result.Document.Id?.ToString());
     }
 
 
@@ -106,7 +102,7 @@ internal sealed class WebDidResolverResolvingTests
     [TestMethod]
     public async Task LoopbackTargetIsRejectedAsInvalidDidAndNotContacted()
     {
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal));
+        var transport = new RoutingTransport(new(StringComparer.Ordinal));
 
         DidResolutionResult result = await Resolve("did:web:127.0.0.1", transport).ConfigureAwait(false);
 
@@ -120,7 +116,7 @@ internal sealed class WebDidResolverResolvingTests
     [TestMethod]
     public async Task PublicIpAddressHostIsRejectedAsInvalidDid()
     {
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal));
+        var transport = new RoutingTransport(new(StringComparer.Ordinal));
 
         DidResolutionResult result = await Resolve("did:web:8.8.8.8", transport).ConfigureAwait(false);
 
@@ -134,7 +130,7 @@ internal sealed class WebDidResolverResolvingTests
     [TestMethod]
     public async Task Ipv6LiteralHostIsRejectedAsInvalidDid()
     {
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal));
+        var transport = new RoutingTransport(new(StringComparer.Ordinal));
 
         //A bracketed IPv6 literal with its port colon percent-encoded: %5B[::1]%5D%3A3000.
         DidResolutionResult result = await Resolve("did:web:%5B%3A%3A1%5D%3A3000", transport).ConfigureAwait(false);
@@ -152,7 +148,7 @@ internal sealed class WebDidResolverResolvingTests
     [TestMethod]
     public async Task EncodedSlashInSegmentIsRejected()
     {
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal));
+        var transport = new RoutingTransport(new(StringComparer.Ordinal));
 
         DidResolutionResult result = await Resolve("did:web:example.com:path%2Fto", transport).ConfigureAwait(false);
 
@@ -248,7 +244,7 @@ internal sealed class WebDidResolverResolvingTests
     [TestMethod]
     public async Task RejectsNonWebDid()
     {
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal));
+        var transport = new RoutingTransport(new(StringComparer.Ordinal));
 
         DidResolutionResult result = await Resolve("did:key:z6MkExample", transport).ConfigureAwait(false);
 
@@ -261,7 +257,7 @@ internal sealed class WebDidResolverResolvingTests
     //Runs the resolving delegate against the faked transport under the secure-default policy.
     private async Task<DidResolutionResult> Resolve(string did, RoutingTransport transport)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         DidMethodResolverDelegate resolver = WebDidResolver.BuildResolving(transport.Delegate, DeserializeDocument);

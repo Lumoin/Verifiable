@@ -1,4 +1,3 @@
-using System;
 using System.Buffers.Binary;
 
 namespace Verifiable.Tpm.Spec;
@@ -19,7 +18,6 @@ namespace Verifiable.Tpm.Spec;
 /// </remarks>
 public ref struct TpmReader
 {
-    private ReadOnlySpan<byte> Original { get; }
     private ReadOnlySpan<byte> remaining;
     private int consumed;
 
@@ -29,7 +27,6 @@ public ref struct TpmReader
     /// <param name="buffer">The buffer to read from.</param>
     public TpmReader(ReadOnlySpan<byte> buffer)
     {
-        Original = buffer;
         remaining = buffer;
         consumed = 0;
     }
@@ -37,22 +34,22 @@ public ref struct TpmReader
     /// <summary>
     /// Gets the number of bytes consumed so far.
     /// </summary>
-    public int Consumed => consumed;
+    public readonly int Consumed => consumed;
 
     /// <summary>
     /// Gets the number of bytes remaining.
     /// </summary>
-    public int Remaining => remaining.Length;
+    public readonly int Remaining => remaining.Length;
 
     /// <summary>
     /// Gets a value indicating whether the buffer is empty.
     /// </summary>
-    public bool IsEmpty => remaining.IsEmpty;
+    public readonly bool IsEmpty => remaining.IsEmpty;
 
     /// <summary>
     /// Gets the current position in the original buffer.
     /// </summary>
-    public int Position => consumed;
+    public readonly int Position => consumed;
 
     /// <summary>
     /// Reads a single byte.
@@ -204,7 +201,7 @@ public ref struct TpmReader
     /// </summary>
     /// <param name="count">The number of bytes to peek.</param>
     /// <returns>A span containing the bytes.</returns>
-    public ReadOnlySpan<byte> PeekBytes(int count) => remaining[..count];
+    public readonly ReadOnlySpan<byte> PeekBytes(int count) => remaining[..count];
 
     /// <summary>
     /// Skips a specified number of bytes.

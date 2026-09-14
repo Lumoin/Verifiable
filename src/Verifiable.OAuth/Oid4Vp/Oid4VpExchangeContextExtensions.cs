@@ -1,9 +1,7 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.OAuth.Federation;
 
 namespace Verifiable.OAuth.Oid4Vp;
 

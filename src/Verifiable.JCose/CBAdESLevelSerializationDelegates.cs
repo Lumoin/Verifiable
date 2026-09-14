@@ -126,7 +126,7 @@ public abstract class CBAdESPayloadTimestampImprintSource
 /// present, and <see cref="PayloadBytes"/> is its content (CB-5.2.6-05).
 /// </summary>
 [DebuggerDisplay("CBAdESAttachedPayloadTimestampImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESAttachedPayloadTimestampImprintSource : CBAdESPayloadTimestampImprintSource
+public sealed class CBAdESAttachedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadTimestampImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -152,7 +152,7 @@ public sealed class CBAdESAttachedPayloadTimestampImprintSource : CBAdESPayloadT
 /// retrieved detached payload (CB-5.2.6-05; retrieval mechanism out of this document's scope).
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedPayloadTimestampImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESDetachedPayloadTimestampImprintSource : CBAdESPayloadTimestampImprintSource
+public sealed class CBAdESDetachedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedPayloadTimestampImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -185,7 +185,7 @@ public sealed class CBAdESDetachedPayloadTimestampImprintSource : CBAdESPayloadT
 /// element is a <strong>borrowed</strong> view.
 /// </param>
 [DebuggerDisplay("CBAdESSigDProcessedPayloadTimestampImprintSource: {ProcessedParBytes.Count} segments")]
-public sealed class CBAdESSigDProcessedPayloadTimestampImprintSource : CBAdESPayloadTimestampImprintSource
+public sealed class CBAdESSigDProcessedPayloadTimestampImprintSource: CBAdESPayloadTimestampImprintSource
 {
     /// <summary>
     /// Initializes a new <see cref="CBAdESSigDProcessedPayloadTimestampImprintSource"/>.

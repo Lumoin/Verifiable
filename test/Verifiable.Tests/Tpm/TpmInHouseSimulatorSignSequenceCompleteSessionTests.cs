@@ -1,10 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -12,12 +10,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -446,7 +438,7 @@ internal sealed class TpmInHouseSimulatorSignSequenceCompleteSessionTests
             byte[] message = "message"u8.ToArray();
             using SignSequenceCompleteInput input = SignSequenceCompleteInput.Create(sequenceHandle, key.ObjectHandle, message, pool);
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await TpmCommandExecutor.ExecuteAsync<SignSequenceCompleteResponse>(
                     tpm, input, [sequenceSession, keySession], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }

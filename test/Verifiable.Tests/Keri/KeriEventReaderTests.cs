@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 using Verifiable.Keri;
 
@@ -47,7 +46,7 @@ internal sealed class KeriEventReaderTests
     {
         KeriKeyEvent read = KeriEventReader.Read(InceptionFields("0"));
 
-        Assert.IsInstanceOfType<KeriInceptionEvent>(read);
+        _ = Assert.IsInstanceOfType<KeriInceptionEvent>(read);
         var inception = (KeriInceptionEvent)read;
         Assert.AreEqual(Aid, inception.Prefix);
         Assert.AreEqual(0, inception.SequenceNumber);
@@ -77,7 +76,7 @@ internal sealed class KeriEventReaderTests
 
         KeriKeyEvent read = KeriEventReader.Read(fields);
 
-        Assert.IsInstanceOfType<KeriInteractionEvent>(read);
+        _ = Assert.IsInstanceOfType<KeriInteractionEvent>(read);
         var interaction = (KeriInteractionEvent)read;
         Assert.AreEqual(1, interaction.SequenceNumber);
         Assert.AreEqual(Aid, interaction.PriorSaid);
@@ -113,7 +112,7 @@ internal sealed class KeriEventReaderTests
 
         KeriKeyEvent read = KeriEventReader.Read(fields);
 
-        Assert.IsInstanceOfType<KeriRotationEvent>(read);
+        _ = Assert.IsInstanceOfType<KeriRotationEvent>(read);
         var rotation = (KeriRotationEvent)read;
         Assert.AreSequenceEqual(toRemove, (System.Collections.ICollection)rotation.BackersToRemove);
         Assert.AreSequenceEqual(toAdd, (System.Collections.ICollection)rotation.BackersToAdd);
@@ -139,9 +138,9 @@ internal sealed class KeriEventReaderTests
     public void RejectsMissingRequiredField()
     {
         MessageFieldMap fields = InceptionFields("0");
-        fields.Remove(KeriMessageFields.SigningKeys);
+        _ = fields.Remove(KeriMessageFields.SigningKeys);
 
-        Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
     }
 
 
@@ -154,7 +153,7 @@ internal sealed class KeriEventReaderTests
         MessageFieldMap fields = InceptionFields("0");
         fields["di"] = Aid;
 
-        Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
     }
 
 
@@ -166,9 +165,9 @@ internal sealed class KeriEventReaderTests
     public void RejectsMissingAnchorField()
     {
         MessageFieldMap fields = InceptionFields("0");
-        fields.Remove(KeriMessageFields.Anchors);
+        _ = fields.Remove(KeriMessageFields.Anchors);
 
-        Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
     }
 
 
@@ -198,7 +197,7 @@ internal sealed class KeriEventReaderTests
             [KeriMessageFields.Anchors] = NoTraits
         };
 
-        Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
     }
 
 
@@ -216,7 +215,7 @@ internal sealed class KeriEventReaderTests
             [KeriMessageFields.SequenceNumber] = "0"
         };
 
-        Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
     }
 
 

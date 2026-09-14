@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-
 namespace Verifiable.Apdu;
 
 /// <summary>
@@ -40,7 +36,7 @@ namespace Verifiable.Apdu;
 /// while recording is in progress.
 /// </para>
 /// </remarks>
-public sealed class ApduRecorder : IObserver<ApduExchange>, IDisposable
+public sealed class ApduRecorder: IObserver<ApduExchange>, IDisposable
 {
     private List<ApduExchange> Exchanges { get; } = [];
 

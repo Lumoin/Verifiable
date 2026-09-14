@@ -1,8 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -45,7 +44,7 @@ internal sealed class JwtBearerRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        OutgoingFormFields form = result.Value!;
+        OutgoingFormFields form = result.Value;
         Assert.HasCount(2, form);
         Assert.AreEqual(WellKnownGrantTypes.JwtBearer, form[OAuthRequestParameterNames.GrantType]);
         Assert.AreEqual(AssertionValue, form[OAuthRequestParameterNames.Assertion]);
@@ -63,7 +62,7 @@ internal sealed class JwtBearerRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(GrantedScope, result.Value![OAuthRequestParameterNames.Scope]);
+        Assert.AreEqual(GrantedScope, result.Value[OAuthRequestParameterNames.Scope]);
     }
 
 
@@ -83,7 +82,7 @@ internal sealed class JwtBearerRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual("billing-team", result.Value!["requested_actor_context"]);
+        Assert.AreEqual("billing-team", result.Value["requested_actor_context"]);
     }
 
 

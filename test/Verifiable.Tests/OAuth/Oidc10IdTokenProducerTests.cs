@@ -1,15 +1,12 @@
-using System.Collections.Immutable;
+using Microsoft.Extensions.Time.Testing;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -59,7 +56,7 @@ internal sealed class Oidc10IdTokenProducerTests
     public async Task PayloadCarriesExpectedClaimsForBaselineInput()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -123,7 +120,7 @@ internal sealed class Oidc10IdTokenProducerTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -133,7 +130,7 @@ internal sealed class Oidc10IdTokenProducerTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -154,7 +151,7 @@ internal sealed class Oidc10IdTokenProducerTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -167,7 +164,7 @@ internal sealed class Oidc10IdTokenProducerTests
     /// </summary>
     private static string CanonicaliseClaims(JsonElement payload)
     {
-        List<KeyValuePair<string, JsonElement>> entries = new();
+        List<KeyValuePair<string, JsonElement>> entries = [];
         foreach(JsonProperty prop in payload.EnumerateObject())
         {
             entries.Add(new KeyValuePair<string, JsonElement>(prop.Name, prop.Value));
@@ -175,33 +172,27 @@ internal sealed class Oidc10IdTokenProducerTests
         entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
 
         StringBuilder sb = new();
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
         foreach(KeyValuePair<string, JsonElement> entry in entries)
         {
-            if(!first) { sb.Append(','); }
+            if(!first) { _ = sb.Append(','); }
             first = false;
-            sb.Append('"').Append(entry.Key).Append("\":");
-            switch(entry.Value.ValueKind)
+            _ = sb.Append('"').Append(entry.Key).Append("\":");
+            _ = entry.Value.ValueKind switch
             {
-                case JsonValueKind.String:
-                    sb.Append('"').Append(entry.Value.GetString()).Append('"');
-                    break;
-                case JsonValueKind.Number:
-                    sb.Append(entry.Value.GetInt64().ToString(CultureInfo.InvariantCulture));
-                    break;
-                case JsonValueKind.True:
-                    sb.Append("true");
-                    break;
-                case JsonValueKind.False:
-                    sb.Append("false");
-                    break;
-                default:
-                    sb.Append('"').Append(entry.Value.GetRawText()).Append('"');
-                    break;
-            }
+                JsonValueKind.String => sb.Append('"').Append(entry.Value.GetString()).Append('"'),
+                JsonValueKind.Number => sb.Append(entry.Value.GetInt64().ToString(CultureInfo.InvariantCulture)),
+                JsonValueKind.True => sb.Append("true"),
+                JsonValueKind.False => sb.Append("false"),
+                JsonValueKind.Null => sb.Append('"').Append(entry.Value.GetRawText()).Append('"'),
+                JsonValueKind.Object => sb.Append('"').Append(entry.Value.GetRawText()).Append('"'),
+                JsonValueKind.Array => sb.Append('"').Append(entry.Value.GetRawText()).Append('"'),
+                JsonValueKind.Undefined => sb.Append('"').Append(entry.Value.GetRawText()).Append('"'),
+                _ => sb.Append('"').Append(entry.Value.GetRawText()).Append('"')
+            };
         }
-        sb.Append('}');
+        _ = sb.Append('}');
         return sb.ToString();
     }
 

@@ -1,7 +1,6 @@
-using System.Buffers.Binary;
 using CsCheck;
+using System.Buffers.Binary;
 using Verifiable.Fido2;
-
 using static Verifiable.Tests.Fido2.Fido2TestVectors;
 
 namespace Verifiable.Tests.Fido2;

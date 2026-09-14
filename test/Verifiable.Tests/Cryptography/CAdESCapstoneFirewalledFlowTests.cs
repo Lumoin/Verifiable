@@ -1,12 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Tsp;
+using System.Buffers;
+using System.Security.Cryptography;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -184,10 +179,10 @@ internal sealed class CAdESCapstoneFirewalledFlowTests
             "Clause 4.4.7.1: the time value of the proof is the archive time-stamp's own generation time.");
 
         List<SensitiveMemory> covered = [.. provisioning.CoveredObjects];
-        Assert.Contains(contentToken!.Representation, covered,
+        Assert.Contains(contentToken.Representation, covered,
             "TS 119 102-2 clause 4.4.7 (D-F): the archive time-stamp's ProvidesProofOfExistenceFor lists the content-time-stamp token — a signed attribute value step 3) of clause 5.5.3 binds through the whole signedAttrs, not through the ats-hash-index-v3.");
         Assert.IsNotNull(contentToken.ProofOfExistence, "Clause 4.4.6: the content-time-stamp token carries the proof of existence the archive time-stamp establishes for it.");
-        Assert.AreEqual(message.ArchiveTimestampTime, contentToken.ProofOfExistence!.Instant,
+        Assert.AreEqual(message.ArchiveTimestampTime, contentToken.ProofOfExistence.Instant,
             "The content-time-stamp is proven to have existed at the archive time-stamp's generation time.");
     }
 
@@ -450,7 +445,7 @@ internal sealed class CAdESCapstoneFirewalledFlowTests
         using PkiCertificateMemory archiveTokenCarrier = ToTokenCarrier(archiveTimestampTokens[0]);
         using AtsHashIndexV3? attachedIndex = ArchiveTimestampV3.ReadHashIndexFromToken(archiveTokenCarrier, BaseMemoryPool.Shared);
         Assert.IsNotNull(attachedIndex, "The archive time-stamp token carries the ats-hash-index-v3 unsigned attribute.");
-        Assert.AreSequenceEqual(independentIndex.AsReadOnlySpan().ToArray(), attachedIndex!.AsReadOnlySpan().ToArray(),
+        Assert.AreSequenceEqual(independentIndex.AsReadOnlySpan().ToArray(), attachedIndex.AsReadOnlySpan().ToArray(),
             "Leg 3: stage 3's independent hash-index reimplementation recomputes exactly the index the shipped augmentation surface grafted into the token.");
 
         //The content-time-stamp token octets, read back through the shipped signed-attribute reader, so the
@@ -787,7 +782,7 @@ internal sealed class CAdESCapstoneFirewalledFlowTests
         /// <typeparam name="T">The carrier's type.</typeparam>
         /// <param name="carrier">The carrier.</param>
         /// <returns>The same carrier.</returns>
-        private T Own<T>(T carrier) where T: IDisposable
+        private T Own<T>(T carrier) where T : IDisposable
         {
             Owned.Add(carrier);
 

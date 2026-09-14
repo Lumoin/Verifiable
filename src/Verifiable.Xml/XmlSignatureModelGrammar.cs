@@ -1,6 +1,5 @@
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using Lumoin.Base;
+using System.Runtime.CompilerServices;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -376,7 +375,7 @@ internal static class XmlSignatureModelGrammar
             return false;
         }
 
-        owned.Add(decoded!);
+        owned.Add(decoded);
 
         return true;
     }

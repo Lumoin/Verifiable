@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -74,7 +69,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-authenticator", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         byte[] userIdBytes = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x70);
@@ -141,7 +136,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
             transports: ["nfc"],
             cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
-        Assert.IsInstanceOfType<NoneAttestationResult>(registrationOutcome.AttestationResult);
+        _ = Assert.IsInstanceOfType<NoneAttestationResult>(registrationOutcome.AttestationResult);
         Assert.IsTrue(registrationOutcome.IsAcceptable, "The registration ceremony must be acceptable.");
 
         using Fido2CredentialRecord? credentialRecord = registrationOutcome.CredentialRecord;
@@ -233,7 +228,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-packed-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-packed-authenticator", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         byte[] userIdBytes = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0x90);
@@ -302,7 +297,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
             transports: ["nfc"],
             cancellationToken: cancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(registrationOutcome.AttestationResult);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(registrationOutcome.AttestationResult);
         Assert.IsTrue(registrationOutcome.IsAcceptable, "A packed self-attestation registration must be acceptable with AcceptSelfAttestation left at its default.");
 
         using Fido2CredentialRecord? credentialRecord = registrationOutcome.CredentialRecord;
@@ -333,7 +328,7 @@ internal sealed class CtapAuthenticatorCapstoneFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-multi-account-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-multi-account-authenticator", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         byte[] olderUserId = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(16, 0xB0);

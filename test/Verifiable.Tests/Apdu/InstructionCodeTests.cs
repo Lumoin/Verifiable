@@ -1,5 +1,3 @@
-using System;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -156,7 +154,7 @@ internal sealed class InstructionCodeTests
     [TestMethod]
     public void CreateThrowsOnDuplicate()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             InstructionCode.Create(0xA4, "Duplicate SELECT."));
     }
 

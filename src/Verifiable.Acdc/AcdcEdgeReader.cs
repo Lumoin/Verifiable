@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Acdc;
@@ -86,7 +84,7 @@ public static class AcdcEdgeReader
 
             //The frame's members are all built; close it into an edge-group and attach it to its parent's member
             //slot, or return it as the root when there is no parent.
-            stack.Pop();
+            _ = stack.Pop();
             var group = new AcdcEdgeGroup(frame.Said, frame.Uuid, ParseMaryOperator(frame.OperatorRaw), frame.Weight, Materialize(frame.Built));
             if(stack.Count == 0)
             {
@@ -127,7 +125,7 @@ public static class AcdcEdgeReader
             MessageFieldMap? properties = null;
             if(shell.Members.Count > 0)
             {
-                properties = new MessageFieldMap(StringComparer.Ordinal);
+                properties = new(StringComparer.Ordinal);
                 foreach(KeyValuePair<string, object?> property in shell.Members)
                 {
                     properties[property.Key] = property.Value;

@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.DidComm.ReturnRoute;
 

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Text;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -52,7 +51,7 @@ internal sealed class SdJwtRfc9901IssuanceTests
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
             SdJwtIssuance.IssueVerboseAsync,
 disclosablePaths,
             TestSalts.DefaultGenerator(),
@@ -92,7 +91,7 @@ disclosablePaths,
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
             SdJwtIssuance.IssueVerboseAsync,
 disclosablePaths,
             TestSalts.DefaultGenerator(),
@@ -119,7 +118,7 @@ disclosablePaths,
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
             SdJwtIssuance.IssueVerboseAsync,
 new HashSet<CredentialPath>(),
             TestSalts.DefaultGenerator(),
@@ -152,7 +151,7 @@ new HashSet<CredentialPath>(),
         };
 
         SdTokenResult result = await claims.IssueSdJwtAsync(
-            static (Dictionary<string, object> c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
+            static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, TestSetup.DefaultSerializationOptions),
             SdJwtIssuance.IssueVerboseAsync,
 disclosablePaths,
             TestSalts.DefaultGenerator(),

@@ -1,9 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Hierarchy;
@@ -11,12 +10,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -139,7 +132,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            TpmPolicyDigest.ExtendForSecret(zero, authName, policyRef, SessionAlg, predicted, pool);
+            _ = TpmPolicyDigest.ExtendForSecret(zero, authName, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -237,7 +230,7 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             byte[] predicted = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted, pool);
+            _ = TpmPolicyDigest.ExtendForSigned(zero, authorityName, policyRef, SessionAlg, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -566,10 +559,10 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
         byte[] secondCpHash = new byte[Sha256DigestSize];
         Array.Fill(secondCpHash, (byte)0x22);
 
-        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) minted =
-            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, policyRef, pool).ConfigureAwait(false);
+        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) =
+            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, policyRef).ConfigureAwait(false);
 
-        byte[] tamperedDigest = (byte[])minted.ticketDigestBytes.Clone();
+        byte[] tamperedDigest = (byte[])ticketDigestBytes.Clone();
         tamperedDigest[^1] ^= 0xFF;
 
         uint sessionHandle = 0;
@@ -584,9 +577,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
 
             //First replay: a non-empty cpHashA, but a tampered ticket digest. Must fail WITHOUT latching
             //firstCpHash onto the session.
-            using TpmtTkAuth tamperedTicket = TpmtTkAuth.Create(minted.ticketTag, minted.ticketHierarchy, tamperedDigest, pool);
+            using TpmtTkAuth tamperedTicket = TpmtTkAuth.Create(ticketTag, ticketHierarchy, tamperedDigest, pool);
             TpmResult<PolicyTicketResponse> firstResult = await tpm.PolicyTicketAsync(
-                sessionHandle, minted.timeoutBytes, firstCpHash, policyRef, authName, tamperedTicket, TestContext.CancellationToken).ConfigureAwait(false);
+                sessionHandle, timeoutBytes, firstCpHash, policyRef, authName, tamperedTicket, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsFalse(firstResult.IsSuccess, "A tampered ticket digest must be rejected.");
             Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), firstResult.ResponseCode, "A tampered ticket digest must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
 
@@ -623,10 +616,10 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
         byte[] authName = new byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_OWNER);
 
-        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) minted =
-            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, policyRef, pool).ConfigureAwait(false);
+        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) =
+            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, policyRef).ConfigureAwait(false);
 
-        byte[] tamperedDigest = (byte[])minted.ticketDigestBytes.Clone();
+        byte[] tamperedDigest = (byte[])ticketDigestBytes.Clone();
         tamperedDigest[^1] ^= 0xFF;
 
         uint sessionHandle = 0;
@@ -639,9 +632,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             using StartAuthSessionResponse session = startResult.Value;
             sessionHandle = session.SessionHandle.Value;
 
-            using TpmtTkAuth tamperedTicket = TpmtTkAuth.Create(minted.ticketTag, minted.ticketHierarchy, tamperedDigest, pool);
+            using TpmtTkAuth tamperedTicket = TpmtTkAuth.Create(ticketTag, ticketHierarchy, tamperedDigest, pool);
             TpmResult<PolicyTicketResponse> ticketResult = await tpm.PolicyTicketAsync(
-                sessionHandle, minted.timeoutBytes, ReadOnlyMemory<byte>.Empty, policyRef, authName, tamperedTicket, TestContext.CancellationToken).ConfigureAwait(false);
+                sessionHandle, timeoutBytes, ReadOnlyMemory<byte>.Empty, policyRef, authName, tamperedTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A tampered ticket digest must be rejected.");
             Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), ticketResult.ResponseCode, "A tampered ticket digest must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
@@ -671,8 +664,8 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
         byte[] authName = new byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_OWNER);
 
-        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) minted =
-            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, policyRef, pool).ConfigureAwait(false);
+        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) =
+            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, policyRef).ConfigureAwait(false);
 
         uint sessionHandle = 0;
         try
@@ -685,9 +678,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             sessionHandle = session.SessionHandle.Value;
 
             //The original digest bytes, unmodified, replayed against a DIFFERENT hierarchy constant.
-            using TpmtTkAuth wrongHierarchyTicket = TpmtTkAuth.Create(minted.ticketTag, TpmiRhHierarchy.Endorsement, minted.ticketDigestBytes, pool);
+            using TpmtTkAuth wrongHierarchyTicket = TpmtTkAuth.Create(ticketTag, TpmiRhHierarchy.Endorsement, ticketDigestBytes, pool);
             TpmResult<PolicyTicketResponse> ticketResult = await tpm.PolicyTicketAsync(
-                sessionHandle, minted.timeoutBytes, ReadOnlyMemory<byte>.Empty, policyRef, authName, wrongHierarchyTicket, TestContext.CancellationToken).ConfigureAwait(false);
+                sessionHandle, timeoutBytes, ReadOnlyMemory<byte>.Empty, policyRef, authName, wrongHierarchyTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A ticket replayed against the wrong hierarchy must be rejected.");
             Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), ticketResult.ResponseCode, "A ticket replayed against the wrong hierarchy must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
@@ -716,8 +709,8 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
         byte[] authName = new byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32BigEndian(authName, (uint)TpmRh.TPM_RH_OWNER);
 
-        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) minted =
-            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, mintedPolicyRef, pool).ConfigureAwait(false);
+        (byte[] timeoutBytes, byte[] ticketDigestBytes, TpmStConstants ticketTag, TpmiRhHierarchy ticketHierarchy) =
+            await MintPolicySecretTicketAsync(tpm, (uint)TpmRh.TPM_RH_OWNER, mintedPolicyRef).ConfigureAwait(false);
 
         uint sessionHandle = 0;
         try
@@ -730,9 +723,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
             sessionHandle = session.SessionHandle.Value;
 
             //The original ticket octets and hierarchy, unmodified, replayed against a DIFFERENT policyRef.
-            using TpmtTkAuth genuineTicket = TpmtTkAuth.Create(minted.ticketTag, minted.ticketHierarchy, minted.ticketDigestBytes, pool);
+            using TpmtTkAuth genuineTicket = TpmtTkAuth.Create(ticketTag, ticketHierarchy, ticketDigestBytes, pool);
             TpmResult<PolicyTicketResponse> ticketResult = await tpm.PolicyTicketAsync(
-                sessionHandle, minted.timeoutBytes, ReadOnlyMemory<byte>.Empty, replayedPolicyRef, authName, genuineTicket, TestContext.CancellationToken).ConfigureAwait(false);
+                sessionHandle, timeoutBytes, ReadOnlyMemory<byte>.Empty, replayedPolicyRef, authName, genuineTicket, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(ticketResult.IsSuccess, "A ticket replayed under a different policyRef must be rejected.");
             Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_TICKET, 4), ticketResult.ResponseCode, "A ticket replayed under a different policyRef must be refused with TPM_RC_TICKET at ticket, parameter 5 of Table 148.");
@@ -916,10 +909,9 @@ internal sealed class TpmInHouseSimulatorPolicyTicketTests
     /// <param name="tpm">The TPM device.</param>
     /// <param name="authHandle">The entity whose authorization the ticket binds to.</param>
     /// <param name="policyRef">The opaque policy qualifier the ticket is bound to.</param>
-    /// <param name="pool">The memory pool.</param>
     /// <returns>The minted ticket's wire timeout, digest, tag, and hierarchy.</returns>
     private async Task<(byte[] TimeoutBytes, byte[] TicketDigestBytes, TpmStConstants TicketTag, TpmiRhHierarchy TicketHierarchy)> MintPolicySecretTicketAsync(
-        TpmDevice tpm, uint authHandle, ReadOnlyMemory<byte> policyRef, BaseMemoryPool pool)
+        TpmDevice tpm, uint authHandle, ReadOnlyMemory<byte> policyRef)
     {
         TpmResult<StartAuthSessionResponse> startResult = await tpm.StartPolicySessionAsync(
             SessionAlg, TestContext.CancellationToken).ConfigureAwait(false);

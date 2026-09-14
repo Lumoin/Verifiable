@@ -198,7 +198,7 @@ public static class TpmRcExtensions
 
         //N field in bits 11:8. Handles use N = 1-7 (bit 11 clear).
         uint nField = (value & NumberFieldMask) >> NumberFieldShift;
-        return nField >= 1 && nField <= 7;
+        return nField is >= 1 and <= 7;
     }
 
     /// <summary>

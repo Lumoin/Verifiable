@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Immutable;
 
 namespace Verifiable.Core.Did.Methods.WebPlus;

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Linq;
 using Verifiable.Cryptography;
 
 namespace Verifiable.JCose;

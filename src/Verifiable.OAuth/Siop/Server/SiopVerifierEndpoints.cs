@@ -3,7 +3,6 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Server.States;
-using Verifiable.Server;
 
 using static Verifiable.Server.EndpointInput;
 

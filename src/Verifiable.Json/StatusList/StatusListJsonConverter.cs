@@ -1,9 +1,6 @@
-using System;
-using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.StatusList;
-using Verifiable.Json;
 
 namespace Verifiable.Json.StatusList;
 
@@ -62,7 +59,7 @@ public sealed class StatusListJsonConverter: JsonConverter<Core.StatusList.Statu
             }
 
             string propertyName = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
 
             switch(propertyName)
             {
@@ -190,7 +187,7 @@ public sealed class StatusListReferenceJsonConverter: JsonConverter<StatusListRe
             }
 
             string propertyName = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
 
             switch(propertyName)
             {
@@ -295,7 +292,7 @@ public sealed class StatusClaimJsonConverter: JsonConverter<StatusClaim>
                     "Token Status List Section 6.1's members each name one status mechanism.");
             }
 
-            reader.Read();
+            _ = reader.Read();
 
             if(propertyName == StatusListJsonConstants.StatusList)
             {
@@ -377,7 +374,7 @@ public sealed class StatusListAggregationJsonConverter: JsonConverter<StatusList
             }
 
             string propertyName = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
 
             if(propertyName == StatusListJsonConstants.StatusLists)
             {

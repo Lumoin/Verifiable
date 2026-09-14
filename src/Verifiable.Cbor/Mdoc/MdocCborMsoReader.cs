@@ -177,7 +177,7 @@ public static class MdocCborMsoReader
             int? digestCount = reader.ReadStartMap();
             Dictionary<uint, ReadOnlyMemory<byte>> digests = digestCount is null
                 ? []
-                : new Dictionary<uint, ReadOnlyMemory<byte>>(digestCount.Value);
+                : new(digestCount.Value);
 
             int digestsRead = 0;
             while(digestCount is null ? reader.PeekState() != CborReaderState.EndMap : digestsRead < digestCount.Value)

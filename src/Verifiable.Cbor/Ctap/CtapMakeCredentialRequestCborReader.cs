@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -304,23 +302,23 @@ public static class CtapMakeCredentialRequestCborReader
 
                 switch(key)
                 {
-                    case(WellKnownCtapHmacSecretExtensionKeys.KeyAgreement):
+                    case WellKnownCtapHmacSecretExtensionKeys.KeyAgreement:
                     {
                         ReadOnlyMemory<byte> keyAgreementCbor = reader.ReadEncodedValue();
                         keyAgreement = CredentialPublicKeyCborReader.Read(keyAgreementCbor).CoseKey;
                         break;
                     }
-                    case(WellKnownCtapHmacSecretExtensionKeys.SaltEnc):
+                    case WellKnownCtapHmacSecretExtensionKeys.SaltEnc:
                     {
                         saltEnc = reader.ReadByteString();
                         break;
                     }
-                    case(WellKnownCtapHmacSecretExtensionKeys.SaltAuth):
+                    case WellKnownCtapHmacSecretExtensionKeys.SaltAuth:
                     {
                         saltAuth = reader.ReadByteString();
                         break;
                     }
-                    case(WellKnownCtapHmacSecretExtensionKeys.PinUvAuthProtocol):
+                    case WellKnownCtapHmacSecretExtensionKeys.PinUvAuthProtocol:
                     {
                         pinUvAuthProtocol = checked((int)reader.ReadInt64());
                         break;

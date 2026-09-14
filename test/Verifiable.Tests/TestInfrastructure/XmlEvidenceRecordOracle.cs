@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Globalization;
-using System.IO;
 using System.Security.Cryptography.Xml;
 using System.Xml;
 using System.Xml.Linq;
@@ -297,7 +294,7 @@ internal static class XmlEvidenceRecordOracle
                     || string.Equals(attribute.NamespaceURI, XmlAttributeNamespace, StringComparison.Ordinal);
                 if(copyable && !liftedRoot.HasAttribute(attribute.LocalName, attribute.NamespaceURI))
                 {
-                    liftedRoot.SetAttribute(attribute.LocalName, attribute.NamespaceURI, attribute.Value);
+                    _ = liftedRoot.SetAttribute(attribute.LocalName, attribute.NamespaceURI, attribute.Value);
                 }
             }
 

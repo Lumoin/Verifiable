@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -318,7 +318,7 @@ public static class MdocCborDeviceResponseReader
         }
 
         return new MdocIssuerSigned(
-            nameSpaces ?? new Dictionary<string, IReadOnlyList<MdocIssuerSignedItem>>(StringComparer.Ordinal),
+            nameSpaces ?? new(StringComparer.Ordinal),
             issuerAuth);
     }
 

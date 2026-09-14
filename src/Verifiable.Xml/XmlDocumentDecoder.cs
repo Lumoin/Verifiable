@@ -187,7 +187,7 @@ internal static class XmlDocumentDecoder
                 : (octets[index + 1] << 8) | octets[index];
             int codePoint;
             int unitStart = index;
-            if(unit >= 0xD800 && unit <= 0xDBFF)
+            if(unit is >= 0xD800 and <= 0xDBFF)
             {
                 if(index + 3 >= octets.Length)
                 {
@@ -199,7 +199,7 @@ internal static class XmlDocumentDecoder
                 int lowUnit = isBigEndian
                     ? (octets[index + 2] << 8) | octets[index + 3]
                     : (octets[index + 3] << 8) | octets[index + 2];
-                if(lowUnit < 0xDC00 || lowUnit > 0xDFFF)
+                if(lowUnit is < 0xDC00 or > 0xDFFF)
                 {
                     error = new XmlReadError(XmlReadFailure.IllFormedUtf16, unitStart);
 
@@ -209,7 +209,7 @@ internal static class XmlDocumentDecoder
                 codePoint = 0x10000 + ((unit - 0xD800) << 10) + (lowUnit - 0xDC00);
                 index += 4;
             }
-            else if(unit >= 0xDC00 && unit <= 0xDFFF)
+            else if(unit is >= 0xDC00 and <= 0xDFFF)
             {
                 error = new XmlReadError(XmlReadFailure.IllFormedUtf16, unitStart);
 
@@ -230,7 +230,7 @@ internal static class XmlDocumentDecoder
 
             var rune = new Rune(codePoint);
             int written = rune.EncodeToUtf8(scratch);
-            destination.AddRange(scratch[..written]);
+            _ = destination.AddRange(scratch[..written]);
         }
 
         return true;

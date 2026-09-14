@@ -1,7 +1,6 @@
-using System;
+using Lumoin.Veritas.Cbor;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor;
 

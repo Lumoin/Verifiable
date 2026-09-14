@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -115,7 +113,7 @@ internal sealed class PAdESBaselineLevelTableTests
         foreach(AdESTableRow service in serviceRows)
         {
             Assert.IsNotNull(service.ServiceProvisionOptionRequirementIds);
-            foreach(string spoId in service.ServiceProvisionOptionRequirementIds!)
+            foreach(string spoId in service.ServiceProvisionOptionRequirementIds)
             {
                 Assert.IsNotNull(PAdESBaselineLevelTable.FindByRequirementId(spoId), $"{service.RequirementId} names unregistered SPO '{spoId}'.");
             }

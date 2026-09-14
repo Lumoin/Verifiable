@@ -1,23 +1,15 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1301,6 +1293,7 @@ internal sealed class TpmInHouseSimulatorLoadExternalTests
                 or MalformedShape.SymCipherPublic or MalformedShape.UnknownTypePublic => HmacKeyHarness.ParameterEncodedRc(expected, 1),
             MalformedShape.HierarchyOutOfRange => HmacKeyHarness.ParameterEncodedRc(expected, 2),
             MalformedShape.SensitiveOverDeclared or MalformedShape.SensitivePastTheFrame or MalformedShape.SeedValueOverBound => HmacKeyHarness.ParameterEncodedRc(expected, 0),
+            MalformedShape.TrailingOctet => expected,
             _ => expected
         };
         Assert.AreEqual(expectedEncoded, responseCode, $"A frame with {shape} must answer {expectedEncoded} (Part 3, clause 12.3, Table 22; clause 5.2).");
@@ -1503,7 +1496,7 @@ internal sealed class TpmInHouseSimulatorLoadExternalTests
     public async Task LoadExternalInFailureModeReturnsFailure()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using var simulator = new TpmSimulator($"tpm-in-house-load-external-{nameof(LoadExternalInFailureModeReturnsFailure)}",selfTest: TpmSelfTestBehavior.Fails, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var simulator = new TpmSimulator($"tpm-in-house-load-external-{nameof(LoadExternalInFailureModeReturnsFailure)}", selfTest: TpmSelfTestBehavior.Fails, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

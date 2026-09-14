@@ -1,24 +1,17 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -135,7 +128,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
             Assert.IsTrue(results[0].IsSuccess, $"Genesis must verify; error: '{results[0].Error}'.");
             Assert.IsTrue(results[1].IsSuccess, $"The second quote must verify; error: '{results[1].Error}'.");
 
-            Assert.IsInstanceOfType<ActiveLogState<TpmAttestationState>>(results[1].State);
+            _ = Assert.IsInstanceOfType<ActiveLogState<TpmAttestationState>>(results[1].State);
             var finalState = ((ActiveLogState<TpmAttestationState>)results[1].State).Value;
             Assert.AreEqual(2, finalState.QuoteCount, "The log must have accumulated two verified quotes.");
             Assert.IsTrue(finalState.AttestationKey.AsSpan().SequenceEqual(enrolled), "The bound AK must be the enrolled key.");
@@ -191,7 +184,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
                     $"The rejection must cite the enrolled-AK rule; got '{results[1].Error}'.");
 
                 //The log state holds at the last good entry: one verified quote from the enrolled AK.
-                Assert.IsInstanceOfType<ActiveLogState<TpmAttestationState>>(results[1].State);
+                _ = Assert.IsInstanceOfType<ActiveLogState<TpmAttestationState>>(results[1].State);
                 Assert.AreEqual(1, ((ActiveLogState<TpmAttestationState>)results[1].State).Value.QuoteCount);
             }
             finally
@@ -244,7 +237,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
 
                 Assert.HasCount(1, results, "The genesis entry must be processed.");
                 Assert.IsTrue(results[0].IsSuccess, $"The enrolled AK's quote must verify; error: '{results[0].Error}'.");
-                Assert.IsInstanceOfType<ActiveLogState<TpmAttestationState>>(results[0].State);
+                _ = Assert.IsInstanceOfType<ActiveLogState<TpmAttestationState>>(results[0].State);
 
                 var state = ((ActiveLogState<TpmAttestationState>)results[0].State).Value;
                 Assert.AreEqual(1, state.QuoteCount);
@@ -407,7 +400,7 @@ internal sealed class TpmInHouseSimulatorAttestationLogTests
         CancellationToken cancellationToken)
     {
         Span<byte> recomputed = stackalloc byte[32];
-        SHA256.HashData(entry.CanonicalBytes.Span, recomputed);
+        _ = SHA256.HashData(entry.CanonicalBytes.Span, recomputed);
         if(!recomputed.SequenceEqual(entry.Digest.Span))
         {
             return ValueTask.FromResult<string?>("The entry digest does not match its canonical bytes.");

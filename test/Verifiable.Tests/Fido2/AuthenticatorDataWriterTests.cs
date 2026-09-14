@@ -59,7 +59,7 @@ internal sealed class AuthenticatorDataWriterTests
         byte[] extensionsBytes = [0xA0]; //An empty CBOR map.
 
         byte[] expectedAttestedCredentialData = BuildAttestedCredentialData(aaguid, credentialIdBytes, credentialPublicKeyCbor);
-        byte[] expected = BuildAuthenticatorData(rpIdHashBytes, flags: (byte)(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit), signCount: 5, expectedAttestedCredentialData, extensionsBytes);
+        byte[] expected = BuildAuthenticatorData(rpIdHashBytes, flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit, signCount: 5, expectedAttestedCredentialData, extensionsBytes);
 
         using DigestValue rpIdHash = WrapRpIdHash(rpIdHashBytes, BaseMemoryPool.Shared);
         using CredentialId credentialId = CredentialId.Create(credentialIdBytes, BaseMemoryPool.Shared);
@@ -67,7 +67,7 @@ internal sealed class AuthenticatorDataWriterTests
 
         TaggedMemory<byte> written = AuthenticatorDataWriter.Write(
             rpIdHash,
-            new AuthenticatorDataFlags((byte)(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit)),
+            new AuthenticatorDataFlags(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit),
             signCount: 5,
             attestedCredentialData,
             extensionsBytes);
@@ -145,7 +145,7 @@ internal sealed class AuthenticatorDataWriterTests
     {
         using DigestValue rpIdHash = WrapRpIdHash(CreateRpIdHash(), BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<ArgumentException>(() => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit), signCount: 0));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit), signCount: 0));
     }
 
 
@@ -157,7 +157,7 @@ internal sealed class AuthenticatorDataWriterTests
         using CredentialId credentialId = CredentialId.Create([0x01], BaseMemoryPool.Shared);
         var attestedCredentialData = new AttestedCredentialDataToWrite(Guid.NewGuid(), credentialId, EncodeP256CoseKey());
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.None), signCount: 0, attestedCredentialData));
     }
 
@@ -168,7 +168,7 @@ internal sealed class AuthenticatorDataWriterTests
     {
         using DigestValue rpIdHash = WrapRpIdHash(CreateRpIdHash(), BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<ArgumentException>(() => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.ExtensionDataIncludedBit), signCount: 0));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.ExtensionDataIncludedBit), signCount: 0));
     }
 
 
@@ -178,7 +178,7 @@ internal sealed class AuthenticatorDataWriterTests
     {
         using DigestValue rpIdHash = WrapRpIdHash(CreateRpIdHash(), BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.None), signCount: 0, extensions: new byte[] { 0xA0 }));
     }
 
@@ -189,7 +189,7 @@ internal sealed class AuthenticatorDataWriterTests
     {
         using DigestValue rpIdHash = WrapRpIdHash(new byte[16], BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<ArgumentException>(() => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.None), signCount: 0));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.None), signCount: 0));
     }
 
 
@@ -201,7 +201,7 @@ internal sealed class AuthenticatorDataWriterTests
         using CredentialId credentialId = CredentialId.Create(new byte[CredentialId.MaxLength + 1], BaseMemoryPool.Shared);
         var attestedCredentialData = new AttestedCredentialDataToWrite(Guid.NewGuid(), credentialId, EncodeP256CoseKey());
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AuthenticatorDataWriter.Write(rpIdHash, new AuthenticatorDataFlags(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit), signCount: 0, attestedCredentialData));
     }
 
@@ -210,6 +210,6 @@ internal sealed class AuthenticatorDataWriterTests
     [TestMethod]
     public void NullRpIdHashThrowsArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => AuthenticatorDataWriter.Write(null!, new AuthenticatorDataFlags(AuthenticatorDataFlags.None), signCount: 0));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => AuthenticatorDataWriter.Write(null!, new AuthenticatorDataFlags(AuthenticatorDataFlags.None), signCount: 0));
     }
 }

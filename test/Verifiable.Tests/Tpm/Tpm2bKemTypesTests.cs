@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
@@ -88,8 +86,8 @@ internal sealed class Tpm2bKemTypesTests
         }
 
         byte[] wire = new byte[sizeof(ushort) + payload.Length];
-        wire[0] = (byte)(Tpm2bSharedSecret.MaxSize >> 8);
-        wire[1] = (byte)(Tpm2bSharedSecret.MaxSize & 0xFF);
+        wire[0] = Tpm2bSharedSecret.MaxSize >> 8;
+        wire[1] = Tpm2bSharedSecret.MaxSize & 0xFF;
         payload.CopyTo(wire, sizeof(ushort));
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -248,8 +246,8 @@ internal sealed class Tpm2bKemTypesTests
         }
 
         byte[] wire = new byte[sizeof(ushort) + payload.Length];
-        wire[0] = (byte)(Tpm2bKemCiphertext.MaxSize >> 8);
-        wire[1] = (byte)(Tpm2bKemCiphertext.MaxSize & 0xFF);
+        wire[0] = Tpm2bKemCiphertext.MaxSize >> 8;
+        wire[1] = Tpm2bKemCiphertext.MaxSize & 0xFF;
         payload.CopyTo(wire, sizeof(ushort));
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

@@ -1,15 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -151,7 +148,7 @@ internal sealed class UserInfoEndpointTests
         //Subject is seeded with profile + email, but the access token's
         //granted scope is openid only — UserInfo must emit just sub, no
         //scope-driven claims.
-        host.SeedTestSubject(subject: SubjectId, name: "Alice", email: "alice@example.com");
+        _ = host.SeedTestSubject(subject: SubjectId, name: "Alice", email: "alice@example.com");
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -180,7 +177,7 @@ internal sealed class UserInfoEndpointTests
     public async Task ValidAccessTokenWithProfileScopeReturnsProfileClaims()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId, name: "Alice");
+        _ = host.SeedTestSubject(subject: SubjectId, name: "Alice");
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -209,7 +206,7 @@ internal sealed class UserInfoEndpointTests
     public async Task ValidAccessTokenWithEmailScopeReturnsEmailClaims()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(
+        _ = host.SeedTestSubject(
             subject: SubjectId,
             email: "alice@example.com",
             emailVerified: true);
@@ -278,7 +275,7 @@ internal sealed class UserInfoEndpointTests
     public async Task ResolveSubjectIdentifierIsConsultedOnUserInfo()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         host.Server.OAuth().ResolveSubjectIdentifierAsync =
             (endUserId, _, _, _) => ValueTask.FromResult($"hashed-{endUserId}");
 
@@ -369,7 +366,7 @@ internal sealed class UserInfoEndpointTests
                 [OAuthRequestParameterNames.ClientSecret] = clientSecret,
                 [OAuthRequestParameterNames.Scope] = scope
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
@@ -383,7 +380,7 @@ internal sealed class UserInfoEndpointTests
     public async Task ExpiredAccessTokenReturnsUnauthorized()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
@@ -432,7 +429,7 @@ internal sealed class UserInfoEndpointTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -442,7 +439,7 @@ internal sealed class UserInfoEndpointTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -463,7 +460,7 @@ internal sealed class UserInfoEndpointTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
@@ -495,7 +492,7 @@ internal sealed class UserInfoEndpointTests
             Headers: headers,
             RouteValues: RouteValues.Empty);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         return await host.Server.DispatchAsync(request, context, TestContext.CancellationToken)
             .ConfigureAwait(false);

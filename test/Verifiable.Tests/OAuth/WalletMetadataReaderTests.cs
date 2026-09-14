@@ -205,7 +205,7 @@ internal sealed class WalletMetadataReaderTests
         Assert.IsNotNull(formatsJson);
         Assert.Contains("dc+sd-jwt", formatsJson, StringComparison.Ordinal);
         Assert.Contains("sd-jwt_alg_values", formatsJson, StringComparison.Ordinal);
-        Assert.IsTrue(formatsJson.StartsWith('{') && formatsJson.EndsWith('}'),
+        Assert.IsTrue(formatsJson.StartsWith('{', StringComparison.Ordinal) && formatsJson.EndsWith('}', StringComparison.Ordinal),
             "Returned vp_formats_supported text must be a self-contained JSON object.");
     }
 

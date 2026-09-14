@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 
@@ -89,32 +89,32 @@ public static class TpmAttestationStatementCborReader
 
                 switch(key)
                 {
-                    case(VerKey):
+                    case VerKey:
                     {
                         ver = reader.ReadTextString();
                         break;
                     }
-                    case(AlgKey):
+                    case AlgKey:
                     {
                         alg = checked((int)reader.ReadInt64());
                         break;
                     }
-                    case(SigKey):
+                    case SigKey:
                     {
                         sig = reader.ReadByteString();
                         break;
                     }
-                    case(CertInfoKey):
+                    case CertInfoKey:
                     {
                         certInfo = reader.ReadByteString();
                         break;
                     }
-                    case(PubAreaKey):
+                    case PubAreaKey:
                     {
                         pubArea = reader.ReadByteString();
                         break;
                     }
-                    case(X5cKey):
+                    case X5cKey:
                     {
                         x5c = ReadCertificateChain(reader, pool);
                         break;

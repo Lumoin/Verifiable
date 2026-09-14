@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;

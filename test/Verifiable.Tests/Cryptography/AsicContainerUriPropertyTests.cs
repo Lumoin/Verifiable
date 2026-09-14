@@ -1,7 +1,6 @@
-using System;
+using CsCheck;
 using System.Globalization;
 using System.Text;
-using CsCheck;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;

@@ -1,9 +1,7 @@
-using System.Collections.Generic;
-using System.Text;
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Foundation;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
@@ -312,7 +310,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
         Assert.IsTrue(resolution.IsResolved);
         Assert.IsNotNull(resolution.PrefetchedLogo);
-        Assert.AreSequenceEqual(logoBytes, resolution.PrefetchedLogo!.Value.ToArray());
+        Assert.AreSequenceEqual(logoBytes, resolution.PrefetchedLogo.Value.ToArray());
         Assert.AreEqual("image/png", resolution.PrefetchedLogoContentType);
         Assert.Contains(LogoUrl, transport.Calls.ConvertAll(static c => c.Target.AbsoluteUri));
     }
@@ -468,7 +466,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
 
     private async Task<ClientIdMetadataResolution> Resolve(ResolveClientMetadataDelegate resolve, string clientMetadataUri)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         return await resolve(new Uri(clientMetadataUri, UriKind.Absolute), context, TestContext.CancellationToken)
@@ -518,7 +516,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             IReadOnlyDictionary<string, string>? headers = null)
         {
             Dictionary<string, string> merged = headers is null
-                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                ? new(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase);
 
             if(contentType is not null)
@@ -536,7 +534,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             IReadOnlyDictionary<string, string>? headers = null)
         {
             Dictionary<string, string> merged = headers is null
-                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                ? new(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase);
 
             if(contentType is not null)
@@ -584,7 +582,7 @@ internal sealed class ClientIdMetadataDocumentsResolvingTests
             var headerBuilder = new HttpHeaderSet.Builder();
             foreach(KeyValuePair<string, string> header in response.Headers)
             {
-                headerBuilder.Add(header.Key, header.Value);
+                _ = headerBuilder.Add(header.Key, header.Value);
             }
 
             return ValueTask.FromResult(new OutboundResponse

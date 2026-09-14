@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -66,7 +65,7 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
             return ReadOnlySpan<byte>.Empty;
         }
 
-        return RawStorage.Memory.Span.Slice(0, RawLength);
+        return RawStorage.Memory.Span[..RawLength];
     }
 
     /// <summary>
@@ -84,7 +83,7 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return RawStorage.Memory.Slice(0, RawLength);
+        return RawStorage.Memory[..RawLength];
     }
 
     /// <summary>
@@ -130,7 +129,7 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
             ArgumentOutOfRangeException.ThrowIfGreaterThan(length, attestationData.Memory.Length);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(length, ushort.MaxValue);
 
-            var innerReader = new TpmReader(attestationData.Memory.Span.Slice(0, length));
+            var innerReader = new TpmReader(attestationData.Memory.Span[..length]);
             TpmsAttest attestationView = TpmsAttest.Parse(ref innerReader, pool);
 
             return new Tpm2bAttest(attestationView, attestationData, length);
@@ -180,10 +179,10 @@ public sealed class Tpm2bAttest: ITpmWireType, IDisposable
         try
         {
             ReadOnlySpan<byte> source = reader.ReadBytes(size);
-            source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
+            source.CopyTo(rawStorage.Memory.Span[..size]);
 
             //Parse the TPMS_ATTEST from the raw bytes.
-            var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
+            var innerReader = new TpmReader(rawStorage.Memory.Span[..size]);
             TpmsAttest attestationData = TpmsAttest.Parse(ref innerReader, pool);
 
             return new Tpm2bAttest(attestationData, rawStorage, size);

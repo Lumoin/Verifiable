@@ -314,7 +314,7 @@ public abstract record CBAdESRuleViolation
 /// nor <see cref="CBAdESProtectedHeaders.X5Chain"/> is present in the protected headers map (the tri-way
 /// condition, implemented once and shared by all three Table 14 rows it governs).
 /// </summary>
-public sealed record CBAdESCertificateReferenceTriWayViolation : CBAdESRuleViolation
+public sealed record CBAdESCertificateReferenceTriWayViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.2.2-07";
@@ -332,7 +332,7 @@ public sealed record CBAdESCertificateReferenceTriWayViolation : CBAdESRuleViola
 /// Claims header at all and one whose CWT Claims map carries no <c>iat</c> member) reported here rather than
 /// failing the parse; see the <see cref="CBAdESHeaderRules"/> remarks.
 /// </summary>
-public sealed record CBAdESCwtClaimsMissingViolation : CBAdESRuleViolation
+public sealed record CBAdESCwtClaimsMissingViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-10";
@@ -348,7 +348,7 @@ public sealed record CBAdESCwtClaimsMissingViolation : CBAdESRuleViolation
 /// Both <see cref="CBAdESProtectedHeaders.ContentType"/> and <see cref="CBAdESProtectedHeaders.DetachedObjects"/>
 /// are present — the two are mutually exclusive.
 /// </summary>
-public sealed record CBAdESContentTypeDetachedObjectsExclusivityViolation : CBAdESRuleViolation
+public sealed record CBAdESContentTypeDetachedObjectsExclusivityViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.1.3-03";
@@ -363,7 +363,7 @@ public sealed record CBAdESContentTypeDetachedObjectsExclusivityViolation : CBAd
 /// <see cref="CBAdESProtectedHeaders.ContentType"/> is present while the COSE Payload this signature covers is
 /// caller-attested to itself be a (counter-signed) signature.
 /// </summary>
-public sealed record CBAdESContentTypeCountersignedPayloadViolation : CBAdESRuleViolation
+public sealed record CBAdESContentTypeCountersignedPayloadViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.1.3-05";
@@ -379,7 +379,7 @@ public sealed record CBAdESContentTypeCountersignedPayloadViolation : CBAdESRule
 /// <see cref="CBAdESProtectedHeaders.DetachedObjects"/> is present but <see cref="CBAdESProtectedHeaders.CriticalLabels"/>
 /// does not include <c>sigD</c>'s assigned label (267).
 /// </summary>
-public sealed record CBAdESDetachedObjectsCriticalLabelViolation : CBAdESRuleViolation
+public sealed record CBAdESDetachedObjectsCriticalLabelViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.1.10-04";
@@ -395,7 +395,7 @@ public sealed record CBAdESDetachedObjectsCriticalLabelViolation : CBAdESRuleVio
 /// <see cref="CBAdESProtectedHeaders.DetachedObjects"/> is present but the COSE Payload is attached rather
 /// than detached.
 /// </summary>
-public sealed record CBAdESDetachedObjectsAttachedPayloadViolation : CBAdESRuleViolation
+public sealed record CBAdESDetachedObjectsAttachedPayloadViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.2.8-03";
@@ -412,7 +412,7 @@ public sealed record CBAdESDetachedObjectsAttachedPayloadViolation : CBAdESRuleV
 /// (<see cref="CBAdESDetachedMechanisms.ObjectIdByURI"/>) but carries a <c>hashM</c> digest algorithm — that
 /// mechanism carries neither <c>hashM</c> nor <c>hashV</c>.
 /// </summary>
-public sealed record CBAdESDetachedObjectsUriMechanismDigestViolation : CBAdESRuleViolation
+public sealed record CBAdESDetachedObjectsUriMechanismDigestViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.2.8.2.2-02";
@@ -429,7 +429,7 @@ public sealed record CBAdESDetachedObjectsUriMechanismDigestViolation : CBAdESRu
 /// (<see cref="CBAdESDetachedMechanisms.ObjectIdByURIHash"/>) but carries no <c>hashM</c> digest algorithm —
 /// that mechanism requires both <c>hashM</c> and <c>hashV</c>.
 /// </summary>
-public sealed record CBAdESDetachedObjectsUriHashMechanismDigestViolation : CBAdESRuleViolation
+public sealed record CBAdESDetachedObjectsUriHashMechanismDigestViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.2.8.2.3-02";
@@ -449,7 +449,7 @@ public sealed record CBAdESDetachedObjectsUriHashMechanismDigestViolation : CBAd
 /// <see cref="CBAdESProtectedHeaders.SignaturePolicyIdentifier"/> already satisfies the digest half of this
 /// gate).
 /// </summary>
-public sealed record CBAdESSignaturePolicyStoreGateViolation : CBAdESRuleViolation
+public sealed record CBAdESSignaturePolicyStoreGateViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-b";
@@ -542,7 +542,7 @@ public enum CBAdESCoseSignBodyLayerComponentKind
 /// </summary>
 /// <param name="Kind">Which member was found misplaced.</param>
 [DebuggerDisplay("CBAdESCoseSignBodyLayerPlacementViolation: {Kind}")]
-public sealed record CBAdESCoseSignBodyLayerPlacementViolation(CBAdESCoseSignBodyLayerComponentKind Kind) : CBAdESRuleViolation
+public sealed record CBAdESCoseSignBodyLayerPlacementViolation(CBAdESCoseSignBodyLayerComponentKind Kind): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -577,7 +577,7 @@ public sealed record CBAdESCoseSignBodyLayerPlacementViolation(CBAdESCoseSignBod
 /// refused independent of any algorithm policy.
 /// </summary>
 /// <param name="Surface">Which surface named MD5 — see <see cref="CBAdESMd5DigestAlgorithmSurface"/>.</param>
-public sealed record CBAdESMd5DigestAlgorithmViolation(CBAdESMd5DigestAlgorithmSurface Surface) : CBAdESRuleViolation
+public sealed record CBAdESMd5DigestAlgorithmViolation(CBAdESMd5DigestAlgorithmSurface Surface): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.2.1-02";
@@ -603,7 +603,7 @@ public sealed record CBAdESMd5DigestAlgorithmViolation(CBAdESMd5DigestAlgorithmS
 /// invariant, would be needed to enforce the "zero new" half; that is the augmenting orchestrator's own
 /// concern, not this collect-posture rule's).
 /// </remarks>
-public sealed record CBAdESSignatureTimestampMissingViolation : CBAdESRuleViolation
+public sealed record CBAdESSignatureTimestampMissingViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-21";
@@ -626,7 +626,7 @@ public sealed record CBAdESSignatureTimestampMissingViolation : CBAdESRuleViolat
 /// <c>sigTst</c> INSTANCES): multiple TSAs are achieved via multiple <c>sigTst</c> instances (Table 14 note
 /// 7), never via multiple tokens inside one instance's <c>tstContainer</c>.
 /// </remarks>
-public sealed record CBAdESSignatureTimestampTokenCountViolation(int TokenCount) : CBAdESRuleViolation
+public sealed record CBAdESSignatureTimestampTokenCountViolation(int TokenCount): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-c";
@@ -650,7 +650,7 @@ public sealed record CBAdESSignatureTimestampTokenCountViolation(int TokenCount)
 /// <c>sigTst</c>-only exactly-one-token narrowing (additional requirement (c)) is orthogonal to this
 /// violation and is never raised for an <c>arcTst</c> instance, however many tokens it carries.
 /// </remarks>
-public sealed record CBAdESArchiveTimestampMissingViolation : CBAdESRuleViolation
+public sealed record CBAdESArchiveTimestampMissingViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-29";
@@ -707,7 +707,7 @@ public enum CBAdESTimestampContainerKind
 /// <see cref="CBAdESLevelRules.Check"/> checks it unconditionally from <see cref="CBAdESLevelRuleContext.PayloadTimestamps"/>
 /// rather than from the <c>uHeaders</c> element loop.
 /// </remarks>
-public sealed record CBAdESTimestampTokenNotBaselineViolation(CBAdESTimestampContainerKind Kind) : CBAdESRuleViolation
+public sealed record CBAdESTimestampTokenNotBaselineViolation(CBAdESTimestampContainerKind Kind): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-02";
@@ -749,7 +749,7 @@ public enum CBAdESRefsFamilyKind
 /// three (the augmenting orchestrator's own concern, not this collect-posture rule's, which only reports
 /// what it finds).
 /// </remarks>
-public sealed record CBAdESRefsFamilyForbiddenViolation(CBAdESRefsFamilyKind Kind) : CBAdESRuleViolation
+public sealed record CBAdESRefsFamilyForbiddenViolation(CBAdESRefsFamilyKind Kind): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -794,7 +794,7 @@ public enum CBAdESReferencesTimestampGenerationKind
 /// at some position strictly before the <c>sigRTst</c>/<c>rfsTst</c> element under check
 /// (<see cref="Verifiable.Cryptography.Pki.CBAdESUnsignedHeaders.ElementsBefore(int)"/>).
 /// </remarks>
-public sealed record CBAdESReferencesTimestampGenerationGateViolation(CBAdESReferencesTimestampGenerationKind Kind) : CBAdESRuleViolation
+public sealed record CBAdESReferencesTimestampGenerationGateViolation(CBAdESReferencesTimestampGenerationKind Kind): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -829,7 +829,7 @@ public sealed record CBAdESReferencesTimestampGenerationGateViolation(CBAdESRefe
 /// <c>valData</c> SPO over the embedded-in-token SPO when a generator has a genuine choice between them.
 /// </para>
 /// </remarks>
-public sealed record CBAdESTimestampValidationDataServiceViolation : CBAdESRuleViolation
+public sealed record CBAdESTimestampValidationDataServiceViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-26";
@@ -852,7 +852,7 @@ public sealed record CBAdESTimestampValidationDataServiceViolation : CBAdESRuleV
 /// certificate digest (the caller supplies these because this rule surface cannot itself derive the signing
 /// certificate from a <c>uHeaders</c> snapshot alone).
 /// </remarks>
-public sealed record CBAdESReferencesSigningCertificateExclusionViolation : CBAdESRuleViolation
+public sealed record CBAdESReferencesSigningCertificateExclusionViolation: CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-A.1.1-02";
@@ -889,7 +889,7 @@ public enum CBAdESRefsFamilyDigestSurface
 /// the B-B rule surface's own closed enum untouched.
 /// </summary>
 /// <param name="Surface">Which surface named MD5.</param>
-public sealed record CBAdESRefsFamilyMd5DigestAlgorithmViolation(CBAdESRefsFamilyDigestSurface Surface) : CBAdESRuleViolation
+public sealed record CBAdESRefsFamilyMd5DigestAlgorithmViolation(CBAdESRefsFamilyDigestSurface Surface): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.2.1-02";
@@ -933,7 +933,7 @@ public enum CBAdESReferenceMaterialKind
 /// embedded inside an <c>arcTst</c> instance's own timestamp tokens is a further extension not yet built; see
 /// <see cref="CBAdESLevelRules.CheckReferencesResolveToValidationDataAsync"/>'s own remarks.
 /// </remarks>
-public sealed record CBAdESReferencesValidationDataConsistencyViolation(CBAdESReferenceMaterialKind Kind) : CBAdESRuleViolation
+public sealed record CBAdESReferencesValidationDataConsistencyViolation(CBAdESReferenceMaterialKind Kind): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-A.1.1-30";
@@ -1033,7 +1033,7 @@ public sealed record CBAdESTimestampTokenBindingViolation(
     CBAdESTimestampTokenBindingFailureReason Reason,
     string Detail,
     int InstanceOrdinal,
-    int TokenOrdinal) : CBAdESRuleViolation
+    int TokenOrdinal): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -1087,7 +1087,7 @@ public sealed record CBAdESTimestampTokenBindingViolation(
 /// consistent with the no-chain-building/no-HTTP library doctrine.
 /// </para>
 /// </remarks>
-public sealed record CBAdESTimestampSignerCertificateCoverageViolation(CBAdESTimestampTokenBindingKind Kind, string Detail) : CBAdESRuleViolation
+public sealed record CBAdESTimestampSignerCertificateCoverageViolation(CBAdESTimestampTokenBindingKind Kind, string Detail): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-h";
@@ -1113,7 +1113,7 @@ public sealed record CBAdESTimestampSignerCertificateCoverageViolation(CBAdESTim
 /// disclosure.
 /// </param>
 [DebuggerDisplay("CBAdESUndisclosedAlternativeMechanismViolation: {Label}")]
-public sealed record CBAdESUndisclosedAlternativeMechanismViolation(CBAdESUnsignedHeaderElementLabel Label) : CBAdESRuleViolation
+public sealed record CBAdESUndisclosedAlternativeMechanismViolation(CBAdESUnsignedHeaderElementLabel Label): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-E-01";
@@ -1144,7 +1144,7 @@ public sealed record CBAdESUndisclosedAlternativeMechanismViolation(CBAdESUnsign
 /// </param>
 /// <param name="ElementIndex">The malformed element's own zero-based position within <c>uHeaders</c>.</param>
 [DebuggerDisplay("CBAdESCounterSignatureMalformedViolation: {ElementIndex}")]
-public sealed record CBAdESCounterSignatureMalformedViolation(bool IsAbbreviated, int ElementIndex) : CBAdESRuleViolation
+public sealed record CBAdESCounterSignatureMalformedViolation(bool IsAbbreviated, int ElementIndex): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-30";
@@ -1163,7 +1163,7 @@ public sealed record CBAdESCounterSignatureMalformedViolation(bool IsAbbreviated
 /// </summary>
 /// <param name="ElementIndex">The counter-signature element's own zero-based position within <c>uHeaders</c>.</param>
 [DebuggerDisplay("CBAdESCounterSignatureDetachedObjectsViolation: {ElementIndex}")]
-public sealed record CBAdESCounterSignatureDetachedObjectsViolation(int ElementIndex) : CBAdESRuleViolation
+public sealed record CBAdESCounterSignatureDetachedObjectsViolation(int ElementIndex): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-5.2.8-09";
@@ -1192,7 +1192,7 @@ public sealed record CBAdESCounterSignatureDetachedObjectsViolation(int ElementI
 /// </param>
 /// <param name="ElementIndex">The failing element's own zero-based position within <c>uHeaders</c>.</param>
 [DebuggerDisplay("CBAdESCounterSignatureVerificationFailedViolation: {ElementIndex}")]
-public sealed record CBAdESCounterSignatureVerificationFailedViolation(bool IsAbbreviated, int ElementIndex) : CBAdESRuleViolation
+public sealed record CBAdESCounterSignatureVerificationFailedViolation(bool IsAbbreviated, int ElementIndex): CBAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "CB-6.3-30";

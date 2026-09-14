@@ -73,7 +73,7 @@ public readonly record struct CesrCodeSizing(int HardSize, int SoftSize, int Ext
             int padSize = CodeSize % 4;
             int valueChars = fullSize - CodeSize;
 
-            return (((padSize + valueChars) * 3) / 4) - padSize - LeadSize;
+            return ((padSize + valueChars) * 3 / 4) - padSize - LeadSize;
         }
     }
 }

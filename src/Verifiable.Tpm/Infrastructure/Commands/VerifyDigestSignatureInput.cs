@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -182,9 +178,9 @@ public sealed class VerifyDigestSignatureInput: ITpmCommandInput, IDisposable
         return new VerifyDigestSignatureInput(
             keyHandle,
             digestOwner,
-            digestOwner.Memory.Slice(0, digest.Length),
+            digestOwner.Memory[..digest.Length],
             signatureOwner,
-            signatureOwner.Memory.Slice(0, signature.Length),
+            signatureOwner.Memory[..signature.Length],
             signatureScheme,
             schemeHashAlg);
     }

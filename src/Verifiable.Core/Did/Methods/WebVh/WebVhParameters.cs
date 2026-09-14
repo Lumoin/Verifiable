@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
@@ -200,7 +198,7 @@ public sealed record WebVhParameters
             return (null, "The scid parameter MUST NOT appear after the first did:webvh log entry.");
         }
 
-        if(declared.Method is not null && declared.Method != SupportedMethod)
+        if(declared.Method is not (null or SupportedMethod))
         {
             return (null, $"Unsupported did:webvh method '{declared.Method}'; this resolver processes '{SupportedMethod}'.");
         }

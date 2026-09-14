@@ -1,9 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Cryptography;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -267,7 +266,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void ParseInvalidJwtThrows()
     {
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             SdJwtSerializer.ParseToken("not-a-jwt~", Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag));
     }
 
@@ -275,7 +274,7 @@ internal sealed class SdJwtSerializerTests
     [TestMethod]
     public void ParseMissingSeparatorThrows()
     {
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             SdJwtSerializer.ParseToken(Rfc9901IssuerSignedJwt, Decoder, Encoder, MemoryPool, TestSalts.TestSaltTag));
     }
 

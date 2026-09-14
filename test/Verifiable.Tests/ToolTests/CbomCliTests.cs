@@ -1,7 +1,6 @@
-using System.Text.Json;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
-using Verifiable;
+using System.Text.Json;
 
 namespace Verifiable.Tests.ToolTests;
 

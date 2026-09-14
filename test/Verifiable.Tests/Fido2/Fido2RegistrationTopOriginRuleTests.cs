@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 

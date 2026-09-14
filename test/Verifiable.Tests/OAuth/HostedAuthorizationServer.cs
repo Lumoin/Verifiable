@@ -1,9 +1,7 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -16,7 +14,6 @@ using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.Server.States;
@@ -25,22 +22,19 @@ using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oidc;
-using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Audit;
-using Verifiable.OAuth.Server.Keys;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server.Pipeline;
 using Verifiable.OAuth.Server.Registration;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.OAuth.Server.States;
 using Verifiable.OAuth.Siop.Server;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Validation;
+using Verifiable.Server.Pipeline;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
 using Verifiable.Vcalm.Exchange;
-using Verifiable.Tests.TestDataProviders;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -88,6 +82,15 @@ internal sealed class HostedAuthorizationServer
 
     public ConcurrentDictionary<string, ClientRecord> Registrations { get; } = new();
     public ConcurrentDictionary<string, (FlowState State, int StepCount)> FlowStates { get; } = new();
+
+    /// <summary>
+    /// Backs <see cref="ServerIntegration.ClaimFlowStateAsync"/>: a claim on
+    /// <c>(flowId, expectedStepCount)</c> succeeds for exactly one caller because
+    /// <see cref="ConcurrentDictionary{TKey,TValue}.TryAdd"/> is itself the atomic operation —
+    /// no read-modify-write over <see cref="FlowStates"/> is needed, so the claim never touches
+    /// (and cannot race with) the state or step count <see cref="FlowStates"/> holds.
+    /// </summary>
+    public ConcurrentDictionary<(string FlowId, int StepCount), byte> ClaimedFlowSteps { get; } = new();
     public ConcurrentDictionary<string, string> RequestUriTokenIndex { get; } = new();
     public ConcurrentDictionary<string, string> CodeIndex { get; } = new();
     public ConcurrentDictionary<string, string> JtiIndex { get; } = new();
@@ -104,6 +107,12 @@ internal sealed class HostedAuthorizationServer
     public global::Microsoft.AspNetCore.Builder.WebApplication? HttpHost { get; set; }
     public Uri? HttpBaseAddress { get; set; }
     public System.Net.Http.HttpClient? SharedHttpClient { get; set; }
+
+    /// <summary>
+    /// The <see cref="RegistrationObserver"/> subscription onto <see cref="Server"/>'s event stream,
+    /// held so <see cref="TestHostShell.DisposeAsync"/> can release it alongside this host's other state.
+    /// </summary>
+    internal IDisposable? EventSubscription { get; set; }
 
 
     internal HostedAuthorizationServer(string name)
@@ -225,14 +234,24 @@ internal sealed class HostedAuthorizationServer
 
             DeleteFlowStateAsync = (tenantId, flowId, ctx, ct) =>
             {
-                //Refresh-token rotation invokes this to invalidate the
-                //presented refresh state. Also remove from the secondary
-                //refresh-token index so the next presentation of the rotated-
-                //out token cleanly fails the correlation lookup.
+                //Replay and reuse revoke the claimed live refresh record and its token index.
+                //Retired rotation records retain their indexes for reuse detection.
                 if(host.FlowStates.TryRemove(flowId, out var removed)
                     && removed.State is ServerRefreshTokenIssuedState removedRefresh)
                 {
-                    host.RefreshTokenIndex.TryRemove(removedRefresh.RefreshToken, out _);
+                    _ = host.RefreshTokenIndex.TryRemove(removedRefresh.RefreshToken, out _);
+                }
+
+                //A real backend ties a claim entry's lifetime to its flow record's; this
+                //in-memory fixture only ever adds to ClaimedFlowSteps (see its own /// above), so
+                //a deleted flow's claim entries are evicted here to bound the dictionary's growth
+                //across a long-running test process.
+                foreach((string FlowId, int StepCount) key in host.ClaimedFlowSteps.Keys)
+                {
+                    if(string.Equals(key.FlowId, flowId, StringComparison.Ordinal))
+                    {
+                        _ = host.ClaimedFlowSteps.TryRemove(key, out _);
+                    }
                 }
 
                 return ValueTask.CompletedTask;
@@ -383,7 +402,15 @@ internal sealed class HostedAuthorizationServer
                 ValueTask.FromResult(
                     host.FlowStates.TryGetValue(flowId, out var entry)
                         ? (entry.State, entry.StepCount)
-                        : ((FlowState?)null, 0)),
+                        : (null, 0)),
+
+            //The atomic claim selects one caller. Checking the stored version afterward also
+            //rejects a stale request whose flow was deleted and whose claim entry was evicted.
+            ClaimFlowStateAsync = (tenantId, flowId, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(
+                    host.ClaimedFlowSteps.TryAdd((flowId, expectedStepCount), 0)
+                    && host.FlowStates.TryGetValue(flowId, out var entry)
+                    && entry.StepCount == expectedStepCount),
 
             ResolveCorrelationKeyAsync = (tenantId, flowKind, externalHandle, ctx, ct) =>
             {
@@ -937,7 +964,7 @@ internal sealed class HostedAuthorizationServer
         host.Server.Validate();
 
         //Subscribe to populate the routing table from events.
-        host.Server.Events.Subscribe(new RegistrationObserver(host.Registrations, host.RegistrationAccessTokens));
+        host.EventSubscription = host.Server.Events.Subscribe(new RegistrationObserver(host.Registrations, host.RegistrationAccessTokens));
 
         return host;
     }
@@ -998,9 +1025,9 @@ internal sealed class HostedAuthorizationServer
             }
             else if(value is ClientDeregistered deregistered)
             {
-                store.TryRemove(deregistered.TenantId, out _);
-                store.TryRemove(deregistered.ClientId, out _);
-                tokenStore.TryRemove(deregistered.ClientId, out _);
+                _ = store.TryRemove(deregistered.TenantId, out _);
+                _ = store.TryRemove(deregistered.ClientId, out _);
+                _ = tokenStore.TryRemove(deregistered.ClientId, out _);
             }
             else if(value is ClientUpdated updated)
             {

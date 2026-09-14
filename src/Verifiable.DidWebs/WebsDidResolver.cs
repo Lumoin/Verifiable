@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cesr;
 using Verifiable.Core.Did.Methods.Web;
@@ -68,7 +67,7 @@ public static class WebsDidResolver
         //SAID is not a did:webs identifier — this is enforced before the transform so the failure names the AID
         //rather than a downstream path condition. The transform's own MinimumPathSegments guard then rejects an
         //AID that has no host in front of it.
-        string aid = methodSpecificId[(methodSpecificId.LastIndexOf(':') + 1)..];
+        string aid = methodSpecificId[(methodSpecificId.LastIndexOf(':', StringComparison.Ordinal) + 1)..];
         if(!CesrSaid.IsWellFormedSaid(aid))
         {
             throw new ArgumentException(

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -95,7 +94,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
         AttestationResult result = await VerifyAsync(
             fixture, x5c: [fixture.LeafPki, fixture.IntermediatePki], checkRevocation: checker.CheckAsync, completeChain: null);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -127,7 +126,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
         AttestationResult result = await VerifyAsync(
             fixture, x5c: [fixture.LeafPki, fixture.IntermediatePki], checkRevocation: null, completeChain: null);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -144,7 +143,7 @@ internal sealed class PackedRevocationAndChainCompletionTests
         AttestationResult result = await VerifyAsync(
             fixture, x5c: [fixture.LeafPki], checkRevocation: null, completeChain: completer.CompleteAsync);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 

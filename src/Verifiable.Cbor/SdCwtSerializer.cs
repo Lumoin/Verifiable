@@ -1,12 +1,10 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Core.Model.SelectiveDisclosure;
 
 namespace Verifiable.Cbor;
 
@@ -95,7 +93,7 @@ public static class SdCwtSerializer
         var writer = new CborWriter(buffer, CborSerializerOptions.Default(conformanceMode));
 
         //COSE_Sign1 = tag(18) [protected, unprotected, payload, signature].
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
 
         //Protected header (as bstr).
@@ -192,7 +190,7 @@ public static class SdCwtSerializer
         //Unprotected header - extract sd_claims.
         var disclosures = new List<SdDisclosure>();
         var wireBytes = new List<byte[]>();
-        reader.ReadStartMap();
+        _ = reader.ReadStartMap();
 
         try
         {
@@ -202,7 +200,7 @@ public static class SdCwtSerializer
                 if(label == CoseHeaderParameters.SdClaims)
                 {
                     //Read sd_claims array.
-                    reader.ReadStartArray();
+                    _ = reader.ReadStartArray();
                     while(reader.PeekState() != CborReaderState.EndArray)
                     {
                         byte[] disclosureCbor = reader.ReadByteString();

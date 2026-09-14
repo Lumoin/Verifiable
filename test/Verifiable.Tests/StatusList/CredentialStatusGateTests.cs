@@ -1,5 +1,3 @@
-using System.Buffers;
-using System.Threading.Tasks;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestDataProviders;
@@ -81,7 +79,7 @@ internal sealed class CredentialStatusGateTests
         StatusListValidationException? caught = null;
         try
         {
-            await CredentialStatusGate.CheckAsync(
+            _ = await CredentialStatusGate.CheckAsync(
                 StatusListFixtures.ContextFor(CredentialIndex, ListUri), StatusListFixtures.ResolverFor(tokenForAnotherList, Now), Now, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         }
         catch(StatusListValidationException exception)
@@ -155,7 +153,7 @@ internal sealed class CredentialStatusGateTests
     [TestMethod]
     public async Task AResolverSignalingResolutionFailureSurfacesAsStatusListValidationException()
     {
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, ct) =>
+        static ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken ct = default) =>
             throw new StatusListResolutionException(context.Reference.Uri, "The status list host refused the connection.");
 
         StatusListValidationException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
@@ -163,7 +161,7 @@ internal sealed class CredentialStatusGateTests
                 StatusListFixtures.ContextFor(CredentialIndex, ListUri), resolver, Now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
 
-        Assert.IsInstanceOfType<StatusListValidationException>(caught,
+        _ = Assert.IsInstanceOfType<StatusListValidationException>(caught,
             "StatusListResolutionException derives from StatusListValidationException so callers already "
             + "catching that type classify a resolution failure the same as any other undeterminable status.");
     }
@@ -179,7 +177,7 @@ internal sealed class CredentialStatusGateTests
     [TestMethod]
     public async Task AResolverReturningNullSurfacesAsStatusListResolutionException()
     {
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, ct) => ValueTask.FromResult<ResolvedStatusListToken?>(null);
+        static ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken ct = default) => ValueTask.FromResult<ResolvedStatusListToken?>(null);
 
         StatusListResolutionException caught = await Assert.ThrowsExactlyAsync<StatusListResolutionException>(
             async () => await CredentialStatusGate.CheckAsync(
@@ -275,7 +273,7 @@ internal sealed class CredentialStatusGateTests
         int invocations = 0;
         string? requestedUri = null;
 
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             invocations++;
             requestedUri = context.Reference.Uri;
@@ -286,7 +284,7 @@ internal sealed class CredentialStatusGateTests
                 ResolvedAt = Now,
                 IsTokenOwned = false
             });
-        };
+        }
 
         CredentialStatusOutcome outcome = await CredentialStatusGate.CheckAsync(
             StatusListFixtures.ContextFor(CredentialIndex, ListUri), resolver, Now,
@@ -312,7 +310,7 @@ internal sealed class CredentialStatusGateTests
         using var list = StatusListType.Create(64, StatusListBitSize.OneBit, metered.Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ListUri, Now, list);
 
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
             {
                 Token = token,
@@ -341,7 +339,7 @@ internal sealed class CredentialStatusGateTests
         using var list = StatusListType.Create(64, StatusListBitSize.OneBit, metered.Pool, BitOrder.LeastSignificantFirst);
         var token = new StatusListToken(ListUri, Now, list);
 
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
             {
                 Token = token,

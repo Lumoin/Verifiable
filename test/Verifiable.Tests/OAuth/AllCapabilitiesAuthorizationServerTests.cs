@@ -1,14 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
-using Verifiable.OAuth.Logout;
-using Verifiable.OAuth.Ssf;
 using Verifiable.OAuth.Client;
+using Verifiable.OAuth.Logout;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
@@ -16,8 +14,7 @@ using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
+using Verifiable.OAuth.Ssf;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -108,7 +105,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             ClientId, ClientBaseUri, profile: PolicyProfile.Fapi20, capabilities: TokenServerCapabilities);
 
         //ValidateDpopProofAsync is the gate for advertising dpop_signing_alg_values_supported.
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         //ValidateClientCredentialsAsync is the gate for the client_credentials
         //grant — without it the grant endpoint does not exist (fail-closed).
@@ -123,7 +120,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         //Global Token Revocation: capability + the default JSON parse seam + the
         //revoke-subject seam + client auth gate the endpoint — wiring them advertises
         //global_token_revocation_endpoint.
-        host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
+        _ = host.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
         host.Server.OAuth().RevokeSubjectTokensAsync = static (_, _, _, _) =>
             ValueTask.FromResult(GlobalTokenRevocationOutcome.Initiated);
 
@@ -150,7 +147,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -259,7 +256,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             WellKnownEndpointNames.SsfConfiguration,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -309,7 +306,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             WellKnownEndpointNames.ProtectedResourceMetadata,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -334,7 +331,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, discovery.StatusCode, discovery.Body);
 
@@ -350,10 +347,10 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     public async Task EverythingEnabledAuthorizationCodeFlowIssuesAndRefreshesTokens()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: TokenServerCapabilities);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         //Auth Code + PKCE + PAR -> token. The core OAuth/OIDC flow must still work with the
         //full capability surface registered — proving no inter-capability interference.
@@ -379,7 +376,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         ServerHttpResponse refreshResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            refreshFields, new ExchangeContext(),
+            refreshFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, refreshResponse.StatusCode, refreshResponse.Body);
@@ -405,11 +402,11 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
     public async Task TokenFlowRoutesCorrectlyWithPresentationAndFederationCoRegistered()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce,
             capabilities: TokenServerWithPresentationAndFederation);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         //With the OID4VP-verifier and Federation matchers co-registered alongside the
         //token-flow matchers on one host, an Auth Code + PKCE token request must still be
@@ -441,10 +438,10 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             TimeProvider, TestContext.CancellationToken).ConfigureAwait(false);
         TestHostShell app = run.App;
 
-        app.SeedTestSubject(subject: SubjectId);
+        _ = app.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial tokenClient = app.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: TokenServerCapabilities);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
@@ -473,7 +470,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
                 FlowId = $"wallet-{Guid.NewGuid():N}"
             },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsInstanceOfType<ResponseSent>(presentation.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(presentation.TerminalState,
             "The VP presentation must reach the wallet ResponseSent terminal on the co-registered host.");
         run.AssertClaims((PresentationVerifiedState)app.GetFlowState(parHandle).State);
 
@@ -504,7 +501,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -514,7 +511,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -536,7 +533,7 @@ internal sealed class AllCapabilitiesAuthorizationServerTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

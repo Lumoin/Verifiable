@@ -1,8 +1,4 @@
-using System;
 using System.Collections.Frozen;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
@@ -924,7 +920,7 @@ public static class ContextValidationRules
 
         List<Claim> claims =
         [
-            ValidateFirstEntry(context, (IReadOnlyList<string>)[Context.DidCore10, Context.DidCore11]),
+            ValidateFirstEntry(context, [Context.DidCore10, Context.DidCore11]),
             ValidateEntriesAreUrlsOrDefinitions(context),
             ValidateNoDuplicateEntries(context)
         ];

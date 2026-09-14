@@ -2,7 +2,6 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Fido2;
 
@@ -54,7 +53,7 @@ public sealed class BioEnrollmentTemplateId: SensitiveMemory, IEquatable<BioEnro
     /// <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/> when no OTel listener is
     /// active.
     /// </param>
-    public BioEnrollmentTemplateId(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): base(sensitiveMemory, tag, lifetime)
+    public BioEnrollmentTemplateId(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null) : base(sensitiveMemory, tag, lifetime)
     {
     }
 

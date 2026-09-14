@@ -162,7 +162,7 @@ namespace Verifiable.Tests.Cryptography
             using(var rsaKey = RSA.Create(keySizeInBits))
             {
                 var rsaParameters = rsaKey.ExportParameters(includePrivateParameters: false);
-                var rsaModulus = rsaParameters.Modulus!;
+                var rsaModulus = rsaParameters.Modulus;
 
                 var encodedModulus = RsaUtilities.Encode(rsaModulus);
                 var decodedModulus = RsaUtilities.Decode(encodedModulus);
@@ -170,10 +170,10 @@ namespace Verifiable.Tests.Cryptography
 
                 //This is a bit of extra to show how to get the DER encoded public key from the platform.
                 var dotNetEncoded = ExportPublicKeyAsDerEncoded(rsaKey);
-                var dotNetDecoded = DecodeDerPublicKey(dotNetEncoded);
+                var (Modulus, Exponent) = DecodeDerPublicKey(dotNetEncoded);
                 Assert.AreSequenceEqual(encodedModulus, dotNetEncoded);
-                Assert.AreSequenceEqual(rsaParameters.Modulus, dotNetDecoded.Modulus);
-                Assert.AreSequenceEqual(rsaParameters.Exponent, dotNetDecoded.Exponent);
+                Assert.AreSequenceEqual(rsaParameters.Modulus, Modulus);
+                Assert.AreSequenceEqual(rsaParameters.Exponent, Exponent);
             }
         }
 
@@ -293,7 +293,7 @@ namespace Verifiable.Tests.Cryptography
         /// </summary>
         /// <param name="rsa">The RSA structure from which to export the key.</param>
         /// <returns>The RSA key in raw format.</returns>
-        private static (byte[] Modulus, byte[] Exponent)  DecodeDerPublicKey(byte[] derEncodedKey)
+        private static (byte[] Modulus, byte[] Exponent) DecodeDerPublicKey(byte[] derEncodedKey)
         {
             AsnReader reader = new(derEncodedKey, AsnEncodingRules.DER);
 

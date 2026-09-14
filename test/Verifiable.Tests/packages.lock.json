@@ -1,7 +1,7 @@
 {
   "version": 2,
   "dependencies": {
-    "net10.0": {
+    "net11.0": {
       "CsCheck": {
         "type": "Direct",
         "requested": "[4.8.0, )",
@@ -122,9 +122,9 @@
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "IBf7lbovvjGWVWXZX5cJ/cO0WXbId0Zq4BuSeT94mGZuOAP66oMeH9PTBZ9Jpp3Jb6jtK0qm/NyUbPRo1gC/wQ=="
+        "requested": "[11.0.0-rc.1.26425.128, )",
+        "resolved": "11.0.0-rc.1.26425.128",
+        "contentHash": "oMgihfjNcxZpR9B/O5Ke8Qmr8CJcpdzG4PnVYtA6Ja4g41NELxLRuiqqh5ys7w+ourEBNng2IIZnrlMJXfncmQ=="
       },
       "Microsoft.Reactive.Testing": {
         "type": "Direct",
@@ -302,8 +302,7 @@
         "contentHash": "zUiLpqoyNemwSRqUgE/7mtlYFuVxmiaLte6dFi9miShAqGVDfU08wAQpks1ovlGr7o1uKUTJCCsiTo82Gg65iQ==",
         "dependencies": {
           "DotLiquid": "2.1.405",
-          "Microsoft.TestPlatform.ObjectModel": "16.9.1",
-          "System.ComponentModel.Annotations": "5.0.0"
+          "Microsoft.TestPlatform.ObjectModel": "16.9.1"
         }
       },
       "MessagePack.Annotations": {
@@ -431,11 +430,6 @@
         "resolved": "4.3.3",
         "contentHash": "cTcdSPIZ8WvchbC5DFmfHxrvVNZCtops+2W94le+Q+mx110Y9L9mqNVVc9flF35lFeL5GsY+rxGBylsjDk4+zg=="
       },
-      "System.ComponentModel.Annotations": {
-        "type": "Transitive",
-        "resolved": "5.0.0",
-        "contentHash": "dMkqfy2el8A8/I76n2Hi1oBFEbG1SfxD2l5nhwXV3XjlnOmwxJlQbYpJH4W51odnU9sARCSAgv7S3CyAFMkpYg=="
-      },
       "System.Security.Permissions": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -480,7 +474,7 @@
       "verifiable.apdu": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.12, )",
+          "Lumoin.Base": "[0.0.14, )",
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
@@ -517,21 +511,20 @@
           "Lumoin.Veridical.Bbs": "[0.0.6, )",
           "Lumoin.Veritas.JsonPointer": "[0.0.2-local.be47a9ff, )",
           "Verifiable.Foundation": "[0.0.0, )",
-          "Verifiable.JCose": "[0.0.0, )",
-          "Verifiable.JsonPointer": "[0.0.0, )"
+          "Verifiable.JCose": "[0.0.0, )"
         }
       },
       "verifiable.cryptography": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.12, )",
+          "Lumoin.Base": "[0.0.14, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
       },
       "verifiable.didcomm": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.12, )",
+          "Lumoin.Base": "[0.0.14, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Cryptography": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
@@ -559,7 +552,7 @@
       "verifiable.foundation": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base": "[0.0.12, )"
+          "Lumoin.Base": "[0.0.14, )"
         }
       },
       "verifiable.jcose": {
@@ -578,14 +571,10 @@
           "Verifiable.Fido2": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )",
           "Verifiable.JCose": "[0.0.0, )",
-          "Verifiable.JsonPointer": "[0.0.0, )",
           "Verifiable.OAuth": "[0.0.0, )",
           "Verifiable.Vcalm": "[0.0.0, )",
           "Verifiable.WebFinger": "[0.0.0, )"
         }
-      },
-      "verifiable.jsonpointer": {
-        "type": "Project"
       },
       "verifiable.keri": {
         "type": "Project",
@@ -597,7 +586,7 @@
       "verifiable.libsodium": {
         "type": "Project",
         "dependencies": {
-          "Lumoin.Base.Libsodium": "[0.0.9, )",
+          "Lumoin.Base.Libsodium": "[0.0.14, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )"
         }
@@ -605,7 +594,6 @@
       "verifiable.microsoft": {
         "type": "Project",
         "dependencies": {
-          "System.Security.Cryptography.Pkcs": "[10.0.11, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )",
           "Verifiable.Core": "[0.0.0, )",
           "Verifiable.Foundation": "[0.0.0, )"
@@ -673,17 +661,17 @@
       },
       "Lumoin.Base": {
         "type": "CentralTransitive",
-        "requested": "[0.0.12, )",
-        "resolved": "0.0.12",
-        "contentHash": "XA9cqzp/hU7UgaoIm9W/83JUiTTbeibFE6d9COdd8SNz2ftwX3rembmGvyIwVJJXgQ2mr1nDf/Yek5pl/JlJPA=="
+        "requested": "[0.0.14, )",
+        "resolved": "0.0.14",
+        "contentHash": "r7OY0s3JyyZzm89TZrkCLKIWiRQBVvjV0ratDc6rJeciV7aNjBxvMU+oq19O+NFznPeBZBJ0yZjML4dHfvhK5w=="
       },
       "Lumoin.Base.Libsodium": {
         "type": "CentralTransitive",
-        "requested": "[0.0.9, )",
-        "resolved": "0.0.9",
-        "contentHash": "f0PcaljZ6rjnxmtT7Cw1ROQkxdU2HN+qqeCiUn2UXrvSJBjgIizxaQcjZyFA7qUbF8fn6fZLCZmWz50zLQpubA==",
+        "requested": "[0.0.14, )",
+        "resolved": "0.0.14",
+        "contentHash": "J6ciT7Ug9NAxJOcvy5o2w+yaHa5kjEUBxr/6dyGn9gCgwPI4YqmZ+7NTPkoVzRfgivpdUcBwIjnaHTDiu0LPjg==",
         "dependencies": {
-          "Lumoin.Base": "0.0.9"
+          "Lumoin.Base": "0.0.14"
         }
       },
       "Lumoin.Veridical.Backends.Managed": {
@@ -798,12 +786,6 @@
         "requested": "[10.0.11, )",
         "resolved": "10.0.11",
         "contentHash": "OzKDcIRkeNJeC8qAsbn8yJXnfTLP1dtkWILe+T56Gf/z+IkAASi7sMqLqJQat08j5z/mRN5xVtoAwbkMNMoBUQ=="
-      },
-      "System.Security.Cryptography.Pkcs": {
-        "type": "CentralTransitive",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "8IV+rI3xN/Mkq9MsSX7VZTv9T9Wt+tyhHLwBX9VNZBk8m8kknEs1JeTSjI2x9M2L/fSja+c2WSE5n5Yy0GXdoQ=="
       }
     }
   }

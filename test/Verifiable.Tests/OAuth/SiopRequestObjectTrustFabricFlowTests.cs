@@ -1,16 +1,12 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Net;
 using System.Security;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
-using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Jar;
@@ -117,7 +113,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
 
         Assert.IsTrue(requestUri.OriginalString.Contains(requestHandle, StringComparison.Ordinal),
             "The composed request_uri must carry the per-flow handle.");
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         //=== Step 2: the Wallet GETs the request_uri and receives the signed §9 Request Object whose
         //JOSE header now advertises x5c. ===
@@ -126,7 +122,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
 
         Assert.HasCount(3, requestObjectJws.Split('.'),
             "The §9 Request Object must be a compact JWS with three dot-separated segments.");
-        Assert.IsInstanceOfType<SiopRequestObjectServedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestObjectServedState>(host.GetFlowState(requestHandle).State);
 
         //The served header carries the x5c the fabric resolves the RP key from — not present on the
         //bespoke direct-key path.
@@ -139,7 +135,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
         //Request Object via JarVerification.VerifyAsync — the EXACT resolve+verify composition the
         //OID4VP x509 flow performs. ===
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        ExchangeContext walletContext = new();
+        ExchangeContext walletContext = [];
         scheme.PlaceTrustMaterial(walletContext);
         walletContext.SetValidationTime(now);
 
@@ -198,7 +194,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
@@ -238,7 +234,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
         UnverifiedJwtHeader servedHeader = ParseHeader(requestObjectJws);
 
         DateTimeOffset now = TimeProvider.GetUtcNow();
-        ExchangeContext walletContext = new();
+        ExchangeContext walletContext = [];
         scheme.PlaceTrustMaterial(walletContext);
         walletContext.SetValidationTime(now);
 
@@ -246,7 +242,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
         //treats this as an untrusted request — the fabric throws before any key is handed back.
         string spoofedClientId = $"{WellKnownClientIdPrefixes.X509SanDns}:attacker.example.com";
 
-        await Assert.ThrowsExactlyAsync<SecurityException>(
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(
             async () => await scheme.Resolver(
                 walletContext, spoofedClientId, servedHeader, TestContext.CancellationToken)
                 .ConfigureAwait(false));
@@ -262,7 +258,7 @@ internal sealed class SiopRequestObjectTrustFabricFlowTests
                 bytes, TestSetup.DefaultSerializationOptions)!,
             Pool);
 
-        return new UnverifiedJwtHeader(unverified.Signatures[0].ProtectedHeader);
+        return new(unverified.Signatures[0].ProtectedHeader);
     }
 
 

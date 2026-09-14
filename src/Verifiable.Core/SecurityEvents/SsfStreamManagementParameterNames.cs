@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Core.SecurityEvents;

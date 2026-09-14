@@ -1,6 +1,4 @@
-using System;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 
 namespace Verifiable.Tests.DidComm;
 
@@ -27,7 +25,7 @@ internal sealed class DidCommExchangeResultTests
 
         result.Dispose();
 
-        Assert.ThrowsExactly<ObjectDisposedException>(() => result.ReplyBody.AsReadOnlySpan());
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => result.ReplyBody.AsReadOnlySpan());
     }
 
 
@@ -73,6 +71,6 @@ internal sealed class DidCommExchangeResultTests
     [TestMethod]
     public void AcceptedWithReplyRejectsNullReplyBody()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => DidCommExchangeResult.Accepted(200, null!, null));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => DidCommExchangeResult.Accepted(200, null!, null));
     }
 }

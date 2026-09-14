@@ -1,6 +1,6 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,16 +8,15 @@ using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DataIntegrity;
@@ -654,7 +653,7 @@ internal sealed class CredentialSecuringMethodsTests
     [TestMethod]
     public async ValueTask CoseEnvelopeSucceeds()
     {
-        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(UnsignedCredentialJson, JsonOptions);
 
         var privateKeyBytes = MultibaseSerializer.Decode(
             Ed25519SecretKeyMultibase, MulticodecHeaders.Ed25519PrivateKey.Length, TestSetup.Base58Decoder, BaseMemoryPool.Shared);
@@ -687,7 +686,7 @@ internal sealed class CredentialSecuringMethodsTests
 
         var coseSign1Buffer = new ArrayBufferWriter<byte>();
         var coseSign1 = new CborWriter(coseSign1Buffer, CborOptions.RfcCanonical);
-        coseSign1.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        coseSign1.WriteTag(new CborTag(CoseTags.Sign1));
         coseSign1.WriteStartArray(4);
         coseSign1.WriteByteString(protectedHeaderBytes);
         coseSign1.WriteStartMap(0);
@@ -702,11 +701,11 @@ internal sealed class CredentialSecuringMethodsTests
 
         var reader = new CborReader(coseSign1Bytes, CborOptions.Lax);
         var tag = reader.ReadTag();
-        Assert.AreEqual(new CborTag((ulong)CoseTags.Sign1), tag);
+        Assert.AreEqual(new CborTag(CoseTags.Sign1), tag);
 
-        reader.ReadStartArray();
+        _ = reader.ReadStartArray();
         var readProtectedHeader = reader.ReadByteString();
-        reader.ReadStartMap();
+        _ = reader.ReadStartMap();
         reader.ReadEndMap();
         var readPayload = reader.ReadByteString();
         var readSignature = reader.ReadByteString();
@@ -870,7 +869,7 @@ internal sealed class CredentialSecuringMethodsTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 

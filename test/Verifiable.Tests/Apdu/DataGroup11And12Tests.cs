@@ -1,6 +1,5 @@
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Apdu;
 

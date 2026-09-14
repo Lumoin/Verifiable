@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -37,7 +34,7 @@ public readonly record struct PolicyTemplateInput(uint PolicySession, ReadOnlyMe
     /// </summary>
     public ReadOnlyMemory<byte> TemplateHash
     {
-        get => field;
+        get;
         init => field = EnsureWithinDigestBound(value);
     } = EnsureWithinDigestBound(TemplateHash);
 

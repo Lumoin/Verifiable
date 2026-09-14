@@ -25,7 +25,7 @@ namespace Verifiable.Tests.DataProviders
         /// <summary>
         /// The DID supported RSA key lengths. These are used to generate keys for testing.
         /// </summary>
-        public static int[] RsaKeyLengthConstants => [ Rsa2048KeyLength, Rsa4096KeyLength ];
+        public static int[] RsaKeyLengthConstants => [Rsa2048KeyLength, Rsa4096KeyLength];
 
         /// <summary>
         /// Turns the RSA key length into <see cref="Base58BtcEncodedMulticodecHeaders"/>.
@@ -88,12 +88,12 @@ namespace Verifiable.Tests.DataProviders
                 var modulus = RsaUtilities.Decode(keyMaterial.PublicKey.AsReadOnlySpan());
 
                 var btc58Headers = FromKeyLengthToBtc58EncodedHeader(keyLength);
-                var multiCodecHeaders = FromKeyLengthToMultiCodecHeader(keyLength);
+                var (PublicKeyHeader, PrivateKeyHeader) = FromKeyLengthToMultiCodecHeader(keyLength);
 
                 return new RsaTestData(
                     keyLength,
-                    multiCodecHeaders.PublicKeyHeader,
-                    multiCodecHeaders.PrivateKeyHeader,
+                    PublicKeyHeader,
+                    PrivateKeyHeader,
                     btc58Headers.PublicKey,
                     btc58Headers.PrivateKey,
                     modulus);

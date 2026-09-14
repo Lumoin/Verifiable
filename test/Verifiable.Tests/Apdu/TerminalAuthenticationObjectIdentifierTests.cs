@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Apdu.Eac;
 
 namespace Verifiable.Tests.Apdu;

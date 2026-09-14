@@ -1,10 +1,7 @@
-using System.Buffers;
-using System.Linq;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
@@ -33,7 +30,7 @@ internal sealed class DidCommEventSymmetryTests
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
 
     /// <summary>
@@ -78,7 +75,7 @@ internal sealed class DidCommEventSymmetryTests
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.Contains(
-                (SignatureProducedEvent e) => true,
+                e => true,
                 observer.Received.OfType<SignatureProducedEvent>(),
                 "PackSignedAsync (sign) must publish a SignatureProducedEvent to the global stream by default — no explicit sink is passed.");
 
@@ -94,7 +91,7 @@ internal sealed class DidCommEventSymmetryTests
 
             Assert.IsTrue(result.IsVerified, $"Round trip MUST verify. Error: {result.Error}.");
             Assert.Contains(
-                (VerificationCompletedEvent e) => e.Outcome == VerificationOutcome.Valid,
+                e => e.Outcome == VerificationOutcome.Valid,
                 observer.Received.OfType<VerificationCompletedEvent>(),
                 "UnpackSignedAsync (verify) must publish a VerificationCompletedEvent to the global stream — symmetric with the sign side.");
         }
@@ -144,7 +141,7 @@ internal sealed class DidCommEventSymmetryTests
 
         Assert.IsNotNull(message.FromPrior, "PackFromPriorAsync must produce a from_prior JWT.");
         Assert.Contains(
-            (SignatureProducedEvent e) => true,
+            e => true,
             observer.Received.OfType<SignatureProducedEvent>(),
             "PackFromPriorAsync must publish a SignatureProducedEvent to the global stream by default — matching VerifyFromPriorAsync's existing internal-access emission.");
     }
@@ -155,6 +152,6 @@ internal sealed class DidCommEventSymmetryTests
     {
         VerificationMethod method = document.GetLocalAuthenticationMethods()[0];
 
-        return method.Id!.StartsWith('#') ? did + method.Id : method.Id!;
+        return method.Id!.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id!;
     }
 }

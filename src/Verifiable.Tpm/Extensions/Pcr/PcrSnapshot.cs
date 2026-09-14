@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -68,7 +66,7 @@ public sealed class PcrSnapshot
         UpdateCounter = updateCounter;
         IsConsistent = isConsistent;
 
-        BanksByAlgorithm = new Dictionary<string, PcrBank>(StringComparer.OrdinalIgnoreCase);
+        BanksByAlgorithm = new(StringComparer.OrdinalIgnoreCase);
         foreach(var bank in banks)
         {
             BanksByAlgorithm[bank.Algorithm] = bank;
@@ -134,7 +132,7 @@ public sealed class PcrSnapshot
     private static string NormalizeAlgorithmName(string algorithm)
     {
         //Handle common variations: "SHA-256" -> "SHA256", "sha256" -> "SHA256".
-        return algorithm.Replace("-", "",StringComparison.OrdinalIgnoreCase).ToUpperInvariant();
+        return algorithm.Replace("-", "", StringComparison.OrdinalIgnoreCase).ToUpperInvariant();
     }
 
     private string DebuggerDisplay

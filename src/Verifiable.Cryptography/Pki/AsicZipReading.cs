@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.IO.Compression;
 using System.Text;
 
@@ -929,7 +926,7 @@ public static class AsicZipReading
 
         if(compressedByteLength != uncompressedByteLength
             || uncompressedByteLength == 0
-            || (long)AsicWellKnown.MediaTypeOffset + uncompressedByteLength > container.Length)
+            || AsicWellKnown.MediaTypeOffset + uncompressedByteLength > container.Length)
         {
             return Refused(AsicZipReadStatus.MimetypeEntryMalformed, AsicWellKnown.MimetypeEntryName);
         }
@@ -937,7 +934,7 @@ public static class AsicZipReading
         ReadOnlySpan<byte> mediaTypeOctets = container.Slice(AsicWellKnown.MediaTypeOffset, (int)uncompressedByteLength);
         for(int i = 0; i < mediaTypeOctets.Length; ++i)
         {
-            if(mediaTypeOctets[i] < SmallestPrintableAscii || mediaTypeOctets[i] > LargestPrintableAscii)
+            if(mediaTypeOctets[i] is < SmallestPrintableAscii or > LargestPrintableAscii)
             {
                 return Refused(AsicZipReadStatus.MimetypeEntryMalformed, AsicWellKnown.MimetypeEntryName);
             }
@@ -986,7 +983,14 @@ public static class AsicZipReading
             {
                 CentralDirectoryEntry declared = directory[i];
                 ZipArchiveEntry actual = archive.Entries[i];
-                if(!string.Equals(actual.FullName, declared.Name, StringComparison.Ordinal) || actual.Crc32 != declared.Crc32)
+
+                //This cross-check polices only the structural correspondence between the runtime's reader and
+                //this library's own central directory walk (the same entry, at the same index, under the same
+                //name). Whether the entry's octets match its declared checksum is decided once, below, by this
+                //library's own CRC computation over the octets it read (ReadEntryContent): folding a
+                //runtime-reported CRC comparison in here would let a runtime-specific CRC-surfacing difference
+                //collapse a checksum-mismatch refusal into a generic structural one.
+                if(!string.Equals(actual.FullName, declared.Name, StringComparison.Ordinal))
                 {
                     DisposeAll(entries);
 
@@ -1001,7 +1005,14 @@ public static class AsicZipReading
                     return ToResult(Refused(AsicZipReadStatus.ArchiveMalformed, declared.Name));
                 }
 
-                PooledMemory content = ReadEntryContent(actual, declared, pool, out AsicZipReadStatus contentStatus);
+                if(!TryLocateEntryData(containerBytes.Span, declared, out int dataOffset))
+                {
+                    DisposeAll(entries);
+
+                    return ToResult(Refused(AsicZipReadStatus.ArchiveMalformed, declared.Name));
+                }
+
+                PooledMemory content = ReadEntryContent(containerBytes, dataOffset, declared, pool, out AsicZipReadStatus contentStatus);
                 if(contentStatus != AsicZipReadStatus.Read)
                 {
                     content.Dispose();
@@ -1038,8 +1049,10 @@ public static class AsicZipReading
         }
         catch(InvalidDataException)
         {
-            //The runtime's reader raises this for every structural fault it finds and for a CRC mismatch. It is
-            //an adversary-reachable condition rather than a programming error, so it becomes a status.
+            //The runtime's reader raises this for a central directory it cannot parse on its own terms, which
+            //this method never reaches otherwise: entry content is read from the raw octets directly
+            //(ReadEntryContent), not through the runtime's entry stream. It is an adversary-reachable condition
+            //rather than a programming error, so it becomes a status.
             DisposeAll(entries);
 
             return ToResult(Refused(AsicZipReadStatus.ArchiveMalformed));
@@ -1064,33 +1077,92 @@ public static class AsicZipReading
 
 
     /// <summary>
-    /// Reads exactly the octets an entry declares, and no more.
+    /// Locates where an entry's compressed data begins, from its own local file header.
     /// </summary>
-    /// <param name="entry">The entry as the runtime's reader sees it.</param>
+    /// <param name="container">The container's octets.</param>
+    /// <param name="declared">The entry as the central directory declares it.</param>
+    /// <param name="dataOffset">Where the compressed data begins, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the local header and the declared compressed length both fit inside the container.</returns>
+    private static bool TryLocateEntryData(ReadOnlySpan<byte> container, CentralDirectoryEntry declared, out int dataOffset)
+    {
+        int headerOffset = (int)declared.LocalHeaderOffset;
+        if(headerOffset > container.Length - LocalFileHeaderByteLength)
+        {
+            dataOffset = 0;
+
+            return false;
+        }
+
+        ReadOnlySpan<byte> header = container[headerOffset..];
+        ushort nameByteLength = BinaryPrimitives.ReadUInt16LittleEndian(header[26..]);
+        ushort extraByteLength = BinaryPrimitives.ReadUInt16LittleEndian(header[28..]);
+        long offset = (long)headerOffset + LocalFileHeaderByteLength + nameByteLength + extraByteLength;
+        if(offset + declared.CompressedByteLength > container.Length)
+        {
+            dataOffset = 0;
+
+            return false;
+        }
+
+        dataOffset = (int)offset;
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Decompresses exactly the octets an entry declares, and no more.
+    /// </summary>
+    /// <param name="containerBytes">The container's octets.</param>
+    /// <param name="dataOffset">Where the entry's compressed data begins, as <see cref="TryLocateEntryData"/> found it.</param>
     /// <param name="declared">The entry as the central directory declares it.</param>
     /// <param name="pool">The memory pool the octets are rented from.</param>
     /// <param name="status">What reading the entry concluded.</param>
     /// <returns>The entry's octets, which the caller owns whatever <paramref name="status"/> says.</returns>
     /// <remarks>
-    /// Reading exactly the declared length and then checking that the stream is at its end is what makes the
-    /// bound from the central directory real: an entry whose stream produces more octets than its headers
-    /// declare would otherwise decompress past every size check performed before it was opened.
+    /// The compressed range is decompressed directly with <see cref="DeflateStream"/> over the raw octets rather
+    /// than through <see cref="ZipArchiveEntry.Open"/>: the runtime's own entry stream validates the header's
+    /// CRC-32 as it is read and raises <see cref="InvalidDataException"/> the moment it disagrees, which would
+    /// report every checksum failure as the same structural fault a corrupted deflate bitstream produces. Reading
+    /// the raw range keeps the two apart — a bitstream a decompressor cannot parse is
+    /// <see cref="AsicZipReadStatus.ArchiveMalformed"/>; octets that decompress cleanly but do not hash to the
+    /// declared value are <see cref="AsicZipReadStatus.EntryChecksumMismatch"/>, decided by this method's own
+    /// computation below. Reading exactly the declared length and then checking that the stream is at its end is
+    /// what makes the bound from the central directory real: an entry whose stream produces more octets than its
+    /// headers declare would otherwise decompress past every size check performed before it was opened.
     /// </remarks>
-    private static PooledMemory ReadEntryContent(ZipArchiveEntry entry, CentralDirectoryEntry declared, BaseMemoryPool pool, out AsicZipReadStatus status)
+    private static PooledMemory ReadEntryContent(ReadOnlyMemory<byte> containerBytes, int dataOffset, CentralDirectoryEntry declared, BaseMemoryPool pool, out AsicZipReadStatus status)
     {
         int uncompressedByteLength = (int)declared.UncompressedByteLength;
+        int compressedByteLength = (int)declared.CompressedByteLength;
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(uncompressedByteLength, 1));
         try
         {
             if(uncompressedByteLength > 0)
             {
-                using Stream content = entry.Open();
-                content.ReadExactly(owner.Memory.Span[..uncompressedByteLength]);
-                if(content.ReadByte() != -1)
+                ReadOnlyMemory<byte> compressedRange = containerBytes.Slice(dataOffset, compressedByteLength);
+                if(declared.CompressionMethod == AsicZipCompressionMethod.Stored)
                 {
-                    status = AsicZipReadStatus.ArchiveMalformed;
+                    if(compressedByteLength != uncompressedByteLength)
+                    {
+                        status = AsicZipReadStatus.ArchiveMalformed;
 
-                    return new PooledMemory(owner, 0, AsicTags.ContainerEntry);
+                        return new PooledMemory(owner, 0, AsicTags.ContainerEntry);
+                    }
+
+                    compressedRange.Span.CopyTo(owner.Memory.Span);
+                }
+                else
+                {
+                    using var compressedStream = new ReadOnlyMemoryStream(compressedRange);
+                    using var inflate = new DeflateStream(compressedStream, CompressionMode.Decompress);
+                    inflate.ReadExactly(owner.Memory.Span[..uncompressedByteLength]);
+                    if(inflate.ReadByte() != -1)
+                    {
+                        status = AsicZipReadStatus.ArchiveMalformed;
+
+                        return new PooledMemory(owner, 0, AsicTags.ContainerEntry);
+                    }
                 }
             }
 
@@ -1104,6 +1176,12 @@ public static class AsicZipReading
             return new PooledMemory(owner, uncompressedByteLength, AsicTags.ContainerEntry);
         }
         catch(EndOfStreamException)
+        {
+            status = AsicZipReadStatus.ArchiveMalformed;
+
+            return new PooledMemory(owner, 0, AsicTags.ContainerEntry);
+        }
+        catch(InvalidDataException)
         {
             status = AsicZipReadStatus.ArchiveMalformed;
 
@@ -1314,7 +1392,7 @@ public static class AsicZipReading
             set
             {
                 ArgumentOutOfRangeException.ThrowIfNegative(value);
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, (long)Source.Length);
+                ArgumentOutOfRangeException.ThrowIfGreaterThan(value, Source.Length);
 
                 position = (int)value;
             }

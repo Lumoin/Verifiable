@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
@@ -61,7 +59,7 @@ internal sealed class JAdESSignedComponentModelsTests
     {
         using DigestValue digest = CreateDigest([0x01]);
 
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier(string.Empty), digest));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier(string.Empty), digest));
     }
 
 
@@ -73,7 +71,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingCertificateThumbprintWithNullDigestThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier("sha-256"), null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier("sha-256"), null!));
     }
 
 
@@ -122,7 +120,7 @@ internal sealed class JAdESSignedComponentModelsTests
         using DigestValue digest = CreateDigest([0x01]);
         using var single = new AdESCertificateThumbprint(new AdESDigestAlgorithmTextIdentifier("sha-256"), digest);
 
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([single]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([single]));
     }
 
 
@@ -130,7 +128,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingCertificateThumbprintsWithNullListThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESCertificateThumbprints(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESCertificateThumbprints(null!));
     }
 
 
@@ -159,7 +157,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingCommitmentWithNullIdThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESCommitment(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESCommitment(null!));
     }
 
 
@@ -169,7 +167,7 @@ internal sealed class JAdESSignedComponentModelsTests
     {
         var commitmentId = new AdESObjectIdentifier("https://example.org/jades/commitment/proof-of-origin");
 
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESCommitment(commitmentId, []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESCommitment(commitmentId, []));
     }
 
 
@@ -196,7 +194,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignerCommitmentsWithEmptyArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerCommitments([]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerCommitments([]));
     }
 
 
@@ -204,7 +202,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignerCommitmentsWithNullArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESSignerCommitments(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESSignerCommitments(null!));
     }
 
 
@@ -260,7 +258,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void SignerAttributesCarriesAllThreeMembersWhenSupplied()
     {
-        var certified = new AdESX509AttributeCertificate(new AdESPkiObject { Val = new byte[] { 0x30 } });
+        var certified = new AdESX509AttributeCertificate(new AdESPkiObject { Val = "0"u8.ToArray() });
         var signedAssertion = new JAdESQualifyingAttribute("application/vc+jwt", "base64url", ["assertion-value"]);
         var claimed = new JAdESQualifyingAttribute("text/plain", "base64", ["role=admin"]);
 
@@ -276,7 +274,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignerAttributesWithEmptyCertifiedThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignerAttributes(certified: []));
     }
 
@@ -285,7 +283,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignerAttributesWithEmptySignedAssertionsThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignerAttributes(signedAssertions: []));
     }
 
@@ -294,7 +292,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignerAttributesWithEmptyClaimedThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignerAttributes(claimed: []));
     }
 
@@ -339,7 +337,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingQualifyingAttributeWithEmptyMediaTypeThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESQualifyingAttribute(string.Empty, "base64url", ["value"]));
     }
 
@@ -348,7 +346,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingQualifyingAttributeWithEmptyEncodingThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESQualifyingAttribute("application/vc+jwt", string.Empty, ["value"]));
     }
 
@@ -357,7 +355,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingQualifyingAttributeWithEmptyQualifyingValuesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESQualifyingAttribute("application/vc+jwt", "base64url", []));
     }
 
@@ -389,7 +387,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignaturePolicyIdentifierWithNullIdThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESSignaturePolicyIdentifier(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESSignaturePolicyIdentifier(null!));
     }
 
 
@@ -399,7 +397,7 @@ internal sealed class JAdESSignedComponentModelsTests
     {
         var id = new AdESObjectIdentifier("https://example.org/jades/policy/1");
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignaturePolicyIdentifier(id, qualifiers: []));
     }
 
@@ -414,7 +412,7 @@ internal sealed class JAdESSignedComponentModelsTests
         var id = new AdESObjectIdentifier("https://example.org/jades/policy/1");
         IReadOnlyList<AdESSignaturePolicyQualifier> qualifiers = [new AdESSignaturePolicyUri("https://example.org/policy.pdf")];
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignaturePolicyIdentifier(id, digestIsPerSpecification: true, qualifiers: qualifiers));
     }
 
@@ -510,7 +508,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingSignaturePolicyUserNoticeWithNeitherMemberThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignaturePolicyUserNotice());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignaturePolicyUserNotice());
     }
 
 
@@ -533,7 +531,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingNoticeReferenceWithEmptyOrganizationThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignaturePolicyNoticeReference(string.Empty, [1]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignaturePolicyNoticeReference(string.Empty, [1]));
     }
 
 
@@ -541,7 +539,7 @@ internal sealed class JAdESSignedComponentModelsTests
     [TestMethod]
     public void ConstructingNoticeReferenceWithEmptyNoticeNumbersThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignaturePolicyNoticeReference("Example Org", []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignaturePolicyNoticeReference("Example Org", []));
     }
 
 

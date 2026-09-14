@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -103,7 +100,7 @@ internal sealed class JAdESBaselineLevelTableTests
             Assert.AreSequenceEqual([expectedCardinality], row.Cardinality!.ValuesAt(level).ToArray(), $"{requirementId} ({row.Name}) cardinality at {level}.");
         }
 
-        Assert.IsInstanceOfType<AdESInternalClauseReference>(row.Reference);
+        _ = Assert.IsInstanceOfType<AdESInternalClauseReference>(row.Reference);
         Assert.AreEqual(expectedReferenceClause, ((AdESInternalClauseReference)row.Reference!).Clause, $"{requirementId} ({row.Name}) References clause.");
     }
 
@@ -139,7 +136,7 @@ internal sealed class JAdESBaselineLevelTableTests
         }
 
         Assert.AreEqual(AdESTableRowKind.HeaderParameter, alg.Kind);
-        Assert.IsInstanceOfType<AdESInternalClauseReference>(alg.Reference);
+        _ = Assert.IsInstanceOfType<AdESInternalClauseReference>(alg.Reference);
         Assert.AreEqual("5.1.2", ((AdESInternalClauseReference)alg.Reference!).Clause);
     }
 
@@ -305,7 +302,7 @@ internal sealed class JAdESBaselineLevelTableTests
         Assert.IsTrue(JAdESBaselineLevelTable.IsServiceRow(service));
         Assert.IsFalse(JAdESBaselineLevelTable.IsServiceProvisionOptionRow(service));
         Assert.IsNotNull(service.Cardinality, "Unlike CB-AdES's own service rows, JA-6.3-14's Cardinality column states an actual value ('1'), not '-'.");
-        Assert.AreSequenceEqual(new[] { AdESCardinality.ExactlyOne }, service.Cardinality!.ValuesAt(AdESBaselineLevel.BB).ToArray());
+        Assert.AreSequenceEqual(new[] { AdESCardinality.ExactlyOne }, service.Cardinality.ValuesAt(AdESBaselineLevel.BB).ToArray());
         Assert.IsNull(service.Reference, "JA-6.3-14's References column is '-'.");
 
         IReadOnlyList<AdESTableRow> options = JAdESBaselineLevelTable.ServiceProvisionOptionsFor(service);
@@ -371,7 +368,7 @@ internal sealed class JAdESBaselineLevelTableTests
         Assert.IsNull(service.Cardinality);
         Assert.IsNull(service.Reference);
 
-        Assert.ThrowsExactly<ArgumentException>(() => JAdESBaselineLevelTable.ServiceProvisionOptionsFor(service));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => JAdESBaselineLevelTable.ServiceProvisionOptionsFor(service));
 
         //iat and sigT are ordinary HeaderParameter rows, per Table 1's own column-1 convention.
         Assert.AreEqual(AdESTableRowKind.HeaderParameter, JAdESBaselineLevelTable.IssuedAt.Kind);
@@ -438,7 +435,7 @@ internal sealed class JAdESBaselineLevelTableTests
         {
             foreach(string letter in row.Annotations.RequirementLetters)
             {
-                seenLetters.Add(letter);
+                _ = seenLetters.Add(letter);
             }
         }
 

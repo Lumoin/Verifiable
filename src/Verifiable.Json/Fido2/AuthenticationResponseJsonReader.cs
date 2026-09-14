@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 
 namespace Verifiable.Json;

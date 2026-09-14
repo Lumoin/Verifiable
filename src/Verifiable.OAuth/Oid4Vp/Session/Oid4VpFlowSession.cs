@@ -1,5 +1,4 @@
 using Verifiable.Foundation.Automata;
-using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.States;
 
 namespace Verifiable.OAuth.Oid4Vp.Session;
@@ -104,7 +103,7 @@ public static class Oid4VpFlowSession
         using IDisposable subscription = pda.Subscribe(
             new SingleEntryObserver(entry => capturedEntry = entry));
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
         TraceEntry<FlowState, FlowInput> traceEntry = capturedEntry!;
 

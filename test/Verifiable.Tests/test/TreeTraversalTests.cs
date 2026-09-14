@@ -3,11 +3,11 @@ using Verifiable.Core.Assessment;
 
 namespace Verifiable.Tests.test
 {
-internal record TestClaimContext: ClaimContext { }
+    internal record TestClaimContext: ClaimContext { }
 
 
-[TestClass]
-internal class TreeTraversalTests
+    [TestClass]
+    internal class TreeTraversalTests
     {
         private static ClaimContext TestClaimContext { get; } = new TestClaimContext();
 
@@ -34,7 +34,7 @@ internal class TreeTraversalTests
                 await Task.CompletedTask.ConfigureAwait(false);
             }
 
-            NodeFormatter<Claim, Claim> nullFormatter = node => NullFormatter(node);
+            Claim nullFormatter(TreeTraversalNode<Claim> node) => NullFormatter(node);
 
             TraverseAndOutput(mainClaim, (root) => root.SubClaims.AsEnumerable(), nullFormatter, testSink);
             await TraverseAndOutputAsync(mainClaim, (root) => Task.FromResult(root.SubClaims.AsEnumerable()), nullFormatter, asyncTestSink).ConfigureAwait(false);

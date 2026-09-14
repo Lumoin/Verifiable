@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Core.Model.Did;
 
@@ -300,11 +298,11 @@ internal static class PeerDidServiceReader
                 continue;
             }
 
-            if(b == (byte)'{' || b == (byte)'[')
+            if(b is (byte)'{' or (byte)'[')
             {
                 depth++;
             }
-            else if(b == (byte)'}' || b == (byte)']')
+            else if(b is (byte)'}' or (byte)']')
             {
                 depth--;
             }
@@ -413,7 +411,7 @@ internal static class PeerDidServiceReader
             char current = value[index];
             if(current != '\\' || index + 1 >= value.Length)
             {
-                builder.Append(current);
+                _ = builder.Append(current);
                 index++;
 
                 continue;
@@ -435,7 +433,7 @@ internal static class PeerDidServiceReader
 
             if(simple is char decoded)
             {
-                builder.Append(decoded);
+                _ = builder.Append(decoded);
                 index += 2;
 
                 continue;
@@ -443,13 +441,13 @@ internal static class PeerDidServiceReader
 
             if(escape == 'u' && TryDecodeHex4(value, index + 2, out char unicode))
             {
-                builder.Append(unicode);
+                _ = builder.Append(unicode);
                 index += 6;
 
                 continue;
             }
 
-            builder.Append(current);
+            _ = builder.Append(current);
             index++;
         }
 
@@ -492,5 +490,5 @@ internal static class PeerDidServiceReader
 
 
     private static bool IsJsonWhitespace(byte b) =>
-        b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n';
+        b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
 }

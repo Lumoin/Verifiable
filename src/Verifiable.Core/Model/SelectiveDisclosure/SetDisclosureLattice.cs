@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 
@@ -173,7 +170,7 @@ public sealed class SetDisclosureLattice<TClaim>
         {
             if(Top.Contains(claim))
             {
-                seeds.Add(claim);
+                _ = seeds.Add(claim);
             }
         }
 
@@ -190,7 +187,7 @@ public sealed class SetDisclosureLattice<TClaim>
             {
                 if(Top.Contains(ancestor))
                 {
-                    result.Add(ancestor);
+                    _ = result.Add(ancestor);
                 }
             }
         }
@@ -314,17 +311,17 @@ public sealed class SetDisclosureLattice<TClaim>
             if(Bottom.Contains(claim))
             {
                 //Claim is mandatory, always disclosed.
-                mandatory.Add(claim);
+                _ = mandatory.Add(claim);
             }
             else if(Selectable.Contains(claim))
             {
                 //Claim is selectable, needs selection decision.
-                selectable.Add(claim);
+                _ = selectable.Add(claim);
             }
             else
             {
                 //Claim is not in the credential.
-                unavailable.Add(claim);
+                _ = unavailable.Add(claim);
             }
         }
 

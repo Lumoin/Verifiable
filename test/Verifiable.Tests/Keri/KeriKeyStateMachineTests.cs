@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Keri;
 
 namespace Verifiable.Tests.Keri;
@@ -68,7 +67,7 @@ internal sealed class KeriKeyStateMachineTests
     {
         KeriInceptionEvent malformed = Inception() with { SequenceNumber = 1 };
 
-        Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Incept(malformed));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Incept(malformed));
     }
 
 
@@ -80,7 +79,7 @@ internal sealed class KeriKeyStateMachineTests
     {
         KeriInceptionEvent malformed = Inception() with { SigningKeys = [] };
 
-        Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Incept(malformed));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Incept(malformed));
     }
 
 
@@ -111,7 +110,7 @@ internal sealed class KeriKeyStateMachineTests
         KeriKeyState inception = KeriKeyStateMachine.Incept(Inception());
         var skipping = new KeriInteractionEvent("EGap00000000000000000000000000000000000000", Aid, 2, Aid);
 
-        Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Interact(inception, skipping));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Interact(inception, skipping));
     }
 
 
@@ -124,7 +123,7 @@ internal sealed class KeriKeyStateMachineTests
         KeriKeyState inception = KeriKeyStateMachine.Incept(Inception());
         var foreign = new KeriInteractionEvent("EForeign0000000000000000000000000000000000", "EDifferentAid000000000000000000000000000000", 1, Aid);
 
-        Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Interact(inception, foreign));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriKeyStateMachine.Interact(inception, foreign));
     }
 
 

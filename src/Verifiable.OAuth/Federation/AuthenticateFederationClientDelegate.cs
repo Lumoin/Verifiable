@@ -1,6 +1,5 @@
 using Verifiable.Core;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Federation;
 

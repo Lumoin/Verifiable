@@ -401,9 +401,9 @@ public static class DidCommFromPriorExtensions
         signingInputLength = checked(segment1.Length + 1 + segment2.Length);
         IMemoryOwner<byte> owner = pool.Rent(signingInputLength);
         Span<byte> span = owner.Memory.Span[..signingInputLength];
-        Encoding.ASCII.GetBytes(segment1, span);
+        _ = Encoding.ASCII.GetBytes(segment1, span);
         span[segment1.Length] = (byte)'.';
-        Encoding.ASCII.GetBytes(segment2, span[(segment1.Length + 1)..]);
+        _ = Encoding.ASCII.GetBytes(segment2, span[(segment1.Length + 1)..]);
 
         return owner;
     }

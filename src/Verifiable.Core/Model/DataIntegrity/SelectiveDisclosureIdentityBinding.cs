@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;

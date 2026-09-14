@@ -118,9 +118,9 @@ public static class JwsAccessTokenValidator
         }
 
         //Optional access-token-specific claims, read from the shared core's verified payload.
-        TryReadString(outcome.Payload!, WellKnownJwtClaimNames.ClientId, out string? clientId);
-        TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Scope, out string? scope);
-        TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
+        _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.ClientId, out string? clientId);
+        _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Scope, out string? scope);
+        _ = TryReadString(outcome.Payload!, WellKnownJwtClaimNames.Jti, out string? jti);
         ConfirmationMethod? confirmation = TryReadConfirmation(outcome.Payload!);
 
         //RFC 8693 §4.1/§4.4: act and may_act are nested JSON objects whose members identify a party.
@@ -382,7 +382,7 @@ public static class JwsAccessTokenValidator
         //OIDC Core §3.1.3.7 azp coordination — a present azp must equal the recipient's own client_id,
         //and a multi-valued aud must carry azp. Enforced only when the caller supplies the expected
         //authorized party (the party validating azp); azp is otherwise surfaced but not enforced.
-        TryReadString(payload, WellKnownJwtClaimNames.Azp, out string? azp);
+        _ = TryReadString(payload, WellKnownJwtClaimNames.Azp, out string? azp);
         if(expectedAuthorizedParty is not null)
         {
             if(azp is null)

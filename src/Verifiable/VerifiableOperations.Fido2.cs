@@ -1,15 +1,10 @@
-using System;
+using Lumoin.Base;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;

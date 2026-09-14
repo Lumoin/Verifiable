@@ -1,16 +1,9 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.IO;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography.Pki.Xml;
 
@@ -336,6 +329,9 @@ public static class PreservationAsicExtensionXmlBinding
             PreservationAsicExtensionKind.ValidationReport => ReadValidationReport(content, criticality, limits, pool),
             PreservationAsicExtensionKind.IsMetaDataOf => ReadValue(
                 content, limits, static value => new PreservationIsMetaDataOfExtension { Reference = value }, criticality),
+            PreservationAsicExtensionKind.None => PreservationAsicExtensionParseResult.Failed(
+                PreservationAsicExtensionParseStatus.PayloadNotRecognized,
+                $"'{kind}' is not a payload clause 5.5 states."),
             _ => PreservationAsicExtensionParseResult.Failed(
                 PreservationAsicExtensionParseStatus.PayloadNotRecognized,
                 $"'{kind}' is not a payload clause 5.5 states.")

@@ -1,4 +1,3 @@
-using Verifiable.Core;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
@@ -36,7 +35,7 @@ internal sealed class AuthorizationDetailsJsonParsingTests
 
         IReadOnlyList<AuthorizationDetail>? details =
             await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                json, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                json, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(details);
         Assert.HasCount(1, details!);
@@ -76,7 +75,7 @@ internal sealed class AuthorizationDetailsJsonParsingTests
 
         IReadOnlyList<AuthorizationDetail>? details =
             await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                json, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                json, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(details);
         AuthorizationDetail detail = details![0];
@@ -107,10 +106,10 @@ internal sealed class AuthorizationDetailsJsonParsingTests
 
         IReadOnlyList<AuthorizationDetail>? details =
             await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                json, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                json, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(details);
-        Assert.AreEqual("payment_initiation", details![0].Type);
+        Assert.AreEqual("payment_initiation", details[0].Type);
         Assert.IsEmpty(details[0].ExtensionData);
     }
 
@@ -135,7 +134,7 @@ internal sealed class AuthorizationDetailsJsonParsingTests
         {
             IReadOnlyList<AuthorizationDetail>? details =
                 await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                    invalid, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                    invalid, [], TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNull(details, $"Value must not parse: {invalid}");
         }
@@ -151,10 +150,10 @@ internal sealed class AuthorizationDetailsJsonParsingTests
     {
         IReadOnlyList<AuthorizationDetail>? details =
             await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                "[]", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                "[]", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(details);
-        Assert.IsEmpty(details!);
+        Assert.IsEmpty(details);
     }
 
 
@@ -177,10 +176,10 @@ internal sealed class AuthorizationDetailsJsonParsingTests
 
         IReadOnlyList<AuthorizationDetail>? details =
             await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                json, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                json, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(details);
-        AuthorizationDetail detail = details![0];
+        AuthorizationDetail detail = details[0];
 
         Assert.IsNull(detail.Locations);
         Assert.IsNull(detail.Identifier);
@@ -209,9 +208,9 @@ internal sealed class AuthorizationDetailsJsonParsingTests
 
         IReadOnlyList<AuthorizationDetail>? details =
             await AuthorizationDetailsJsonParsing.ParseAuthorizationDetails(
-                json, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+                json, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(details);
-        Assert.IsEmpty(details![0].MalformedCommonFields);
+        Assert.IsEmpty(details[0].MalformedCommonFields);
     }
 }

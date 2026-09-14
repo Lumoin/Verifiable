@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 /// <summary>
@@ -205,7 +201,7 @@ public sealed class PathLattice
             {
                 if(AllPaths.Contains(ancestor))
                 {
-                    result.Add(ancestor);
+                    _ = result.Add(ancestor);
                 }
             }
         }

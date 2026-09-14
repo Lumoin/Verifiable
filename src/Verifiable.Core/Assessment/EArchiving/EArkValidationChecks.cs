@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
@@ -3008,15 +3003,17 @@ public static class EArkValidationChecks
             return true;
         }
 
-        //Why no plan could be stated, in the words the claim's subject reads in. Kept exhaustive so that a
-        //further status added to the plan is a compilation decision rather than a silent default.
+        //Why no plan could be stated, in the words the claim's subject reads in. Every declared status
+        //has its own wording, and a value outside the declared enum reads as no anchor plan at all.
         static string DescribePlan(EArkProvenanceAnchorStatus status) => status switch
         {
+            EArkProvenanceAnchorStatus.NotEvaluated => "no anchor plan at all",
             EArkProvenanceAnchorStatus.Stated => "a plan whose entries the evidence does not prove",
             EArkProvenanceAnchorStatus.NoProvenanceReferenced => "no digital-provenance reference to anchor",
             EArkProvenanceAnchorStatus.ReferencedEntryMissing => "a digital-provenance reference naming an entry it does not hold",
             EArkProvenanceAnchorStatus.ManifestMissing => "no manifest entry for the references to be anchored with",
             EArkProvenanceAnchorStatus.LimitExceeded => "more entries to anchor than the anchor admits",
+
             _ => "no anchor plan at all"
         };
     }

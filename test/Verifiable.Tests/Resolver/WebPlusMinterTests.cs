@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
@@ -485,7 +482,7 @@ internal sealed class WebPlusMinterTests
     /// <returns>The mutated header.</returns>
     private static JsonObject WithoutKid(JsonObject header)
     {
-        header.Remove("kid");
+        _ = header.Remove("kid");
 
         return header;
     }
@@ -496,7 +493,7 @@ internal sealed class WebPlusMinterTests
     /// <returns>The mutated header.</returns>
     private static JsonObject WithoutAlg(JsonObject header)
     {
-        header.Remove("alg");
+        _ = header.Remove("alg");
 
         return header;
     }
@@ -524,7 +521,7 @@ internal sealed class WebPlusMinterTests
     /// <returns>The mutated header.</returns>
     private static JsonObject WithoutCrit(JsonObject header)
     {
-        header.Remove("crit");
+        _ = header.Remove("crit");
 
         return header;
     }
@@ -551,7 +548,7 @@ internal sealed class WebPlusMinterTests
     private static string DropSelfHashQueryParameter(string verificationMethodId)
     {
         int selfHash = verificationMethodId.IndexOf("selfHash=", StringComparison.Ordinal);
-        int nextParameter = verificationMethodId.IndexOf('&', selfHash);
+        int nextParameter = verificationMethodId.IndexOf('&', selfHash, StringComparison.Ordinal);
 
         return verificationMethodId.Remove(selfHash, nextParameter - selfHash + 1);
     }
@@ -573,7 +570,7 @@ internal sealed class WebPlusMinterTests
     {
         _ = proofs;
 
-        return new JsonArray();
+        return [];
     }
 
 

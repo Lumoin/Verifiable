@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -259,7 +258,7 @@ public static class BearerTokenValidation
             JwtPayload payload;
             try
             {
-                payload = new JwtPayload(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
+                payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
             }
             catch(Exception ex) when(ex is FormatException or InvalidOperationException)
             {

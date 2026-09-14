@@ -63,7 +63,7 @@ public abstract class CBAdESDetachedObjectDereferenceResult
 /// A successfully dereferenced detached data object.
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedObjectDereferenceSuccess: {Content.Length} bytes")]
-public sealed class CBAdESDetachedObjectDereferenceSuccess : CBAdESDetachedObjectDereferenceResult
+public sealed class CBAdESDetachedObjectDereferenceSuccess: CBAdESDetachedObjectDereferenceResult
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedObjectDereferenceSuccess"/>.</summary>
     /// <param name="content">
@@ -95,7 +95,7 @@ public sealed class CBAdESDetachedObjectDereferenceSuccess : CBAdESDetachedObjec
 /// from under a comparison.
 /// </remarks>
 [DebuggerDisplay("CBAdESDetachedObjectDereferenceFailure: {Reason}")]
-public sealed class CBAdESDetachedObjectDereferenceFailure : CBAdESDetachedObjectDereferenceResult, IEquatable<CBAdESDetachedObjectDereferenceFailure>
+public sealed class CBAdESDetachedObjectDereferenceFailure: CBAdESDetachedObjectDereferenceResult, IEquatable<CBAdESDetachedObjectDereferenceFailure>
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedObjectDereferenceFailure"/>.</summary>
     /// <param name="reason">A human-readable statement of why dereferencing failed.</param>
@@ -260,14 +260,14 @@ public sealed class CBAdESDetachedObjectDereferenceException: Exception
     /// Initializes a new instance (the standard parameterless exception constructor .NET convention expects;
     /// every throw site in this library uses the classified overload below instead).
     /// </summary>
-    public CBAdESDetachedObjectDereferenceException(): base("A detached data object could not be dereferenced.")
+    public CBAdESDetachedObjectDereferenceException() : base("A detached data object could not be dereferenced.")
     {
     }
 
 
     /// <summary>Initializes a new instance with a message.</summary>
     /// <param name="message">The message that describes the error.</param>
-    public CBAdESDetachedObjectDereferenceException(string message): base(message)
+    public CBAdESDetachedObjectDereferenceException(string message) : base(message)
     {
     }
 
@@ -275,7 +275,7 @@ public sealed class CBAdESDetachedObjectDereferenceException: Exception
     /// <summary>Initializes a new instance with a message and an inner exception.</summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of this exception.</param>
-    public CBAdESDetachedObjectDereferenceException(string message, Exception innerException): base(message, innerException)
+    public CBAdESDetachedObjectDereferenceException(string message, Exception innerException) : base(message, innerException)
     {
     }
 

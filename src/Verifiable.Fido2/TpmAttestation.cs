@@ -569,7 +569,7 @@ public static class TpmAttestation
                     return HasTpmDeviceAttributes(directoryNameContent);
                 }
 
-                generalNames.ReadEncodedValue();
+                _ = generalNames.ReadEncodedValue();
             }
 
             return false;
@@ -606,7 +606,7 @@ public static class TpmAttestation
             {
                 AsnReader attributeTypeAndValue = relativeDistinguishedName.ReadSequence();
                 string attributeOid = attributeTypeAndValue.ReadObjectIdentifier();
-                attributeTypeAndValue.ReadEncodedValue();
+                _ = attributeTypeAndValue.ReadEncodedValue();
                 if(attributeTypeAndValue.HasData)
                 {
                     return false;

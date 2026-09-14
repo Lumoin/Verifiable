@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -251,6 +247,7 @@ public static class CardVerifiableCertificateChain
             subjectRole is CertificateRole.DocumentVerifierOfficialDomestic or CertificateRole.DocumentVerifierNonOfficialOrForeign,
         CertificateRole.DocumentVerifierOfficialDomestic or CertificateRole.DocumentVerifierNonOfficialOrForeign =>
             subjectRole == CertificateRole.Terminal,
+        CertificateRole.Terminal => false,
         _ => false
     };
 }

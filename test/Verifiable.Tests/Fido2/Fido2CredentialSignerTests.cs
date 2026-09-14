@@ -1,10 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Signers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using Microsoft.Extensions.Time.Testing;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Crypto.Signers;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -146,7 +146,7 @@ internal sealed class Fido2CredentialSignerTests
 
 
     /// <summary>The <c>authData</c> flags byte every valid ceremony in this class carries: user present and user verified.</summary>
-    internal static byte ValidFlags => (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit);
+    internal static byte ValidFlags => AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit;
 
 
     /// <summary>

@@ -1,6 +1,3 @@
-using System;
-using System.Buffers;
-
 namespace Verifiable.Core.Model.Mdoc;
 
 /// <summary>

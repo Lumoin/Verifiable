@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using CsCheck;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 

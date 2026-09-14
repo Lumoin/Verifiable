@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Verifiable.Core.StatusList;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -336,7 +335,7 @@ internal sealed class StatusListJsonConverterTests
         var options = CreateOptions();
         const string json = /*lang=json,strict*/ """{"lst":"eNrbuRgAAhcBXQ"}""";
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<StatusListType>(json, options));
     }
 
@@ -346,7 +345,7 @@ internal sealed class StatusListJsonConverterTests
         var options = CreateOptions();
         const string json = /*lang=json,strict*/ """{"bits":1}""";
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<StatusListType>(json, options));
     }
 
@@ -356,7 +355,7 @@ internal sealed class StatusListJsonConverterTests
         var options = CreateOptions();
         string json = "{\"uri\":\"" + ExampleTokenSubject + "\"}";
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<StatusListReference>(json, options));
     }
 
@@ -366,7 +365,7 @@ internal sealed class StatusListJsonConverterTests
         var options = CreateOptions();
         const string json = /*lang=json,strict*/ """{"idx":0}""";
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<StatusListReference>(json, options));
     }
 

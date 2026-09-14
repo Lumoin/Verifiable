@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Verifiable.Cryptography.Text;
@@ -87,30 +85,30 @@ public static class StepUpAuthenticationChallenge
         }
 
         StringBuilder builder = new();
-        builder.Append(scheme).Append(' ');
+        _ = builder.Append(scheme).Append(' ');
         AppendQuotedParameter(builder, ErrorParameter, OAuthErrors.InsufficientUserAuthentication);
 
         if(!string.IsNullOrEmpty(errorDescription))
         {
-            builder.Append(", ");
+            _ = builder.Append(", ");
             AppendQuotedParameter(builder, ErrorDescriptionParameter, errorDescription);
         }
 
         if(acrValues is { Count: > 0 })
         {
-            builder.Append(", ");
+            _ = builder.Append(", ");
             AppendQuotedParameter(builder, AcrValuesParameter, string.Join(' ', acrValues));
         }
 
         if(maxAgeSeconds is int maxAge)
         {
-            builder.Append(", ");
+            _ = builder.Append(", ");
             AppendQuotedParameter(builder, MaxAgeParameter, maxAge.ToString(CultureInfo.InvariantCulture));
         }
 
         if(scopes is { Count: > 0 })
         {
-            builder.Append(", ");
+            _ = builder.Append(", ");
             AppendQuotedParameter(builder, ScopeParameter, string.Join(' ', scopes));
         }
 
@@ -128,6 +126,6 @@ public static class StepUpAuthenticationChallenge
             .Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
 
-        builder.Append(name).Append("=\"").Append(escaped).Append('"');
+        _ = builder.Append(name).Append("=\"").Append(escaped).Append('"');
     }
 }

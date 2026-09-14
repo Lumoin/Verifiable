@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
@@ -14,10 +13,9 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
+using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
-using Verifiable.OAuth.Server.Pipeline;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
@@ -48,7 +46,7 @@ internal sealed class ResolveIssuerDelegateTests
         Uri contextUri = new("https://fallback.example");
 
         ClientRecord registration = BuildRegistration(issuerUri: registrationUri);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetIssuer(contextUri);
 
         Uri resolved = await DefaultIssuerResolver.ResolveAsync(
@@ -66,7 +64,7 @@ internal sealed class ResolveIssuerDelegateTests
         Uri contextUri = new("https://derived.example");
 
         ClientRecord registration = BuildRegistration(issuerUri: null);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetIssuer(contextUri);
 
         Uri resolved = await DefaultIssuerResolver.ResolveAsync(
@@ -82,7 +80,7 @@ internal sealed class ResolveIssuerDelegateTests
     public async Task DefaultIssuerResolverThrowsWhenBothAreUnset()
     {
         ClientRecord registration = BuildRegistration(issuerUri: null);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
 
         InvalidOperationException thrown = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () => await DefaultIssuerResolver.ResolveAsync(
@@ -135,7 +133,7 @@ internal sealed class ResolveIssuerDelegateTests
     public async Task DefaultIssuerResolverThrowsWhenRegistrationIssuerHasQueryComponent()
     {
         ClientRecord registration = BuildRegistration(issuerUri: new Uri("https://as.example.com?tenant=a"));
-        ExchangeContext context = new();
+        ExchangeContext context = [];
 
         InvalidOperationException thrown = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () => await DefaultIssuerResolver.ResolveAsync(
@@ -155,9 +153,9 @@ internal sealed class ResolveIssuerDelegateTests
         Uri overrideUri = new("https://policy-chosen.example");
 
         ClientRecord registration = BuildRegistration(issuerUri: registrationUri);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
 
-        ResolveIssuerDelegate customResolver = (_, _, _) =>
+        ValueTask<Uri> customResolver(ClientRecord _1, ExchangeContext _2, CancellationToken _3) =>
             ValueTask.FromResult(overrideUri);
 
         Uri resolved = await customResolver(
@@ -183,7 +181,7 @@ internal sealed class ResolveIssuerDelegateTests
             "2026-04-22T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
 
         await using TestHostShell app = new(timeProvider);
-        app.SeedTestSubject(subject: "subject-r9207-004");
+        _ = app.SeedTestSubject(subject: "subject-r9207-004");
 
         using VerifierKeyMaterial material = app.RegisterDpopClient(
             "client-r9207-004", new Uri("https://client.example.com"));
@@ -196,7 +194,7 @@ internal sealed class ResolveIssuerDelegateTests
 
         ServerHttpResponse discoveryResponse = await app.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.MetadataDiscovery, "GET",
-            new RequestFields(), new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, discoveryResponse.StatusCode, discoveryResponse.Body);
 
         using JsonDocument discoveryBody = JsonDocument.Parse(discoveryResponse.Body);
@@ -215,7 +213,7 @@ internal sealed class ResolveIssuerDelegateTests
         };
         ServerHttpResponse parResponse = await app.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            parFields, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
         using JsonDocument parBody = JsonDocument.Parse(parResponse.Body);
@@ -226,7 +224,7 @@ internal sealed class ResolveIssuerDelegateTests
             [OAuthRequestParameterNames.ClientId] = material.Registration.ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId("subject-r9207-004");
 
         ServerHttpResponse authorizeResponse = await app.DispatchAtEndpointAsync(
@@ -237,7 +235,7 @@ internal sealed class ResolveIssuerDelegateTests
         string location = authorizeResponse.Location!;
         int issIndex = location.IndexOf("iss=", StringComparison.Ordinal);
         Assert.IsGreaterThanOrEqualTo(0, issIndex, $"Redirect must carry iss. Location: {location}");
-        int ampIndex = location.IndexOf('&', issIndex);
+        int ampIndex = location.IndexOf('&', issIndex, StringComparison.Ordinal);
         string issRaw = ampIndex < 0 ? location[(issIndex + 4)..] : location[(issIndex + 4)..ampIndex];
         string redirectIssuer = Uri.UnescapeDataString(issRaw);
 
@@ -338,7 +336,7 @@ internal sealed class ResolveIssuerDelegateTests
         string location = authorizeResponse.Headers.Location!.ToString();
         int issIndex = location.IndexOf("iss=", StringComparison.Ordinal);
         Assert.IsGreaterThanOrEqualTo(0, issIndex, $"Redirect must carry iss. Location: {location}");
-        int ampIndex = location.IndexOf('&', issIndex);
+        int ampIndex = location.IndexOf('&', issIndex, StringComparison.Ordinal);
         string issRaw = ampIndex < 0 ? location[(issIndex + 4)..] : location[(issIndex + 4)..ampIndex];
         string redirectIssuer = Uri.UnescapeDataString(issRaw);
 
@@ -366,7 +364,7 @@ internal sealed class ResolveIssuerDelegateTests
         //The registration declares IssuerUri as https://issuer.test/{segment} per
         //TestHostShell. The discovery endpoint must use that value, not any context
         //override, because the resolver prefers the registration.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(new Uri("https://wrong.context.example"));
 
@@ -564,6 +562,7 @@ internal sealed class ResolveIssuerDelegateTests
         {
             case 2: padded += "=="; break;
             case 3: padded += "="; break;
+            default: break;
         }
         return Convert.FromBase64String(padded);
     }

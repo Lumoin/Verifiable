@@ -1,22 +1,13 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -96,7 +87,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
 
-        var input = new GetRandomInput((ushort)PlaintextLength);
+        var input = new GetRandomInput(PlaintextLength);
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
             device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -158,7 +149,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
 
-        var input = new GetRandomInput((ushort)PlaintextLength);
+        var input = new GetRandomInput(PlaintextLength);
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
             device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -305,7 +296,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
 
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
 
-        var input = new GetRandomInput((ushort)PlaintextLength);
+        var input = new GetRandomInput(PlaintextLength);
         TpmResult<GetRandomResponse> result = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
             device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -431,7 +422,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_FlushContext, TpmResponseCodec.FlushContext);
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when the encrypt attribute is inadmissible.");
 
@@ -449,7 +440,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         //FlushContext has no response parameters, so the encrypt attribute cannot apply.
         var input = FlushContextInput.ForHandle(0x80000000u);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await TpmCommandExecutor.ExecuteAsync<FlushContextResponse>(
                 device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -463,7 +454,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when two sessions both set the decrypt attribute.");
 
@@ -485,7 +476,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         FillPattern(probe, 0x55);
         using var input = new EncryptableProbeInput(probe, pool);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
                 device, input, [first, second], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -498,7 +489,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         var registry = new TpmResponseRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetRandom, TpmResponseCodec.GetRandom);
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             Assert.Fail("The device must not be invoked when parameter encryption is inadmissible.");
 
@@ -518,14 +509,14 @@ internal sealed class TpmParameterEncryptionExecutorTests
             Span<byte> probe = stackalloc byte[8];
             FillPattern(probe, 0x66);
             using var encryptable = new EncryptableProbeInput(probe, pool);
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
                     device, encryptable, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
         else
         {
             var plain = new GetRandomInput(8);
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
                     device, plain, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
@@ -651,7 +642,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
             hmacInput.Memory[..hmacInputLength], sessionKey, outputByteLength: SessionKeyLength, tag: HmacTag(), pool: pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         //authArea = TPM2B(nonceTPM new) || sessionAttributes || TPM2B(hmac).
-        int authAreaLength = (sizeof(ushort) + nonceTpmNew.Length) + 1 + (sizeof(ushort) + hmacValue.AsReadOnlySpan().Length);
+        int authAreaLength = sizeof(ushort) + nonceTpmNew.Length + 1 + sizeof(ushort) + hmacValue.AsReadOnlySpan().Length;
         int bodySize = sizeof(uint) + paramAreaLength + authAreaLength; //parameterSize field + params + auth.
         int total = HeaderSize + bodySize;
 
@@ -691,7 +682,7 @@ internal sealed class TpmParameterEncryptionExecutorTests
         IMemoryOwner<byte> frame = pool.Rent(HeaderSize);
         var writer = new TpmWriter(frame.Memory.Span[..HeaderSize]);
         writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_NO_SESSIONS);
-        writer.WriteUInt32((uint)HeaderSize);
+        writer.WriteUInt32(HeaderSize);
         writer.WriteUInt32((uint)responseCode);
 
         return SuccessFrame(frame, HeaderSize);

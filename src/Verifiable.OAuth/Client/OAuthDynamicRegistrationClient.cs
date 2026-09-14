@@ -39,7 +39,7 @@ public readonly struct OAuthDynamicRegistrationClient
     public ValueTask<DynamicRegistrationResult> RegisterAsync(
         RegisterClientOptions options,
         CancellationToken cancellationToken) =>
-        RegisterAsync(options, new ExchangeContext(), cancellationToken);
+        RegisterAsync(options, [], cancellationToken);
 
 
     /// <inheritdoc cref="RegisterAsync(RegisterClientOptions, CancellationToken)"/>
@@ -71,7 +71,7 @@ public readonly struct OAuthDynamicRegistrationClient
     public ValueTask<ClientMetadata> ReadAsync(
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        ReadAsync(registration, new ExchangeContext(), cancellationToken);
+        ReadAsync(registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="ReadAsync(ClientRegistration, CancellationToken)"/>
@@ -104,7 +104,7 @@ public readonly struct OAuthDynamicRegistrationClient
         ClientRegistration registration,
         ClientMetadata newMetadata,
         CancellationToken cancellationToken) =>
-        UpdateAsync(registration, newMetadata, new ExchangeContext(), cancellationToken);
+        UpdateAsync(registration, newMetadata, [], cancellationToken);
 
 
     /// <inheritdoc cref="UpdateAsync(ClientRegistration, ClientMetadata, CancellationToken)"/>
@@ -139,7 +139,7 @@ public readonly struct OAuthDynamicRegistrationClient
     public ValueTask DeregisterAsync(
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        DeregisterAsync(registration, new ExchangeContext(), cancellationToken);
+        DeregisterAsync(registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="DeregisterAsync(ClientRegistration, CancellationToken)"/>

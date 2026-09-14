@@ -42,7 +42,7 @@ internal sealed class JwtPartJsonTests
         byte[] bytes = Encoding.UTF8.GetBytes("{not-valid-json");
 
         FormatException exception = Assert.ThrowsExactly<FormatException>(() => JwtPartJson.Default(bytes));
-        Assert.IsInstanceOfType<System.Text.Json.JsonException>(exception.InnerException);
+        _ = Assert.IsInstanceOfType<System.Text.Json.JsonException>(exception.InnerException);
     }
 
 
@@ -52,6 +52,6 @@ internal sealed class JwtPartJsonTests
     {
         byte[] bytes = Encoding.UTF8.GetBytes("null");
 
-        Assert.ThrowsExactly<FormatException>(() => JwtPartJson.Default(bytes));
+        _ = Assert.ThrowsExactly<FormatException>(() => JwtPartJson.Default(bytes));
     }
 }

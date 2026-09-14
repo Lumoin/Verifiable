@@ -1,12 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
@@ -90,8 +85,7 @@ internal sealed class SsfHttpFlowTests
         //The receiver's push endpoint: every request is one SET; the reception
         //pipeline decides 202 versus 400 + {err, description} per RFC 8935.
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen =
-            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+        ValueTask<bool> isSeen(string jti, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(jti));
 
         async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
         {
@@ -109,7 +103,7 @@ internal sealed class SsfHttpFlowTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -163,15 +157,14 @@ internal sealed class SsfHttpFlowTests
         using PrivateKeyMemory transmitterPrivate = keys.PrivateKey;
 
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen =
-            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+        ValueTask<bool> isSeen(string jti, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(jti));
 
         async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
         {
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -216,15 +209,14 @@ internal sealed class SsfHttpFlowTests
         using PrivateKeyMemory transmitterPrivate = keys.PrivateKey;
 
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen =
-            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+        ValueTask<bool> isSeen(string jti, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(jti));
 
         async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
         {
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -268,15 +260,14 @@ internal sealed class SsfHttpFlowTests
         using PrivateKeyMemory transmitterPrivate = keys.PrivateKey;
 
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen =
-            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+        ValueTask<bool> isSeen(string jti, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(jti));
 
         async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
         {
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -395,8 +386,7 @@ internal sealed class SsfHttpFlowTests
 
         //Receive each SET through the same pipeline push uses; collect acks.
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen =
-            (candidate, _, _) => ValueTask.FromResult(!seenJtis.Add(candidate));
+        ValueTask<bool> isSeen(string candidate, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(candidate));
 
         List<string> toAcknowledge = [];
         foreach(KeyValuePair<string, string> delivered in first.Sets)
@@ -404,7 +394,7 @@ internal sealed class SsfHttpFlowTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 delivered.Value, transmitterPublic, TransmitterIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool,
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.AreEqual(SsfDeliveryOutcome.Accepted, decision.Outcome);

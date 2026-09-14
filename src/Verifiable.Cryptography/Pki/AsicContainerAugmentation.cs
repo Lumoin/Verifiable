@@ -1,12 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -231,14 +225,14 @@ public sealed class AsicContainerAugmentationException: Exception
 
 
     /// <summary>Initializes a new <see cref="AsicContainerAugmentationException"/> with an unclassified fault.</summary>
-    public AsicContainerAugmentationException(): this(AsicContainerAugmentationFailureKind.ContainerNotRead, "The container could not be augmented.")
+    public AsicContainerAugmentationException() : this(AsicContainerAugmentationFailureKind.ContainerNotRead, "The container could not be augmented.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="AsicContainerAugmentationException"/> with an unclassified fault.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public AsicContainerAugmentationException(string message): this(AsicContainerAugmentationFailureKind.ContainerNotRead, message)
+    public AsicContainerAugmentationException(string message) : this(AsicContainerAugmentationFailureKind.ContainerNotRead, message)
     {
     }
 
@@ -255,7 +249,7 @@ public sealed class AsicContainerAugmentationException: Exception
     /// <summary>Initializes a new <see cref="AsicContainerAugmentationException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public AsicContainerAugmentationException(AsicContainerAugmentationFailureKind failureKind, string message): base(message)
+    public AsicContainerAugmentationException(AsicContainerAugmentationFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -1939,7 +1933,7 @@ public static class AsicContainerAugmentation
         DateTimeOffset lastModified,
         BaseMemoryPool pool)
     {
-        List<AsicZipEntrySource> entries = CarryEntriesForward(container, replacements, new Dictionary<string, string>(StringComparer.Ordinal), lastModified);
+        List<AsicZipEntrySource> entries = CarryEntriesForward(container, replacements, new(StringComparer.Ordinal), lastModified);
         PooledMemory augmented = WriteContainer(container, entries, lastModified, pool);
         try
         {

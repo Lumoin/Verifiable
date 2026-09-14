@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
@@ -471,7 +469,7 @@ public static class CBAdESSerialization
             CborThrowHelper.ThrowMissingRequiredMapKey(CBAdESWireKeys.ObjectIdentifierId);
         }
 
-        return new AdESObjectIdentifier(id!, desc, docRefs);
+        return new AdESObjectIdentifier(id, desc, docRefs);
 
         static bool AssignId(CborReader reader, ref string? id)
         {
@@ -628,7 +626,7 @@ public static class CBAdESSerialization
             CborThrowHelper.ThrowMissingRequiredMapKey(CBAdESWireKeys.PkiObjectVal);
         }
 
-        return new AdESPkiObject { Val = val!, Encoding = encoding, SpecRef = specRef };
+        return new AdESPkiObject { Val = val, Encoding = encoding, SpecRef = specRef };
 
         static bool AssignVal(CborReader reader, ref byte[]? val)
         {
@@ -835,7 +833,7 @@ public static class CBAdESSerialization
                 CborThrowHelper.ThrowMissingRequiredMapKey(CBAdESWireKeys.TimestampTokenVal);
             }
 
-            return new AdESTimestampToken { Val = val!, Type = type, Encoding = encoding, SpecRef = specRef };
+            return new AdESTimestampToken { Val = val, Type = type, Encoding = encoding, SpecRef = specRef };
 
             static bool AssignVal(CborReader reader, ref byte[]? val)
             {
@@ -923,7 +921,7 @@ public static class CBAdESSerialization
             var reader = new CborReader(encoded, CborOptions.RfcCanonical);
             int count = reader.ReadStartArrayExpectLengthRange(AdESCertificateThumbprints.MinimumThumbprintCount, int.MaxValue);
 
-            thumbprints = new List<AdESCertificateThumbprint>(Math.Min(count, 64));
+            thumbprints = new(Math.Min(count, 64));
             for(int i = 0; i < count; i++)
             {
                 ReadHashAlgorithmDigestPair(reader, pool, out AdESDigestAlgorithmIdentifier hashAlgorithm, out DigestValue digest);
@@ -1349,7 +1347,7 @@ public static class CBAdESSerialization
         {
             writer.WriteInt32(CBAdESWireKeys.SignerAttributesSignedAssertions);
             writer.WriteStartArray(attributes.SignedAssertions.Count);
-            foreach(CBAdESSignerAttributeNotCertifiedItem item in attributes.SignedAssertions)
+            foreach(CBAdESSignerAttributeNotCertifiedItem item in attributes.SignedAssertions.Cast<CBAdESSignerAttributeNotCertifiedItem>())
             {
                 WriteNotCertifiedItem(writer, item);
             }
@@ -1361,7 +1359,7 @@ public static class CBAdESSerialization
         {
             writer.WriteInt32(CBAdESWireKeys.SignerAttributesClaimed);
             writer.WriteStartArray(attributes.Claimed.Count);
-            foreach(CBAdESSignerAttributeNotCertifiedItem item in attributes.Claimed)
+            foreach(CBAdESSignerAttributeNotCertifiedItem item in attributes.Claimed.Cast<CBAdESSignerAttributeNotCertifiedItem>())
             {
                 WriteNotCertifiedItem(writer, item);
             }
@@ -2211,7 +2209,7 @@ public static class CBAdESSerialization
                 throw new CborContentException("sigD's 'ctys' shall have exactly as many elements as 'pars' (CB-5.2.8-24).");
             }
 
-            entries = new List<CBAdESDetachedObjectEntry>(references.Count);
+            entries = new(references.Count);
             for(int i = 0; i < references.Count; i++)
             {
                 DigestValue? digest = null;

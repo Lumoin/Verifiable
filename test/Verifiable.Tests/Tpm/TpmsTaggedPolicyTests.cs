@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Tpm.Spec.Algorithms;
 
 namespace Verifiable.Tests.Tpm;

@@ -1,12 +1,8 @@
-using System;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using System.Net.WebSockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -174,7 +170,7 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
                 throw new InvalidOperationException($"The envelope MUST arrive as a binary frame, not {envelopeFrame}.");
             }
 
-            Received.TrySetResult(new DidCommWebSocketDelivery(Encoding.UTF8.GetString(mediaTypeBytes), envelopeBytes));
+            _ = Received.TrySetResult(new DidCommWebSocketDelivery(Encoding.UTF8.GetString(mediaTypeBytes), envelopeBytes));
 
             await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "received", context.RequestAborted).ConfigureAwait(false);
         }
@@ -182,7 +178,7 @@ internal sealed class DidCommWebSocketInbox: IAsyncDisposable
         {
             //Forwarded to the awaiter through the TaskCompletionSource, never swallowed: whatever fault
             //this receive loop hits becomes the observable outcome the test awaits on.
-            Received.TrySetException(ex);
+            _ = Received.TrySetException(ex);
         }
     }
 }

@@ -1,7 +1,5 @@
-using System;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -181,7 +179,7 @@ internal sealed class CmsCertificatesSetToleranceTests
     /// reports facts about the structure's own bytes.
     /// </summary>
     [TestMethod]
-    public async Task TheAppendedGarbageMemberStillReportsMalformedThroughTheEmbeddedMaterialObservationChannel()
+    public void TheAppendedGarbageMemberStillReportsMalformedThroughTheEmbeddedMaterialObservationChannel()
     {
         using ECDsa signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 signerCertificate = CmsSignedDataTestFactory.MintSelfSignedCertificate(signingKey, NotBefore, NotAfter);

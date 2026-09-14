@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using Verifiable.Core.Transport;
-
 namespace Verifiable.Tests.Core;
 
 /// <summary>
@@ -213,7 +209,7 @@ internal sealed class HttpHeaderSetTests
         HttpHeaderSet headers = builder.Build();
 
         Assert.HasCount(2, headers.GetValues("Set-Cookie"), "RFC 9110 Section 5.3: a field composed as a list carries every field line the caller declared.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = builder.AddValues("Set-Cookie", ["c=3"]),
             "RFC 9110 Section 5.3: even a list-valued field is declared once; a second declaration would append field lines behind the caller's back.");
     }
@@ -348,13 +344,13 @@ internal sealed class HttpHeaderSetTests
     [DataRow("Accept/Json")]
     public void AFieldNameThatIsNotATokenIsRefused(string name)
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = HttpHeaderSet.FromPairs((name, JsonMediaType)),
             $"RFC 9110 Section 5.6.2: '{name}' is not a token, so it is not a field name.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = new HttpHeaderSet.Builder().Add(name, JsonMediaType),
             $"RFC 9110 Section 5.6.2: '{name}' is not a token, so the builder refuses it too.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = HttpHeaderSet.Empty.With(name, JsonMediaType),
             $"RFC 9110 Section 5.6.2: '{name}' is not a token, so it cannot be composed onto an existing set.");
     }
@@ -377,13 +373,13 @@ internal sealed class HttpHeaderSetTests
     [DataRow("application/json\0")]
     public void AFieldValueCarryingCarriageReturnLineFeedOrNulIsRefused(string value)
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = HttpHeaderSet.FromPairs((WellKnownHttpHeaderNames.ContentType, value)),
             "RFC 9110 Section 5.5: a field value containing CR, LF, or NUL is invalid and dangerous and is rejected.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = new HttpHeaderSet.Builder().Add(WellKnownHttpHeaderNames.ContentType, value),
             "RFC 9110 Section 5.5: the builder rejects such a value at every composition point.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = HttpHeaderSet.Empty.WithValues(WellKnownHttpHeaderNames.ContentType, [value]),
             "RFC 9110 Section 5.5: a list-valued composition rejects such a value too.");
     }

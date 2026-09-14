@@ -1,9 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -12,7 +11,6 @@ using Verifiable.Apdu.Pace;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
@@ -187,7 +185,7 @@ internal sealed class CardSimulatorPaceTests
                 paceCurve: CryptoTags.BrainpoolP256r1ExchangePublicKey, paceChipAuthenticationKey: staticKey, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
             using ApduDevice device = ApduDevice.Create(card.TransceiveAsync);
 
-            await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+            _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
                 async () => await EstablishPaceAsync(
                     device, Convert.FromHexString(ChipAuthenticationMappingPaceOid), Convert.FromHexString(MappingPrivateIfd), wrongPublicKey.AsReadOnlyMemory()).ConfigureAwait(false)).ConfigureAwait(false);
         }
@@ -350,7 +348,7 @@ internal sealed class CardSimulatorPaceTests
     /// <summary>
     /// Resolves a registered cryptographic delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

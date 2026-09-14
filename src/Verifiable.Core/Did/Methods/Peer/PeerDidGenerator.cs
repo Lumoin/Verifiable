@@ -1,10 +1,8 @@
-using System;
 using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Core.Model.Did;
+using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Did.Methods.Peer;
 
@@ -96,7 +94,7 @@ public static class PeerDidGenerator
         using(IMemoryOwner<byte> jsonBytes = pool.Rent(jsonByteCount))
         {
             Span<byte> jsonSpan = jsonBytes.Memory.Span[..jsonByteCount];
-            Encoding.UTF8.GetBytes(json, jsonSpan);
+            _ = Encoding.UTF8.GetBytes(json, jsonSpan);
             encodedDocument = MultibaseSerializer.Encode(jsonSpan, MulticodecHeaders.Json, MultibaseAlgorithms.Base58Btc, base58Encoder, pool);
         }
 
@@ -106,14 +104,14 @@ public static class PeerDidGenerator
         using(IMemoryOwner<byte> encodedBytes = pool.Rent(encodedByteCount))
         {
             Span<byte> encodedSpan = encodedBytes.Memory.Span[..encodedByteCount];
-            Encoding.UTF8.GetBytes(encodedDocument, encodedSpan);
-            hashFunction(encodedSpan, digest);
+            _ = Encoding.UTF8.GetBytes(encodedDocument, encodedSpan);
+            _ = hashFunction(encodedSpan, digest);
         }
 
         ReadOnlySpan<byte> sha256Code = MultihashHeaders.Sha2Bits256;
         Span<byte> multihashPrefix = stackalloc byte[sha256Code.Length + 1];
         sha256Code.CopyTo(multihashPrefix);
-        multihashPrefix[sha256Code.Length] = (byte)Sha256DigestLength;
+        multihashPrefix[sha256Code.Length] = Sha256DigestLength;
         string hashPortion = MultibaseSerializer.Encode(digest, multihashPrefix, MultibaseAlgorithms.Base58Btc, base58Encoder, pool);
 
         return $"did:peer:4{hashPortion}:{encodedDocument}";
@@ -265,8 +263,8 @@ public static class PeerDidGenerator
 
         foreach(PeerDidPurposedKey key in keys)
         {
-            builder.Append('.').Append(PurposeCode(key.Purpose));
-            builder.Append(MultibaseSerializer.EncodeKey(key.Key, base58Encoder, pool));
+            _ = builder.Append('.').Append(PurposeCode(key.Purpose));
+            _ = builder.Append(MultibaseSerializer.EncodeKey(key.Key, base58Encoder, pool));
         }
 
         foreach(Service service in services)
@@ -275,8 +273,8 @@ public static class PeerDidGenerator
             int byteCount = Encoding.UTF8.GetByteCount(abbreviated);
             using IMemoryOwner<byte> serviceBytes = pool.Rent(byteCount);
             Span<byte> serviceSpan = serviceBytes.Memory.Span[..byteCount];
-            Encoding.UTF8.GetBytes(abbreviated, serviceSpan);
-            builder.Append(".S").Append(Base64Url.EncodeToString(serviceSpan));
+            _ = Encoding.UTF8.GetBytes(abbreviated, serviceSpan);
+            _ = builder.Append(".S").Append(Base64Url.EncodeToString(serviceSpan));
         }
 
         return builder.ToString();

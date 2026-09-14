@@ -65,7 +65,7 @@ public static class MdocDcqlAdapter
         {
             ArgumentNullException.ThrowIfNull(document);
 
-            HashSet<CredentialPath> availablePaths = new();
+            HashSet<CredentialPath> availablePaths = [];
             foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in document.IssuerSigned.NameSpaces)
             {
                 foreach(MdocIssuerSignedItem item in nsEntry.Value)
@@ -73,7 +73,7 @@ public static class MdocDcqlAdapter
                     DcqlClaimPattern pattern = DcqlClaimPattern.ForMdoc(nsEntry.Key, item.ElementIdentifier);
                     if(pattern.TryResolve(out CredentialPath path))
                     {
-                        availablePaths.Add(path);
+                        _ = availablePaths.Add(path);
                     }
                 }
             }
@@ -97,7 +97,7 @@ public static class MdocDcqlAdapter
     /// <see langword="false"/> — DCQL wildcard expansion runs through
     /// <see cref="DcqlPathResolver"/> before the extractor is invoked.
     /// </summary>
-    public static DcqlClaimExtractor<MdocDocument> ClaimExtractor { get; } = static (MdocDocument document, DcqlClaimPattern pattern, out object? value) =>
+    public static DcqlClaimExtractor<MdocDocument> ClaimExtractor { get; } = static (document, pattern, out value) =>
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(pattern);

@@ -1,13 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
@@ -47,7 +41,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-unpaired-absent",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-unpaired-absent", BaseMemoryPool.Shared);
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
 
@@ -81,7 +75,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-unpaired-false",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-unpaired-false", BaseMemoryPool.Shared);
         using CtapPlatformPinSession session = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);
 
@@ -120,7 +114,7 @@ internal sealed class CtapAuthenticatorHmacSecretMcFlowTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x75);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-positive",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("hmac-secret-mc-positive", BaseMemoryPool.Shared);
 
         using CtapPlatformPinSession mcSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.One, pool, cancellationToken).ConfigureAwait(false);

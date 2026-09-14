@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -538,7 +536,7 @@ namespace Verifiable.Core.Model.Did
         {
             if(string.IsNullOrEmpty(Query))
             {
-                return new Dictionary<string, string>();
+                return [];
             }
 
             var parameters = new Dictionary<string, string>();
@@ -625,26 +623,26 @@ namespace Verifiable.Core.Model.Did
             }
 
             var builder = new StringBuilder();
-            builder.Append("did:");
-            builder.Append(Method);
-            builder.Append(':');
-            builder.Append(MethodSpecificId);
+            _ = builder.Append("did:");
+            _ = builder.Append(Method);
+            _ = builder.Append(':');
+            _ = builder.Append(MethodSpecificId);
 
             if(!string.IsNullOrEmpty(Path))
             {
-                builder.Append(Path);
+                _ = builder.Append(Path);
             }
 
             if(!string.IsNullOrEmpty(Query))
             {
-                builder.Append('?');
-                builder.Append(Query);
+                _ = builder.Append('?');
+                _ = builder.Append(Query);
             }
 
             if(!string.IsNullOrEmpty(Fragment))
             {
-                builder.Append('#');
-                builder.Append(Fragment);
+                _ = builder.Append('#');
+                _ = builder.Append(Fragment);
             }
 
             return builder.ToString();

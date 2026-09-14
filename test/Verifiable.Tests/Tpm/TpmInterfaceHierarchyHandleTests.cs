@@ -137,7 +137,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhNvIndex.IsNvIndex((uint)TpmRh.TPM_RH_OWNER));
 
-        AssertRefuses<TpmiRhNvIndex>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref TpmReader reader) => TpmiRhNvIndex.Parse(ref reader));
+        AssertRefuses<TpmiRhNvIndex>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref reader) => TpmiRhNvIndex.Parse(ref reader));
     }
 
     /// <summary>
@@ -231,7 +231,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
             Assert.IsFalse(TpmiRhNvDefinedIndex.IsDefinedIndex(value));
             Assert.IsTrue(TpmiRhNvIndex.IsNvIndex(value));
 
-            AssertRefuses<TpmiRhNvDefinedIndex>(Encode(value), (ref TpmReader reader) => TpmiRhNvDefinedIndex.Parse(ref reader));
+            AssertRefuses<TpmiRhNvDefinedIndex>(Encode(value), (ref reader) => TpmiRhNvDefinedIndex.Parse(ref reader));
         }
     }
 
@@ -300,7 +300,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
             Assert.IsFalse(TpmiRhNvLegacyIndex.IsLegacyIndex(value));
             Assert.IsTrue(TpmiRhNvDefinedIndex.IsDefinedIndex(value));
 
-            AssertRefuses<TpmiRhNvLegacyIndex>(Encode(value), (ref TpmReader reader) => TpmiRhNvLegacyIndex.Parse(ref reader));
+            AssertRefuses<TpmiRhNvLegacyIndex>(Encode(value), (ref reader) => TpmiRhNvLegacyIndex.Parse(ref reader));
         }
     }
 
@@ -315,7 +315,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
         {
             Assert.IsFalse(TpmiRhNvLegacyIndex.IsLegacyIndex(value));
 
-            AssertRefuses<TpmiRhNvLegacyIndex>(Encode(value), (ref TpmReader reader) => TpmiRhNvLegacyIndex.Parse(ref reader));
+            AssertRefuses<TpmiRhNvLegacyIndex>(Encode(value), (ref reader) => TpmiRhNvLegacyIndex.Parse(ref reader));
         }
     }
 
@@ -415,7 +415,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhNvAuth.IsNvAuth((uint)TpmRh.TPM_RH_LOCKOUT));
 
-        AssertRefuses<TpmiRhNvAuth>(Encode((uint)TpmRh.TPM_RH_LOCKOUT), (ref TpmReader reader) => TpmiRhNvAuth.Parse(ref reader));
+        AssertRefuses<TpmiRhNvAuth>(Encode((uint)TpmRh.TPM_RH_LOCKOUT), (ref reader) => TpmiRhNvAuth.Parse(ref reader));
     }
 
     /// <summary>
@@ -475,7 +475,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhEndorsement.IsEndorsement((uint)TpmRh.TPM_RH_NULL));
 
-        AssertRefuses<TpmiRhEndorsement>(Encode((uint)TpmRh.TPM_RH_NULL), (ref TpmReader reader) => TpmiRhEndorsement.Parse(ref reader));
+        AssertRefuses<TpmiRhEndorsement>(Encode((uint)TpmRh.TPM_RH_NULL), (ref reader) => TpmiRhEndorsement.Parse(ref reader));
     }
 
     /// <summary>
@@ -509,7 +509,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhEndorsement.IsEndorsement((uint)TpmRh.TPM_RH_OWNER, isNullAdmitted: true));
 
-        AssertRefuses<TpmiRhEndorsement>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref TpmReader reader) => TpmiRhEndorsement.Parse(ref reader));
+        AssertRefuses<TpmiRhEndorsement>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref reader) => TpmiRhEndorsement.Parse(ref reader));
     }
 
     /// <summary>
@@ -589,7 +589,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhProvision.IsProvision((uint)TpmRh.TPM_RH_ENDORSEMENT));
 
-        AssertRefuses<TpmiRhProvision>(Encode((uint)TpmRh.TPM_RH_ENDORSEMENT), (ref TpmReader reader) => TpmiRhProvision.Parse(ref reader));
+        AssertRefuses<TpmiRhProvision>(Encode((uint)TpmRh.TPM_RH_ENDORSEMENT), (ref reader) => TpmiRhProvision.Parse(ref reader));
     }
 
     /// <summary>
@@ -649,7 +649,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhPlatform.IsPlatform((uint)TpmRh.TPM_RH_OWNER));
 
-        AssertRefuses<TpmiRhPlatform>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref TpmReader reader) => TpmiRhPlatform.Parse(ref reader));
+        AssertRefuses<TpmiRhPlatform>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref reader) => TpmiRhPlatform.Parse(ref reader));
     }
 
     /// <summary>
@@ -708,7 +708,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhOwner.IsOwner((uint)TpmRh.TPM_RH_NULL));
 
-        AssertRefuses<TpmiRhOwner>(Encode((uint)TpmRh.TPM_RH_NULL), (ref TpmReader reader) => TpmiRhOwner.Parse(ref reader));
+        AssertRefuses<TpmiRhOwner>(Encode((uint)TpmRh.TPM_RH_NULL), (ref reader) => TpmiRhOwner.Parse(ref reader));
     }
 
     /// <summary>
@@ -742,7 +742,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhOwner.IsOwner((uint)TpmRh.TPM_RH_PLATFORM, isNullAdmitted: true));
 
-        AssertRefuses<TpmiRhOwner>(Encode((uint)TpmRh.TPM_RH_PLATFORM), (ref TpmReader reader) => TpmiRhOwner.Parse(ref reader));
+        AssertRefuses<TpmiRhOwner>(Encode((uint)TpmRh.TPM_RH_PLATFORM), (ref reader) => TpmiRhOwner.Parse(ref reader));
     }
 
     /// <summary>
@@ -802,7 +802,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhLockout.IsLockout((uint)TpmRh.TPM_RH_PLATFORM));
 
-        AssertRefuses<TpmiRhLockout>(Encode((uint)TpmRh.TPM_RH_PLATFORM), (ref TpmReader reader) => TpmiRhLockout.Parse(ref reader));
+        AssertRefuses<TpmiRhLockout>(Encode((uint)TpmRh.TPM_RH_PLATFORM), (ref reader) => TpmiRhLockout.Parse(ref reader));
     }
 
     /// <summary>
@@ -882,7 +882,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhClear.IsClear((uint)TpmRh.TPM_RH_OWNER));
 
-        AssertRefuses<TpmiRhClear>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref TpmReader reader) => TpmiRhClear.Parse(ref reader));
+        AssertRefuses<TpmiRhClear>(Encode((uint)TpmRh.TPM_RH_OWNER), (ref reader) => TpmiRhClear.Parse(ref reader));
     }
 
     /// <summary>
@@ -983,7 +983,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhBaseHierarchy.IsBaseHierarchy((uint)TpmRh.TPM_RH_LOCKOUT));
 
-        AssertRefuses<TpmiRhBaseHierarchy>(Encode((uint)TpmRh.TPM_RH_LOCKOUT), (ref TpmReader reader) => TpmiRhBaseHierarchy.Parse(ref reader));
+        AssertRefuses<TpmiRhBaseHierarchy>(Encode((uint)TpmRh.TPM_RH_LOCKOUT), (ref reader) => TpmiRhBaseHierarchy.Parse(ref reader));
     }
 
     /// <summary>
@@ -1104,7 +1104,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhEnables.IsEnables((uint)TpmRh.TPM_RH_NULL));
 
-        AssertRefuses<TpmiRhEnables>(Encode((uint)TpmRh.TPM_RH_NULL), (ref TpmReader reader) => TpmiRhEnables.Parse(ref reader));
+        AssertRefuses<TpmiRhEnables>(Encode((uint)TpmRh.TPM_RH_NULL), (ref reader) => TpmiRhEnables.Parse(ref reader));
     }
 
     /// <summary>
@@ -1138,7 +1138,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhEnables.IsEnables((uint)TpmRh.TPM_RH_LOCKOUT, isNullAdmitted: true));
 
-        AssertRefuses<TpmiRhEnables>(Encode((uint)TpmRh.TPM_RH_LOCKOUT), (ref TpmReader reader) => TpmiRhEnables.Parse(ref reader));
+        AssertRefuses<TpmiRhEnables>(Encode((uint)TpmRh.TPM_RH_LOCKOUT), (ref reader) => TpmiRhEnables.Parse(ref reader));
     }
 
     /// <summary>
@@ -1282,7 +1282,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhHierarchyPolicy.IsHierarchyPolicy((uint)TpmRh.TPM_RH_NULL));
 
-        AssertRefuses<TpmiRhHierarchyPolicy>(Encode((uint)TpmRh.TPM_RH_NULL), (ref TpmReader reader) => TpmiRhHierarchyPolicy.Parse(ref reader));
+        AssertRefuses<TpmiRhHierarchyPolicy>(Encode((uint)TpmRh.TPM_RH_NULL), (ref reader) => TpmiRhHierarchyPolicy.Parse(ref reader));
     }
 
     /// <summary>
@@ -1403,7 +1403,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhHierarchyAuth.IsHierarchyAuth((uint)TpmRh.TPM_RH_NULL));
 
-        AssertRefuses<TpmiRhHierarchyAuth>(Encode((uint)TpmRh.TPM_RH_NULL), (ref TpmReader reader) => TpmiRhHierarchyAuth.Parse(ref reader));
+        AssertRefuses<TpmiRhHierarchyAuth>(Encode((uint)TpmRh.TPM_RH_NULL), (ref reader) => TpmiRhHierarchyAuth.Parse(ref reader));
     }
 
     /// <summary>
@@ -1438,7 +1438,7 @@ internal sealed class TpmInterfaceHierarchyHandleTests
     {
         Assert.IsFalse(TpmiRhHierarchyAuth.IsHierarchyAuth((uint)TpmRh.TPM_RH_PLATFORM_NV, isNullAdmitted: true));
 
-        AssertRefuses<TpmiRhHierarchyAuth>(Encode((uint)TpmRh.TPM_RH_PLATFORM_NV), (ref TpmReader reader) => TpmiRhHierarchyAuth.Parse(ref reader));
+        AssertRefuses<TpmiRhHierarchyAuth>(Encode((uint)TpmRh.TPM_RH_PLATFORM_NV), (ref reader) => TpmiRhHierarchyAuth.Parse(ref reader));
     }
 
     /// <summary>

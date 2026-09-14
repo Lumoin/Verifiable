@@ -1,9 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -141,7 +137,7 @@ internal static class SdCwtPipeline
     {
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString(protectedHeader);
         writer.WriteStartMap(0);

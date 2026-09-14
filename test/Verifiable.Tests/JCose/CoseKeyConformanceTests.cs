@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Linq;
 using Verifiable.JCose;
 
 namespace Verifiable.Tests.JCose;
@@ -147,7 +146,7 @@ internal sealed class CoseKeyConformanceTests
     [TestMethod]
     public void UsesCompressedPointEncodingRejectsNullKey()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CoseKeyConformance.UsesCompressedPointEncoding(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CoseKeyConformance.UsesCompressedPointEncoding(null!));
     }
 
 
@@ -188,7 +187,7 @@ internal sealed class CoseKeyConformanceTests
     [TestMethod]
     public void UnsupportedKeyTypeIsRejectedForBothLabelSetQueries()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Symmetric));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Symmetric));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CoseKeyConformance.RequiredParameterLabels(CoseKeyTypes.Symmetric));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => CoseKeyConformance.AllowedParameterLabels(CoseKeyTypes.Symmetric));
     }
 }

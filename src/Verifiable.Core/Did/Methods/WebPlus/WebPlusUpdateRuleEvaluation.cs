@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Core.Did.Methods.WebPlus;
 
 /// <summary>
@@ -59,7 +56,7 @@ public static class WebPlusUpdateRuleEvaluation
             else
             {
                 bool result = frame.Finalize();
-                stack.Pop();
+                _ = stack.Pop();
                 if(stack.Count > 0)
                 {
                     Frame parent = stack.Peek();

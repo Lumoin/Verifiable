@@ -1,14 +1,8 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -104,7 +98,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         using PublicKeyMemory opPublic = opKeys.PublicKey;
 
         await using TestHostShell op = new(TimeProvider);
-        op.SeedTestSubject(subject: SubjectId);
+        _ = op.SeedTestSubject(subject: SubjectId);
 
         //Two relying parties, each a real receiver endpoint over loopback Kestrel. Each
         //verifies an incoming Logout Token against the OP public key and its own
@@ -174,7 +168,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
             WellKnownEndpointNames.EndSession,
             "GET",
             new RequestFields { [OAuthRequestParameterNames.IdTokenHint] = rp1IdToken },
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, response.StatusCode, response.Body);
 
@@ -215,12 +209,12 @@ internal sealed class FederatedBackChannelLogoutHttpTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            parFields, [], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         using JsonDocument parDoc = JsonDocument.Parse(parResponse.Body);
         string requestUri = parDoc.RootElement.GetProperty("request_uri").GetString()!;
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetSessionId(sessionId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -244,7 +238,7 @@ internal sealed class FederatedBackChannelLogoutHttpTests
                 [OAuthRequestParameterNames.ClientId] = clientId,
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             },
-            new ExchangeContext(), cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+            [], cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
         using JsonDocument tokenDoc = JsonDocument.Parse(tokenResponse.Body);
@@ -362,7 +356,7 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
     public void SeedSession(string sessionId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-        ActiveSessions.Add(sessionId);
+        _ = ActiveSessions.Add(sessionId);
     }
 
 
@@ -413,7 +407,7 @@ internal sealed class RelyingPartyReceiver: IAsyncDisposable
         //§2.6 sid: drop the session this Logout Token names.
         if(result.SessionId is not null)
         {
-            ActiveSessions.Remove(result.SessionId);
+            _ = ActiveSessions.Remove(result.SessionId);
             VerifiedSessionIdList.Add(result.SessionId);
         }
 

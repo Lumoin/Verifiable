@@ -14,10 +14,10 @@ namespace Verifiable.Core
         /// Ed25519VerificationKey2020 deprecation information.
         /// </summary>
         internal const string Ed25519VerificationKey2020Message = "This crypto suite is deprecated. Consider using the another suite instead.";
-        
+
         /// <summary>
         /// Ed25519VerificationKey2020 deprecation diagnostic code.
         /// </summary>
-        internal const string Ed25519VerificationKey2020DiagId = "VF0001";        
+        internal const string Ed25519VerificationKey2020DiagId = "VF0001";
     }
 }

@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm;
@@ -541,7 +537,7 @@ public sealed partial class TpmDevice: IDisposable, IObservable<TpmExchange>
             }
 
             //Extract st_mode and check the file type bits.
-            uint stMode = MemoryMarshal.Read<uint>(statBuf.Slice(StModeOffset));
+            uint stMode = MemoryMarshal.Read<uint>(statBuf[StModeOffset..]);
             if((stMode & S_IFMT) != S_IFCHR)
             {
                 throw new IOException(

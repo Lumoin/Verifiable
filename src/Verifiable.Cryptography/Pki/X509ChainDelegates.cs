@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Linq;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -245,7 +241,7 @@ public delegate X509CertificateProfile ReadCertificateProfileDelegate(
 /// A certificate whose relevant extension is absent reads every affected constraint as
 /// <see langword="false"/>.
 /// </summary>
-public sealed class X509CertificateProfile : IEquatable<X509CertificateProfile>
+public sealed class X509CertificateProfile: IEquatable<X509CertificateProfile>
 {
     /// <summary>
     /// Gets whether the certificate's Key Usage asserts <c>digitalSignature</c>;

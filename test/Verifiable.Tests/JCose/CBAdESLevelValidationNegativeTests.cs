@@ -1,10 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Nist;
@@ -13,6 +7,8 @@ using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Operators;
 using Org.BouncyCastle.Tsp;
 using Org.BouncyCastle.Utilities.Collections;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -157,7 +153,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESSignatureTimestampTokenCountViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-6.3-c must be collected.");
-        Assert.AreEqual(2, violation!.TokenCount);
+        Assert.AreEqual(2, violation.TokenCount);
     }
 
 
@@ -198,7 +194,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESTimestampTokenNotBaselineViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-6.3-02 must be collected.");
-        Assert.AreEqual(CBAdESTimestampContainerKind.SignatureTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampContainerKind.SignatureTimestamp, violation.Kind);
     }
 
 
@@ -234,7 +230,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESTimestampTokenNotBaselineViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-6.3-02 must be collected for adoTst too.");
-        Assert.AreEqual(CBAdESTimestampContainerKind.PayloadTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampContainerKind.PayloadTimestamp, violation.Kind);
     }
 
 
@@ -316,7 +312,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESRefsFamilyForbiddenViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-6.3-23 must be collected.");
-        Assert.AreEqual(CBAdESRefsFamilyKind.References, violation!.Kind);
+        Assert.AreEqual(CBAdESRefsFamilyKind.References, violation.Kind);
         Assert.AreEqual("CB-6.3-23", violation.RequirementId);
     }
 
@@ -397,7 +393,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESTimestampTokenBindingViolation>(failure.Violations);
         Assert.IsNotNull(violation, "The imprint-mismatch violation must be collected.");
-        Assert.AreEqual(CBAdESTimestampTokenBindingKind.SignatureTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampTokenBindingKind.SignatureTimestamp, violation.Kind);
         Assert.AreEqual(CBAdESTimestampTokenBindingFailureReason.ImprintMismatch, violation.Reason);
     }
 
@@ -440,7 +436,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESTimestampTokenBindingViolation>(failure.Violations);
         Assert.IsNotNull(violation, "The MD5 token must surface as an unreadable token, never silently accepted.");
-        Assert.AreEqual(CBAdESTimestampTokenBindingKind.SignatureTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampTokenBindingKind.SignatureTimestamp, violation.Kind);
         Assert.AreEqual(CBAdESTimestampTokenBindingFailureReason.TokenNotRead, violation.Reason);
     }
 
@@ -483,7 +479,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESReferencesValidationDataConsistencyViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-A.1.1-30 must be collected.");
-        Assert.AreEqual(CBAdESReferenceMaterialKind.Certificate, violation!.Kind);
+        Assert.AreEqual(CBAdESReferenceMaterialKind.Certificate, violation.Kind);
     }
 
 
@@ -573,7 +569,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESReferencesValidationDataConsistencyViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-A.1.1-30 must be collected on the arcTst arm alone.");
-        Assert.AreEqual(CBAdESReferenceMaterialKind.Certificate, violation!.Kind);
+        Assert.AreEqual(CBAdESReferenceMaterialKind.Certificate, violation.Kind);
     }
 
 
@@ -731,7 +727,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
             var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
             var violation = FindViolation<CBAdESTimestampSignerCertificateCoverageViolation>(failure.Violations);
             Assert.IsNotNull(violation, "CB-6.3-h must be collected for a token whose embedded material could not be read.");
-            Assert.AreEqual(CBAdESTimestampTokenBindingKind.SignatureTimestamp, violation!.Kind);
+            Assert.AreEqual(CBAdESTimestampTokenBindingKind.SignatureTimestamp, violation.Kind);
         }
         finally
         {
@@ -834,7 +830,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESArchiveTimestampMissingViolation>(failure.Violations);
         Assert.IsNotNull(violation, "CB-6.3-29 must be collected.");
-        Assert.AreEqual("CB-6.3-29", violation!.RequirementId);
+        Assert.AreEqual("CB-6.3-29", violation.RequirementId);
     }
 
 
@@ -1039,7 +1035,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESTimestampTokenBindingViolation>(failure.Violations);
         Assert.IsNotNull(violation, "The imprint-mismatch violation must be collected for the second instance's token.");
-        Assert.AreEqual(CBAdESTimestampTokenBindingKind.ArchiveTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampTokenBindingKind.ArchiveTimestamp, violation.Kind);
         Assert.AreEqual(CBAdESTimestampTokenBindingFailureReason.ImprintMismatch, violation.Reason);
     }
 
@@ -1313,7 +1309,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         var failure = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
         var violation = FindViolation<CBAdESTimestampTokenBindingViolation>(failure.Violations);
         Assert.IsNotNull(violation, "The unopenable token must surface as TokenNotRead.");
-        Assert.AreEqual(CBAdESTimestampTokenBindingFailureReason.TokenNotRead, violation!.Reason);
+        Assert.AreEqual(CBAdESTimestampTokenBindingFailureReason.TokenNotRead, violation.Reason);
 
         //result now OWNS the decoded headers/unsignedHeaders;
         //disposing it explicitly here is what "returns to the pool" means for this failure arm.
@@ -1448,14 +1444,14 @@ internal sealed class CBAdESLevelValidationNegativeTests
         //reports success; the now-canceled token is only observed once the level-aware token loop reaches its
         //own first per-token async step. The counter pins that this cancellation TRIGGER itself runs exactly
         //once, never once per uHeaders element.
-        VerificationDelegate verifyThenCancel = async (dataToVerify, signatureToVerify, publicKeyMaterial, context, cancellationToken) =>
+        async ValueTask<(bool IsVerified, CryptoEvent? Event)> verifyThenCancel(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signatureToVerify, ReadOnlyMemory<byte> publicKeyMaterial, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default)
         {
-            Interlocked.Increment(ref cancelTriggerCallCount);
+            _ = Interlocked.Increment(ref cancelTriggerCallCount);
             (bool isVerified, CryptoEvent? evt) = await MicrosoftCryptographicFunctions.VerifyP256Async(dataToVerify, signatureToVerify, publicKeyMaterial, new FakeTimeProvider(TestClock.CanonicalEpoch), context, cancellationToken).ConfigureAwait(false);
             await cts.CancelAsync().ConfigureAwait(false);
 
             return (isVerified, evt);
-        };
+        }
 
         using var metered = new MeteredHousePool();
 
@@ -1465,7 +1461,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
                 CoseSerialization.BuildSigStructure,
                 publicKey,
-                verifyThenCancel,
+verifyThenCancel,
                 dereference: null,
                 dereferenceContext: null,
                 externalDetachedPayload: null,
@@ -1866,7 +1862,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
     {
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
+        writer.WriteTag(new CborTag(18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
         writer.WriteStartArray(4);
         writer.WriteByteString(protectedHeader);
         WriteUnprotectedMapOracle(writer, uHeadersArrayBytes);
@@ -2162,7 +2158,7 @@ internal sealed class CBAdESLevelValidationNegativeTests
         }
 
         Fail(unexpectedException);
-        return default!;
+        return default;
 
         /// <summary>Reports <paramref name="exception"/> as an unconditional test failure and never returns.</summary>
         /// <param name="exception">The exception <see cref="ValidateAtLevelExpectingNoThrowAsync"/> caught.</param>

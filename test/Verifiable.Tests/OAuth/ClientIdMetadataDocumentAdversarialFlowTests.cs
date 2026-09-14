@@ -1,15 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Linq;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.OAuth;
@@ -18,8 +12,6 @@ using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.WellKnown;
-using Verifiable.Server;
 using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -402,7 +394,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             .ToArray();
         Assert.IsGreaterThan(0, handleActivities.Length, "At least one Handle activity for this tenant must be captured.");
         Assert.Contains(
-            (Activity a) => a.Events.Any(e => string.Equals(e.Name, PolicyDeniedEventName, StringComparison.Ordinal)),
+            a => a.Events.Any(e => string.Equals(e.Name, PolicyDeniedEventName, StringComparison.Ordinal)),
             handleActivities,
             "A policy-denial span event must be recorded on the request's Handle activity.");
     }
@@ -623,7 +615,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         Assert.IsFalse(string.IsNullOrEmpty(location));
 
         Assert.IsNotNull(captured, "The evaluation seam must have been invoked.");
-        Assert.AreEqual(documentUri.Host, captured!.ClientIdHost,
+        Assert.AreEqual(documentUri.Host, captured.ClientIdHost,
             "CIMD-053: the client_id hostname must be populated.");
         Assert.IsTrue(captured.HasFetchedClientMetadata,
             "CIMD-051: fetched mode must report that document-derived metadata is present.");
@@ -670,11 +662,11 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
                 .ConfigureAwait(false);
         HostedAuthorizationServer hosted = app.Host("default");
 
-        await DriveParAndAuthorizeAsync(
+        _ = await DriveParAndAuthorizeAsync(
             app, hosted, client, registration, flowStore, stub.TenantId.Value, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(materialized, "The evaluation seam must have been invoked.");
-        Assert.AreEqual(softwareStatement, materialized!.SoftwareStatement,
+        Assert.AreEqual(softwareStatement, materialized.SoftwareStatement,
             "CIMD-028: the document's software_statement must reach the materialized registration.");
     }
 
@@ -712,11 +704,11 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
                 .ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = app.Host("default");
-        await DriveParAndAuthorizeAsync(
+        _ = await DriveParAndAuthorizeAsync(
             app, hosted, client, registration, flowStore, stub.TenantId.Value, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(captured, "The evaluation seam must have been invoked.");
-        Assert.AreEqual(new Uri(clientId).Host, captured!.ClientIdHost,
+        Assert.AreEqual(new Uri(clientId).Host, captured.ClientIdHost,
             "CIMD-053: the client_id hostname must be populated regardless of fetch mode.");
         Assert.IsFalse(captured.HasFetchedClientMetadata,
             "CIMD-052: a pre-registered, never-fetched client must report no document-derived metadata.");
@@ -771,7 +763,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         ResolveClientMetadataDelegate resolve = ClientIdMetadataDocuments.BuildResolving(
             transport, new ClientIdMetadataDocumentResolverOptions { PrefetchLogo = true }, timeProvider);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
         ClientIdMetadataResolution first = await resolve(documentUri, context, TestContext.CancellationToken).ConfigureAwait(false);
@@ -1009,7 +1001,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
             .ToArray();
         Assert.IsGreaterThan(0, handleActivities.Length, "At least one Handle activity for this tenant must be captured.");
         Assert.Contains(
-            (Activity a) => a.Events.Any(e => string.Equals(e.Name, ClientIdMismatchEventName, StringComparison.Ordinal)),
+            a => a.Events.Any(e => string.Equals(e.Name, ClientIdMismatchEventName, StringComparison.Ordinal)),
             handleActivities,
             "A client-id-mismatch span event must be recorded on the request's Handle activity.");
     }
@@ -1229,7 +1221,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
         {
             ShouldListenTo = source =>
                 string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+            Sample = static (ref _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => captured.Add(activity)
         };
@@ -1260,7 +1252,7 @@ internal sealed class ClientIdMetadataDocumentAdversarialFlowTests
 
         public OutboundTransportDelegate Delegate => (request, context, cancellationToken) =>
         {
-            Interlocked.Increment(ref callCount);
+            _ = Interlocked.Increment(ref callCount);
 
             return ValueTask.FromResult(new OutboundResponse { StatusCode = 200 });
         };

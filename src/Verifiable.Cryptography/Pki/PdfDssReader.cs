@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography.Pki;
@@ -198,7 +196,7 @@ public static class PdfDssReader
         ReadOnlySpan<byte> s, Dictionary<long, long> objectOffsets, IReadOnlyDictionary<string, PdfValue> dssEntries,
         BaseMemoryPool pool, out Dictionary<string, PdfVriDictionary> vriEntries, [NotNullWhen(false)] out string? error)
     {
-        vriEntries = new Dictionary<string, PdfVriDictionary>(StringComparer.Ordinal);
+        vriEntries = new(StringComparer.Ordinal);
         error = null;
         if(!dssEntries.TryGetValue("VRI", out PdfValue vriMapValue))
         {

@@ -1,15 +1,12 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -36,7 +33,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //The protected-header serializer, mirroring the anoncrypt adversarial tests: the headers are a
     //Dictionary<string, object> the JWE layer hands to this delegate to produce the UTF-8 JSON bytes.
@@ -525,7 +522,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     {
         string token = $"\"{member}\":\"";
         int valueStart = wireJson.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = wireJson.IndexOf('"', valueStart);
+        int valueEnd = wireJson.IndexOf('"', valueStart, StringComparison.Ordinal);
         string originalValue = wireJson[valueStart..valueEnd];
 
         char[] chars = originalValue.ToCharArray();
@@ -541,8 +538,8 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     {
         string token = $"\"{member}\":";
         int memberStart = json.IndexOf(token, StringComparison.Ordinal);
-        int valueQuoteStart = json.IndexOf('"', memberStart + token.Length);
-        int valueQuoteEnd = json.IndexOf('"', valueQuoteStart + 1);
+        int valueQuoteStart = json.IndexOf('"', memberStart + token.Length, StringComparison.Ordinal);
+        int valueQuoteEnd = json.IndexOf('"', valueQuoteStart + 1, StringComparison.Ordinal);
         int afterValue = valueQuoteEnd + 1;
 
         if(afterValue < json.Length && json[afterValue] == ',')
@@ -550,7 +547,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
             return json[..memberStart] + json[(afterValue + 1)..];
         }
 
-        int commaPrev = json.LastIndexOf(',', memberStart);
+        int commaPrev = json.LastIndexOf(',', memberStart, StringComparison.Ordinal);
 
         return json[..commaPrev] + json[afterValue..];
     }
@@ -578,7 +575,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     {
         string token = $"\"{member}\":\"";
         int valueStart = json.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = json.IndexOf('"', valueStart);
+        int valueEnd = json.IndexOf('"', valueStart, StringComparison.Ordinal);
 
         return json[..valueStart] + newValue + json[valueEnd..];
     }
@@ -590,7 +587,7 @@ internal sealed class DidCommEncryptedAuthcryptAdversarialTests
     {
         const string token = "\"protected\":\"";
         int valueStart = wireJson.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = wireJson.IndexOf('"', valueStart);
+        int valueEnd = wireJson.IndexOf('"', valueStart, StringComparison.Ordinal);
         protectedEncoded = wireJson[valueStart..valueEnd];
 
         using IMemoryOwner<byte> decoded = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);

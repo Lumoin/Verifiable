@@ -109,12 +109,12 @@ namespace Verifiable.JCose
 
         public static string GetCanonicalizedValue(string kty) => kty switch
         {
-            string _ when IsEc(kty) => Ec,
-            string _ when IsOct(kty) => Oct,
-            string _ when IsOkp(kty) => Okp,
-            string _ when IsRsa(kty) => Rsa,
-            string _ when IsAkp(kty) => Akp,
-            string _ => kty
+            string when IsEc(kty) => Ec,
+            string when IsOct(kty) => Oct,
+            string when IsOkp(kty) => Okp,
+            string when IsRsa(kty) => Rsa,
+            string when IsAkp(kty) => Akp,
+            string => kty
         };
 
 

@@ -1,7 +1,4 @@
-using System.Buffers;
-using System.Text;
 using System.Text.Json;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -57,7 +54,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<GeneralJweShape>(result,
+        _ = Assert.IsInstanceOfType<GeneralJweShape>(result,
             "An object with 'ciphertext' and a 'recipients' array is the general JWE JSON form (RFC 7516 §7.2.1).");
         Assert.AreEqual(token, ((GeneralJweShape)result).Value,
             "GeneralJweShape must carry the original wire string verbatim.");
@@ -71,7 +68,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<FlattenedJweShape>(result,
+        _ = Assert.IsInstanceOfType<FlattenedJweShape>(result,
             "An object with 'ciphertext' and a top-level 'encrypted_key' (no 'recipients') is the flattened JWE JSON form (RFC 7516 §7.2.2).");
         Assert.AreEqual(token, ((FlattenedJweShape)result).Value,
             "FlattenedJweShape must carry the original wire string verbatim.");
@@ -85,7 +82,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<GeneralJwsShape>(result,
+        _ = Assert.IsInstanceOfType<GeneralJwsShape>(result,
             "An object with 'payload' and a 'signatures' array is the general JWS JSON form (RFC 7515 §7.2.1).");
         Assert.AreEqual(token, ((GeneralJwsShape)result).Value,
             "GeneralJwsShape must carry the original wire string verbatim.");
@@ -99,7 +96,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<FlattenedJwsShape>(result,
+        _ = Assert.IsInstanceOfType<FlattenedJwsShape>(result,
             "An object with 'payload' and a top-level 'signature' (no 'signatures' array) is the flattened JWS JSON form (RFC 7515 §7.2.2).");
         Assert.AreEqual(token, ((FlattenedJwsShape)result).Value,
             "FlattenedJwsShape must carry the original wire string verbatim.");
@@ -115,7 +112,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "An object carrying both JWS and JWE members must classify as MalformedShape (RFC 7516 §9).");
     }
 
@@ -129,7 +126,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "A JWE JSON object with neither 'recipients' nor a top-level 'encrypted_key' must classify as MalformedShape.");
     }
 
@@ -142,7 +139,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "A JSON object that is neither a JWS nor a JWE must classify as MalformedShape.");
     }
 
@@ -157,7 +154,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<GeneralJweShape>(result,
+        _ = Assert.IsInstanceOfType<GeneralJweShape>(result,
             "Leading whitespace before '{' must route to the JSON classification path (RFC 7516 §9).");
     }
 
@@ -171,7 +168,7 @@ internal sealed class JoseTokenClassifierJsonTests
 
         JoseTokenShape result = await ClassifyAsync(token).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "A truncated JSON object must classify as MalformedShape rather than throw.");
     }
 }

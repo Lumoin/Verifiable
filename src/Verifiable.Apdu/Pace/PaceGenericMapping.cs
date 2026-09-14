@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 
@@ -210,7 +207,7 @@ public static class PaceGenericMapping
     /// <summary>
     /// Resolves a registered delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

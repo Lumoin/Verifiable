@@ -1,6 +1,5 @@
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.Server.States;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server;
 

@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
@@ -81,7 +80,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential], "notif-pq-1"));
         WireMlKemResponseEncryptionSeam(host);
@@ -94,7 +93,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         //request leg uses the classical ECDH-ES request-encryption channel — independent of the
         //post-quantum KEM the response leg exercises.
         using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
-        using PrivateKeyMemory _ = issuerPrivate;
+        using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string encryptedRequest = await EncryptToIssuerAsync(
@@ -126,7 +125,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireMlKemResponseEncryptionSeam(host);
@@ -137,7 +136,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
 
         //§8.2: the request carrying credential_response_encryption MUST itself be encrypted.
         using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
-        using PrivateKeyMemory _ = issuerPrivate;
+        using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string encryptedRequest = await EncryptToIssuerAsync(
@@ -152,7 +151,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         parts[1] = TestSetup.Base64UrlEncoder(encapsulation.Memory.Span);
         string tampered = string.Join('.', parts);
 
-        await Assert.ThrowsAsync<CryptographicException>(
+        _ = await Assert.ThrowsAsync<CryptographicException>(
             async () => await DecryptMlKemJweAsync(tampered, walletKemPrivate).ConfigureAwait(false))
             .ConfigureAwait(false);
     }
@@ -208,7 +207,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
         using AeadMessage parsedJwe = JweParsing.ParseCompact(
             compactJwe,
             WellKnownJweAlgorithms.EcdhEs,
-            enc!,
+            enc,
             TestSetup.Base64UrlDecoder,
             Pool);
 
@@ -331,7 +330,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
             new RequestFields(),
             BearerHeaders(accessToken),
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -356,7 +355,7 @@ internal sealed class Oid4VciPostQuantumEncryptionTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, tokenResponse.StatusCode, tokenResponse.Body);

@@ -1,6 +1,5 @@
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Foundation;
 
 namespace Verifiable.OAuth.StatusList;
 
@@ -170,6 +169,12 @@ public static class StatusListTokenFetch
                 OutboundFetchOutcome.DeniedByPolicy => StatusListTokenFetchOutcome.PolicyDenied,
                 OutboundFetchOutcome.RedirectNotFollowed or OutboundFetchOutcome.TooManyRedirects
                     => StatusListTokenFetchOutcome.RedirectNotFollowed,
+
+                //Fetched is not reachable here — this branch runs only when
+                //!fetch.IsFetched — but is kept mapped to the same transport-failure
+                //fallback rather than a throw, matching this seam's fail-closed-by-return design.
+                OutboundFetchOutcome.Fetched => StatusListTokenFetchOutcome.TransportFailed,
+
                 _ => StatusListTokenFetchOutcome.TransportFailed
             };
 
@@ -196,7 +201,7 @@ public static class StatusListTokenFetch
             };
         }
 
-        response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+        _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
         if(!IsAcceptableContentType(contentType, mediaType))
         {
             return new StatusListTokenFetchResult

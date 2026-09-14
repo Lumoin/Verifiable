@@ -1,12 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -153,7 +149,7 @@ internal sealed class Oid4VciCredentialOfferEndpointTests
             WellKnownEndpointNames.Oid4VciCredentialOffer,
             WellKnownHttpMethods.Get,
             new RequestFields { [CredentialOfferParameterNames.Id] = offerId },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

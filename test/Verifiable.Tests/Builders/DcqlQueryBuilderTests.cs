@@ -177,7 +177,7 @@ internal class DcqlQueryBuilderTests
     {
         var builder = new DcqlQueryBuilder();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await builder.BuildAsync(TestContext.CancellationToken)
                 .ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -211,7 +211,7 @@ internal class DcqlQueryBuilderTests
                 [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.FamilyName])]);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await builder.BuildAsync(TestContext.CancellationToken)
                 .ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -322,7 +322,7 @@ internal class DcqlQueryBuilderTests
     [TestMethod]
     public void ForWildcardPathWithEmptySegmentsThrows()
     {
-        Assert.Throws<ArgumentException>(
+        _ = Assert.Throws<ArgumentException>(
             () => ClaimsQuery.ForWildcardPath([]));
     }
 

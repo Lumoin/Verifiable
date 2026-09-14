@@ -1,10 +1,8 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -12,11 +10,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -374,6 +367,7 @@ internal sealed class TpmInHouseSimulatorPublicOnlyAuthorizationTests
                 code = await ActivateCredentialCodeAsync(tpm, registry, pool, activate, ek.ObjectHandle).ConfigureAwait(false);
                 break;
             }
+            case PublicOnlyScenario.ActivateCredentialKeyHandle:
             default:
             {
                 using CreatePrimaryResponse ekTwin = await CreateStoragePrimaryAsync(tpm, registry, pool, TpmRh.TPM_RH_ENDORSEMENT).ConfigureAwait(false);

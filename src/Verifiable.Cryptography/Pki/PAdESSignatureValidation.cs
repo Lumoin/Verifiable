@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -373,6 +369,8 @@ public static class PAdESSignatureValidation
         CAdESVerificationStatus.InvalidTimestamp => PAdESSignatureStatus.InvalidTimestamp,
         CAdESVerificationStatus.TimestampImprintMismatch => PAdESSignatureStatus.TimestampImprintMismatch,
         CAdESVerificationStatus.Malformed => PAdESSignatureStatus.Malformed,
+        CAdESVerificationStatus.Valid => PAdESSignatureStatus.InvalidSignature,
+        CAdESVerificationStatus.InvalidSignature => PAdESSignatureStatus.InvalidSignature,
         _ => PAdESSignatureStatus.InvalidSignature
     };
 }

@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -129,9 +127,9 @@ internal sealed class AcdcCesrTests
     public void RejectsNonMessageFrame()
     {
         var buffer = new ArrayBufferWriter<byte>();
-        CesrFieldMapCodec.EncodeFieldMap(new MessageFieldMap(StringComparer.Ordinal), BaseMemoryPool.Shared, buffer);
+        CesrFieldMapCodec.EncodeFieldMap(new(StringComparer.Ordinal), BaseMemoryPool.Shared, buffer);
 
-        Assert.ThrowsExactly<AcdcException>(() => AcdcCesr.DecodeFieldMap(buffer.WrittenMemory, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcCesr.DecodeFieldMap(buffer.WrittenMemory, BaseMemoryPool.Shared));
     }
 
 
@@ -294,9 +292,9 @@ internal sealed class AcdcCesrTests
 
         AcdcMessage acdc = AcdcReader.Read(decoded);
         Assert.AreEqual(StableAcmSaid, acdc.Said);
-        Assert.IsInstanceOfType<ExpandedAcdcSection>(acdc.Attribute);
-        Assert.IsInstanceOfType<ExpandedAcdcSection>(acdc.Edge);
-        Assert.IsInstanceOfType<ExpandedAcdcSection>(acdc.Rule);
+        _ = Assert.IsInstanceOfType<ExpandedAcdcSection>(acdc.Attribute);
+        _ = Assert.IsInstanceOfType<ExpandedAcdcSection>(acdc.Edge);
+        _ = Assert.IsInstanceOfType<ExpandedAcdcSection>(acdc.Rule);
     }
 
 

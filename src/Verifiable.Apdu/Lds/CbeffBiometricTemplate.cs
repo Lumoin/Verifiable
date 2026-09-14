@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 
@@ -67,7 +66,7 @@ internal static class CbeffBiometricTemplate
         SkipElement(ref reader, BiometricHeaderTemplateTag, "biometric header template");
 
         int dataTag = ReadTag(ref reader);
-        if(dataTag != BiometricDataTag && dataTag != BiometricDataConstructedTag)
+        if(dataTag is not BiometricDataTag and not BiometricDataConstructedTag)
         {
             throw new InvalidOperationException($"{dataGroupName} has no biometric data block (expected tag 0x5F2E or 0x7F2E, found 0x{dataTag:X}).");
         }

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Fido2.Ctap.Authenticator.Automata;

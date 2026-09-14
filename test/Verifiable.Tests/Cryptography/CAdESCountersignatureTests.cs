@@ -1,13 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -16,7 +12,6 @@ using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
 using BcCmsSignedData = Org.BouncyCastle.Cms.CmsSignedData;
 using BcSignerInformation = Org.BouncyCastle.Cms.SignerInformation;
-using BcX509CertificateParser = Org.BouncyCastle.X509.X509CertificateParser;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -182,9 +177,9 @@ internal sealed class CAdESCountersignatureTests
             scenario.SignerCertificate.AsReadOnlySpan(), PkiDigestAlgorithm.Sha256);
 
         Assert.IsNotNull(fields.SigningCertificateHash, "Requirement i): a signing-certificate-v2 attribute is present.");
-        Assert.AreSequenceEqual(countersignerHash.AsReadOnlySpan().ToArray(), fields.SigningCertificateHash!,
+        Assert.AreSequenceEqual(countersignerHash.AsReadOnlySpan().ToArray(), fields.SigningCertificateHash,
             "The ESSCertIDv2 hash is the counter signer's own certificate.");
-        Assert.IsFalse(signerHash.AsReadOnlySpan().SequenceEqual(fields.SigningCertificateHash!),
+        Assert.IsFalse(signerHash.AsReadOnlySpan().SequenceEqual(fields.SigningCertificateHash),
             "It is emphatically not the countersigned signer's certificate.");
         Assert.AreEqual(CountersigningTime, fields.SigningTime, "The countersignature states the signing time the counter signer asked for.");
     }

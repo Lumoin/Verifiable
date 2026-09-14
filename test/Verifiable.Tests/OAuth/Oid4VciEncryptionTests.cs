@@ -4,7 +4,6 @@ using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -14,7 +13,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -69,7 +67,7 @@ internal sealed class Oid4VciEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential], "notif-1"));
         WireResponseEncryptionSeam(host);
@@ -81,7 +79,7 @@ internal sealed class Oid4VciEncryptionTests
         //§8.2: a request carrying credential_response_encryption MUST itself be encrypted, so the
         //Wallet wraps the whole body as a JWE to the issuer's request-encryption key.
         using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
-        using PrivateKeyMemory _ = issuerPrivate;
+        using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string encryptedRequest = await EncryptToIssuerAsync(
@@ -112,7 +110,7 @@ internal sealed class Oid4VciEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Defer("8xLOxBtZp8", 60));
         host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
@@ -127,7 +125,7 @@ internal sealed class Oid4VciEncryptionTests
         //credential_response_encryption, so both MUST themselves be encrypted to the issuer's
         //request-encryption key.
         using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
-        using PrivateKeyMemory _ = issuerPrivate;
+        using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -157,7 +155,7 @@ internal sealed class Oid4VciEncryptionTests
             new RequestFields(),
             BearerHeaders(accessToken),
             encryptedDeferredRequest,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, delivered.StatusCode, delivered.Body);
@@ -180,7 +178,7 @@ internal sealed class Oid4VciEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         //EncryptCredentialResponseAsync deliberately left unwired.
@@ -194,7 +192,7 @@ internal sealed class Oid4VciEncryptionTests
         //must reach the response-seam / parameter-shape checks, not be stopped at the substitution
         //gate.
         using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
-        using PrivateKeyMemory _ = issuerPrivate;
+        using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -229,7 +227,7 @@ internal sealed class Oid4VciEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
         host.Server.OAuth().IssueCredentialAsync = (request, _, _, _, _) =>
@@ -275,7 +273,7 @@ internal sealed class Oid4VciEncryptionTests
 
         Assert.AreEqual(200, issued.StatusCode, issued.Body);
         Assert.IsNotNull(seenRequest);
-        Assert.AreEqual(ConfigurationId, seenRequest!.CredentialConfigurationId,
+        Assert.AreEqual(ConfigurationId, seenRequest.CredentialConfigurationId,
             "The decrypted request must parse to the same shape as a plain one.");
     }
 
@@ -292,7 +290,7 @@ internal sealed class Oid4VciEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -314,7 +312,7 @@ internal sealed class Oid4VciEncryptionTests
         //§8.2: the accepted ask carries credential_response_encryption, so its request leg MUST
         //be encrypted to the issuer's request-encryption key.
         using PublicKeyMemory issuerPublic = WireRequestDecryptionSeam(host, out PrivateKeyMemory issuerPrivate);
-        using PrivateKeyMemory _ = issuerPrivate;
+        using PrivateKeyMemory issuerPrivateOwner = issuerPrivate;
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -346,7 +344,7 @@ internal sealed class Oid4VciEncryptionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         host.Server.OAuth().ContributeCredentialIssuerMetadataAsync = static (_, _, _) =>
@@ -484,7 +482,7 @@ internal sealed class Oid4VciEncryptionTests
         using AeadMessage parsedJwe = JweParsing.ParseCompact(
             compactJwe,
             WellKnownJweAlgorithms.EcdhEs,
-            enc!,
+            enc,
             TestSetup.Base64UrlDecoder,
             Pool);
 
@@ -552,7 +550,7 @@ internal sealed class Oid4VciEncryptionTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
@@ -573,7 +571,7 @@ internal sealed class Oid4VciEncryptionTests
             new RequestFields(),
             BearerHeaders(accessToken),
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

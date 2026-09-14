@@ -1,9 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Globalization;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Core.Assessment;
-using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Server;
@@ -174,7 +172,7 @@ internal sealed class ContributorChainRegressionTests
         IssuanceContext issuance = new()
         {
             Registration = ContributorTestFixtures.BuildRegistration(),
-            Context = new ExchangeContext(),
+            Context = [],
             IssuerUri = new Uri("https://issuer.baseline.test/"),
             Subject = "subject-baseline",
             Scope = "openid profile email address phone",
@@ -223,22 +221,22 @@ internal sealed class ContributorChainRegressionTests
 
     private static ValueTask<List<Claim>> EmitFirst(
         ClaimContributionTarget target, CancellationToken cancellationToken) =>
-        new(new List<Claim>
-        {
+        new(
+        [
             new(FirstMarkerId, ClaimOutcome.Success,
                 new ClaimContributionContext("chain_test_marker", "first"),
                 Claim.NoSubClaims)
-        });
+        ]);
 
 
     private static ValueTask<List<Claim>> EmitSecond(
         ClaimContributionTarget target, CancellationToken cancellationToken) =>
-        new(new List<Claim>
-        {
+        new(
+        [
             new(SecondMarkerId, ClaimOutcome.Success,
                 new ClaimContributionContext("chain_test_marker", "second"),
                 Claim.NoSubClaims)
-        });
+        ]);
 
 
     /// <summary>
@@ -260,22 +258,22 @@ internal sealed class ContributorChainRegressionTests
 
     private static void AppendObject(StringBuilder sb, IDictionary<string, object> map)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
         foreach(KeyValuePair<string, object> entry in map.OrderBy(
             e => e.Key, StringComparer.Ordinal))
         {
             if(!first)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
             first = false;
 
-            sb.Append('"').Append(entry.Key).Append("\":");
+            _ = sb.Append('"').Append(entry.Key).Append("\":");
             AppendValue(sb, entry.Value);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -284,32 +282,32 @@ internal sealed class ContributorChainRegressionTests
         switch(value)
         {
             case string s:
-                sb.Append('"').Append(s).Append('"');
+                _ = sb.Append('"').Append(s).Append('"');
                 break;
 
             case long l:
-                sb.Append(l.ToString(CultureInfo.InvariantCulture));
+                _ = sb.Append(l.ToString(CultureInfo.InvariantCulture));
                 break;
 
             case int i:
-                sb.Append(i.ToString(CultureInfo.InvariantCulture));
+                _ = sb.Append(i.ToString(CultureInfo.InvariantCulture));
                 break;
 
             case bool b:
-                sb.Append(b ? "true" : "false");
+                _ = sb.Append(b ? "true" : "false");
                 break;
 
             case IReadOnlyList<string> list:
-                sb.Append('[');
+                _ = sb.Append('[');
                 for(int idx = 0; idx < list.Count; idx++)
                 {
                     if(idx > 0)
                     {
-                        sb.Append(',');
+                        _ = sb.Append(',');
                     }
-                    sb.Append('"').Append(list[idx]).Append('"');
+                    _ = sb.Append('"').Append(list[idx]).Append('"');
                 }
-                sb.Append(']');
+                _ = sb.Append(']');
                 break;
 
             case IDictionary<string, object> nested:
@@ -317,7 +315,7 @@ internal sealed class ContributorChainRegressionTests
                 break;
 
             default:
-                sb.Append('"').Append(value).Append('"');
+                _ = sb.Append('"').Append(value).Append('"');
                 break;
         }
     }

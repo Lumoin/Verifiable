@@ -1,8 +1,6 @@
-using System.Linq;
-
 namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
-    public sealed class MultikeyVerificationMethodTypeInfo : VerificationMethodTypeInfo
+    public sealed class MultikeyVerificationMethodTypeInfo: VerificationMethodTypeInfo
     {
         public static MultikeyVerificationMethodTypeInfo Instance { get; } = new()
         {

@@ -1,11 +1,7 @@
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.Json;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
 
@@ -86,7 +82,7 @@ internal sealed class DidCommPlaintextMessageTests
         Assert.AreEqual(message.Id, roundTripped.Id);
         Assert.AreEqual(message.Type, roundTripped.Type);
         Assert.AreEqual(message.From, roundTripped.From);
-        Assert.AreSequenceEqual(message.To!, roundTripped.To!);
+        Assert.AreSequenceEqual(message.To, roundTripped.To);
         Assert.AreEqual(message.ThreadId, roundTripped.ThreadId);
         Assert.AreEqual(message.ParentThreadId, roundTripped.ParentThreadId);
         Assert.AreEqual(message.CreatedTime, roundTripped.CreatedTime);
@@ -174,7 +170,7 @@ internal sealed class DidCommPlaintextMessageTests
             {"type":"https://example.com/protocols/lets_do_lunch/1.0/proposal"}
             """;
 
-        Assert.ThrowsExactly<FormatException>(() =>
+        _ = Assert.ThrowsExactly<FormatException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(Encoding.UTF8.GetBytes(Json), DidCommMessageJson.Parser));
     }
 
@@ -187,7 +183,7 @@ internal sealed class DidCommPlaintextMessageTests
             {"id":"1234567890"}
             """;
 
-        Assert.ThrowsExactly<FormatException>(() =>
+        _ = Assert.ThrowsExactly<FormatException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(Encoding.UTF8.GetBytes(Json), DidCommMessageJson.Parser));
     }
 
@@ -200,7 +196,7 @@ internal sealed class DidCommPlaintextMessageTests
             {"id":"1234567890","type":"not a message type uri"}
             """;
 
-        Assert.ThrowsExactly<FormatException>(() =>
+        _ = Assert.ThrowsExactly<FormatException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(Encoding.UTF8.GetBytes(Json), DidCommMessageJson.Parser));
     }
 
@@ -217,7 +213,7 @@ internal sealed class DidCommPlaintextMessageTests
             }
             """;
 
-        Assert.ThrowsExactly<FormatException>(() =>
+        _ = Assert.ThrowsExactly<FormatException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(Encoding.UTF8.GetBytes(Json), DidCommMessageJson.Parser));
     }
 
@@ -241,7 +237,7 @@ internal sealed class DidCommPlaintextMessageTests
 
         byte[] plaintextJson = Encoding.UTF8.GetBytes(Json);
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(plaintextJson, DidCommMessageJson.Parser));
     }
 
@@ -264,7 +260,7 @@ internal sealed class DidCommPlaintextMessageTests
 
         byte[] plaintextJson = Encoding.UTF8.GetBytes(Json);
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(plaintextJson, DidCommMessageJson.Parser));
     }
 

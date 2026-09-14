@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Cryptography.Pki;
 

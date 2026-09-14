@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
-using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
@@ -101,7 +99,7 @@ internal static class LoopbackTls
         request.CertificateExtensions.Add(
             new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, critical: true));
 
-        OidCollection serverAuthEku = new() { new Oid("1.3.6.1.5.5.7.3.1") };
+        OidCollection serverAuthEku = [new Oid("1.3.6.1.5.5.7.3.1")];
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(serverAuthEku, critical: false));
 
         DateTimeOffset now = TestClock.CanonicalEpoch;

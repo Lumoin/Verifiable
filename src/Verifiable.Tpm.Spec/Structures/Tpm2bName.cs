@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -106,7 +105,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
                 return [];
             }
 
-            return Storage.Memory.Span.Slice(0, Size);
+            return Storage.Memory.Span[..Size];
         }
     }
 
@@ -124,7 +123,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return Storage.Memory.Slice(0, Size);
+        return Storage.Memory[..Size];
     }
 
     /// <summary>
@@ -160,7 +159,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Span.Slice(2);
+            return Span[2..];
         }
     }
 
@@ -240,7 +239,7 @@ public sealed class Tpm2bName: IDisposable, ITpmWireType
 
         IMemoryOwner<byte> storage = pool.Rent(size);
         ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(storage.Memory.Span.Slice(0, size));
+        source.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bName(storage, size);
     }

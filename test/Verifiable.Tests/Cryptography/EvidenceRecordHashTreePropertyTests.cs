@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading;
 using CsCheck;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -66,7 +63,7 @@ internal sealed class EvidenceRecordHashTreePropertyTests
                 return false;
             }
 
-            return (actual == 0) == sample.left.AsSpan().SequenceEqual(sample.right);
+            return actual == 0 == sample.left.AsSpan().SequenceEqual(sample.right);
         });
     }
 

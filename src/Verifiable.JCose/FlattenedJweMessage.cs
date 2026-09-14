@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Cryptography;
@@ -139,19 +138,19 @@ public sealed class FlattenedJweMessage: IDisposable
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
 
         StringBuilder builder = new();
-        builder.Append("{\"protected\":");
+        _ = builder.Append("{\"protected\":");
         JweJsonString.Append(builder, HeaderEncoded);
-        builder.Append(",\"header\":{\"kid\":");
+        _ = builder.Append(",\"header\":{\"kid\":");
         JweJsonString.Append(builder, Recipient.KeyId);
-        builder.Append("},\"encrypted_key\":");
+        _ = builder.Append("},\"encrypted_key\":");
         JweJsonString.Append(builder, base64UrlEncoder(Recipient.EncryptedKey.AsReadOnlySpan()));
-        builder.Append(",\"iv\":");
+        _ = builder.Append(",\"iv\":");
         JweJsonString.Append(builder, base64UrlEncoder(EncryptResult.Iv.AsReadOnlySpan()));
-        builder.Append(",\"ciphertext\":");
+        _ = builder.Append(",\"ciphertext\":");
         JweJsonString.Append(builder, base64UrlEncoder(EncryptResult.Ciphertext.AsReadOnlySpan()));
-        builder.Append(",\"tag\":");
+        _ = builder.Append(",\"tag\":");
         JweJsonString.Append(builder, base64UrlEncoder(EncryptResult.Tag.AsReadOnlySpan()));
-        builder.Append('}');
+        _ = builder.Append('}');
 
         return builder.ToString();
     }

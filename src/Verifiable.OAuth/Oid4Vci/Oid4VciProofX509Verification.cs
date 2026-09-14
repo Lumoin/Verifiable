@@ -1,5 +1,3 @@
-using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.OAuth.Oid4Vci;

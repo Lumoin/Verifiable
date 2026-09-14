@@ -1,14 +1,8 @@
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -117,14 +111,14 @@ internal sealed class HttpWireFidelityTests
 
         AuthorizationServerMetadata metadata = await client.Infrastructure
             .ResolveAuthorizationServerMetadataAsync(
-                registration.AuthorizationServerIssuer, new ExchangeContext(), TestContext.CancellationToken)
+                registration.AuthorizationServerIssuer, [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         HttpResponseData parResponse = await client.Infrastructure.SendFormPostAsync(
             metadata.PushedAuthorizationRequestEndpoint!,
             parFields,
             OutgoingHeaders.Empty,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, parResponse.StatusCode,

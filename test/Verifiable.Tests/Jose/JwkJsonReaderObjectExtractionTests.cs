@@ -115,7 +115,7 @@ internal sealed class JwkJsonReaderObjectExtractionTests
             Encoding.UTF8.GetBytes(walletMetadata), "jwks"u8);
 
         Assert.IsNotNull(jwksJson);
-        Assert.IsTrue(jwksJson.StartsWith('{') && jwksJson.EndsWith('}'),
+        Assert.IsTrue(jwksJson.StartsWith('{', StringComparison.Ordinal) && jwksJson.EndsWith('}', StringComparison.Ordinal),
             "Sliced JWKS must be a self-contained object.");
         Assert.Contains("\"keys\"", jwksJson, StringComparison.Ordinal);
     }
@@ -177,7 +177,7 @@ internal sealed class JwkJsonReaderObjectExtractionTests
             JwkJsonReader.ExtractNestedObjectProperties(json, "cnf"u8, "jwk"u8);
 
         Assert.IsNotNull(inner);
-        Assert.AreEqual("EC", inner![WellKnownJwkMemberNames.Kty]);
+        Assert.AreEqual("EC", inner[WellKnownJwkMemberNames.Kty]);
         Assert.AreEqual("has } brace", inner["note"]);
         Assert.AreEqual("P-256", inner[WellKnownJwkMemberNames.Crv],
             "The property after the brace-bearing string value must survive — proving the " +
@@ -197,6 +197,6 @@ internal sealed class JwkJsonReaderObjectExtractionTests
             JwkJsonReader.ExtractNestedObjectProperties(json, "cnf"u8, "jwk"u8);
 
         Assert.IsNotNull(inner);
-        Assert.AreEqual("P-256", inner![WellKnownJwkMemberNames.Crv]);
+        Assert.AreEqual("P-256", inner[WellKnownJwkMemberNames.Crv]);
     }
 }

@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core.StatusList;
-using Verifiable.Cryptography;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
@@ -90,7 +85,7 @@ internal sealed class BitstringStatusListBatchRevocationTests
 
         UpdateCredentialStatusesDelegate update = MakeRevoker(listsByUrl, published, () => reEncodeCount++);
 
-        await update(
+        _ = await update(
             [
                 new CredentialStatusChange(RevocationEntry(RevocationListUrl, revocationIndex), 1),
                 new CredentialStatusChange(SuspensionEntry(SuspensionListUrl, suspensionIndex), 1)
@@ -113,14 +108,14 @@ internal sealed class BitstringStatusListBatchRevocationTests
         Dictionary<string, string> published,
         Action onReEncode)
     {
-        return (changes, _) =>
+        return (changes, cancellationToken) =>
         {
             var touched = new HashSet<string>(StringComparer.Ordinal);
             foreach(CredentialStatusChange change in changes)
             {
                 StatusListType target = listsByUrl[change.Entry.StatusListCredential];
                 target[change.Entry.StatusListIndex] = change.NewStatus;
-                touched.Add(change.Entry.StatusListCredential);
+                _ = touched.Add(change.Entry.StatusListCredential);
             }
 
             foreach(string url in touched)

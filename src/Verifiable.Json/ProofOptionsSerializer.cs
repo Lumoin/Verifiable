@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
@@ -171,7 +170,7 @@ public static class ProofOptionsSerializer
             throw new JsonException("The received proof JSON must be a JSON object.");
         }
 
-        obj.Remove("proofValue");
+        _ = obj.Remove("proofValue");
         AppendContext(obj, proofOptions.Context, options);
 
         return obj.ToJsonString(options);
@@ -198,7 +197,7 @@ public static class ProofOptionsSerializer
             return;
         }
 
-        JsonTypeInfo<Context> contextTypeInfo = (JsonTypeInfo<Context>)options.GetTypeInfo(typeof(Context));
+        JsonTypeInfo<Context> contextTypeInfo = options.GetTypeInfo<Context>();
         string contextJson = JsonSerializer.Serialize(context, contextTypeInfo);
         obj["@context"] = JsonNode.Parse(contextJson);
     }

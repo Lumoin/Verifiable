@@ -66,7 +66,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -92,7 +92,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -119,7 +119,7 @@ internal sealed class OAuthAttackMitigationTests
         //Plain RFC 6749 with PKCE does not require iss. The callback is valid without it.
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -157,7 +157,7 @@ internal sealed class OAuthAttackMitigationTests
             store,
             PolicyProfile.Rfc6749WithPkce,
             tokenResponse: BuildTokenJson("at.123", "Bearer", 3600, null));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -193,7 +193,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Rfc6749WithPkce);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -219,7 +219,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -255,7 +255,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -285,7 +285,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -330,7 +330,7 @@ internal sealed class OAuthAttackMitigationTests
             store,
             PolicyProfile.Haip10,
             knownIssuerResolver: KnownIssuers("https://as.example.com"));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -368,7 +368,7 @@ internal sealed class OAuthAttackMitigationTests
             PolicyProfile.Haip10,
             tokenResponse: BuildTokenJson("at.123", "Bearer", 3600, null),
             knownIssuerResolver: KnownIssuers("https://other-as.example.com"));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -413,7 +413,7 @@ internal sealed class OAuthAttackMitigationTests
             store,
             PolicyProfile.Haip10,
             knownIssuerResolver: null);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
@@ -470,7 +470,7 @@ internal sealed class OAuthAttackMitigationTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, PolicyProfile.Haip10);
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
@@ -512,7 +512,7 @@ internal sealed class OAuthAttackMitigationTests
             PolicyProfile.Haip10,
             captureFormFields: capturedFields);
 
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.IsTrue(
@@ -540,10 +540,10 @@ internal sealed class OAuthAttackMitigationTests
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:test", 60),
             tokenResponse: BuildTokenJson("at.123", "Bearer", 3600, null));
 
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
         string flowId = GetSingleFlowId(store);
-        await AuthCodeFlowHandlers.HandleCallbackAsync(
+        _ = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
                 [OAuthRequestParameterNames.Code] = "code-abc",
@@ -554,7 +554,7 @@ internal sealed class OAuthAttackMitigationTests
             registration,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        await AuthCodeFlowHandlers.HandleTokenAsync(
+        _ = await AuthCodeFlowHandlers.HandleTokenAsync(
             new Dictionary<string, string> { [AuthCodeFlowRoutes.FlowIdField] = flowId },
             infrastructure,
             registration,
@@ -586,7 +586,7 @@ internal sealed class OAuthAttackMitigationTests
             PolicyProfile.Haip10,
             captureFormFields: capturedFields);
 
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(
@@ -610,7 +610,7 @@ internal sealed class OAuthAttackMitigationTests
             PolicyProfile.Haip10,
             parResponse: BuildParJson("urn:ietf:params:oauth:request_uri:expired", 1));
 
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken)
             .ConfigureAwait(false);
         string flowId = GetSingleFlowId(store);
 
@@ -663,7 +663,7 @@ internal sealed class OAuthAttackMitigationTests
         var fillEntropy = TestEntropy.NewCounterStream();
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-            sendFormPostAsync: async (endpoint, fields, _, _, _) =>
+            sendFormPostAsync: (endpoint, fields, _, _, _) =>
             {
                 bool isTokenEndpoint = endpoint.AbsolutePath.EndsWith("/token", StringComparison.Ordinal)
                                     || endpoint.AbsolutePath.EndsWith("/revoke", StringComparison.Ordinal);
@@ -684,7 +684,8 @@ internal sealed class OAuthAttackMitigationTests
                 string body = isTokenEndpoint
                     ? tokenResponse ?? string.Empty
                     : parResponse ?? BuildParJson("urn:ietf:params:oauth:request_uri:default", 60);
-                return new HttpResponseData { Body = body, StatusCode = 200 };
+
+                return ValueTask.FromResult(new HttpResponseData { Body = body, StatusCode = 200 });
             },
             saveStateAsync: (state, _, _) =>
             {

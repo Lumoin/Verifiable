@@ -167,21 +167,21 @@ internal sealed class XmlDifferentialCorpusGenerator
 
         if(NextChance(40))
         {
-            builder.Append("<?xml version=\"1.0\"");
+            _ = builder.Append("<?xml version=\"1.0\"");
             if(NextChance(50))
             {
-                builder.Append(" encoding=\"UTF-8\"");
+                _ = builder.Append(" encoding=\"UTF-8\"");
             }
 
             if(NextChance(25))
             {
-                builder.Append(" standalone=\"yes\"");
+                _ = builder.Append(" standalone=\"yes\"");
             }
 
-            builder.Append("?>");
+            _ = builder.Append("?>");
             if(NextChance(70))
             {
-                builder.Append('\n');
+                _ = builder.Append('\n');
             }
         }
 
@@ -218,25 +218,25 @@ internal sealed class XmlDifferentialCorpusGenerator
     private static XmlDifferentialCase GenerateDeepDocument(int index)
     {
         var deepBuilder = new StringBuilder();
-        deepBuilder.Append("<d0 xmlns=\"urn:deep\" xmlns:pa=\"urn:alpha\">");
+        _ = deepBuilder.Append("<d0 xmlns=\"urn:deep\" xmlns:pa=\"urn:alpha\">");
         for(int i = 1; i < 64; ++i)
         {
-            deepBuilder.Append("<d").Append(i);
+            _ = deepBuilder.Append("<d").Append(i);
             if(i % 7 == 0)
             {
-                deepBuilder.Append(" pa:a=\"v\"");
+                _ = deepBuilder.Append(" pa:a=\"v\"");
             }
 
-            deepBuilder.Append('>');
+            _ = deepBuilder.Append('>');
         }
 
-        deepBuilder.Append("deep ä");
+        _ = deepBuilder.Append("deep ä");
         for(int i = 63; i >= 1; --i)
         {
-            deepBuilder.Append("</d").Append(i).Append('>');
+            _ = deepBuilder.Append("</d").Append(i).Append('>');
         }
 
-        deepBuilder.Append("</d0>");
+        _ = deepBuilder.Append("</d0>");
 
         return new XmlDifferentialCase(index, deepBuilder.ToString(), hasApexElement: false, string.Empty, string.Empty);
     }
@@ -312,7 +312,7 @@ internal sealed class XmlDifferentialCorpusGenerator
         }
 
         var usablePrefixes = new List<string>();
-        foreach((string prefix, string _) in Scope)
+        foreach((string prefix, _) in Scope)
         {
             if(prefix.Length > 0 && !usablePrefixes.Contains(prefix))
             {
@@ -353,15 +353,15 @@ internal sealed class XmlDifferentialCorpusGenerator
 
         Shuffle(attributeTexts);
 
-        builder.Append('<').Append(qualifiedName);
+        _ = builder.Append('<').Append(qualifiedName);
         foreach(string attributeText in attributeTexts)
         {
-            builder.Append(NextChance(12) ? "\n   " : " ").Append(attributeText);
+            _ = builder.Append(NextChance(12) ? "\n   " : " ").Append(attributeText);
         }
 
         if(NextChance(8))
         {
-            builder.Append(' ');
+            _ = builder.Append(' ');
         }
 
         bool isApexAppendPending = depth == 0 && isApexDocument;
@@ -370,11 +370,11 @@ internal sealed class XmlDifferentialCorpusGenerator
         {
             if(NextChance(50))
             {
-                builder.Append("/>");
+                _ = builder.Append("/>");
             }
             else
             {
-                builder.Append("></").Append(qualifiedName).Append('>');
+                _ = builder.Append("></").Append(qualifiedName).Append('>');
             }
 
             Scope.RemoveRange(scopeMark, Scope.Count - scopeMark);
@@ -382,7 +382,7 @@ internal sealed class XmlDifferentialCorpusGenerator
             return;
         }
 
-        builder.Append('>');
+        _ = builder.Append('>');
         int childCount = NextBelow(4) + (depth == 0 ? 1 : 0);
         for(int i = 0; i < childCount; ++i)
         {
@@ -394,7 +394,7 @@ internal sealed class XmlDifferentialCorpusGenerator
             AppendElement(depth + 1, ApexLocalName);
         }
 
-        builder.Append("</").Append(qualifiedName).Append('>');
+        _ = builder.Append("</").Append(qualifiedName).Append('>');
         Scope.RemoveRange(scopeMark, Scope.Count - scopeMark);
     }
 
@@ -419,7 +419,7 @@ internal sealed class XmlDifferentialCorpusGenerator
             int segmentCount = 1 + NextBelow(3);
             for(int i = 0; i < segmentCount; ++i)
             {
-                builder.Append(NextTextSegment());
+                _ = builder.Append(NextTextSegment());
             }
 
             return;
@@ -427,14 +427,14 @@ internal sealed class XmlDifferentialCorpusGenerator
 
         if(selector < 70)
         {
-            builder.Append("<![CDATA[").Append(Pick(CdataRuns)).Append("]]>");
+            _ = builder.Append("<![CDATA[").Append(Pick(CdataRuns)).Append("]]>");
 
             return;
         }
 
         if(selector < 80)
         {
-            builder.Append("<!--").Append(Pick(CommentRuns)).Append("-->");
+            _ = builder.Append("<!--").Append(Pick(CommentRuns)).Append("-->");
 
             return;
         }
@@ -446,7 +446,7 @@ internal sealed class XmlDifferentialCorpusGenerator
             return;
         }
 
-        builder.Append("\n  ");
+        _ = builder.Append("\n  ");
     }
 
 
@@ -458,7 +458,7 @@ internal sealed class XmlDifferentialCorpusGenerator
     {
         if(NextChance(50))
         {
-            builder.Append("<!--").Append(Pick(CommentRuns)).Append("-->");
+            _ = builder.Append("<!--").Append(Pick(CommentRuns)).Append("-->");
         }
         else
         {
@@ -475,17 +475,17 @@ internal sealed class XmlDifferentialCorpusGenerator
     {
         string target = Pick(ProcessingInstructionTargets);
         string data = Pick(ProcessingInstructionData);
-        builder.Append("<?").Append(target);
+        _ = builder.Append("<?").Append(target);
         if(data.Length > 0)
         {
-            builder.Append(' ').Append(data);
+            _ = builder.Append(' ').Append(data);
         }
         else if(NextChance(40))
         {
-            builder.Append("  ");
+            _ = builder.Append("  ");
         }
 
-        builder.Append("?>");
+        _ = builder.Append("?>");
     }
 
 
@@ -497,7 +497,7 @@ internal sealed class XmlDifferentialCorpusGenerator
         int selector = NextBelow(3);
         if(selector > 0)
         {
-            builder.Append(selector == 1 ? "\n" : "\n\n");
+            _ = builder.Append(selector == 1 ? "\n" : "\n\n");
         }
     }
 
@@ -519,7 +519,7 @@ internal sealed class XmlDifferentialCorpusGenerator
                 1 => Pick(CharacterReferences),
                 _ => Pick(EntityReferences)
             };
-            value.Append(segment);
+            _ = value.Append(segment);
         }
 
         return value.ToString();

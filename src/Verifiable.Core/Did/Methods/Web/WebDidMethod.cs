@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods.Web;
 
 public record WebDidMethod: GenericDidMethod
@@ -11,7 +9,7 @@ public record WebDidMethod: GenericDidMethod
     public static new string Prefix { get; } = $"{WellKnownDidMethodPrefixes.WebDidMethodPrefix}:";
 
 
-    public WebDidMethod(string didString): base(didString)
+    public WebDidMethod(string didString) : base(didString)
     {
         ArgumentNullException.ThrowIfNull(didString);
         if(!didString.StartsWith(Prefix, StringComparison.Ordinal))

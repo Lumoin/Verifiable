@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
@@ -7,7 +8,6 @@ using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -116,7 +116,7 @@ internal sealed class DisclosureBoundEnforcementTests
 
         var assessment = SingleAssessment(graph);
         Assert.IsNotNull(assessment.OutOfBoundsPaths, "The escape above the ceiling is an auditable event.");
-        Assert.IsTrue(assessment.OutOfBoundsPaths!.SetEquals(new HashSet<CredentialPath> { Ssn }),
+        Assert.IsTrue(assessment.OutOfBoundsPaths.SetEquals(new HashSet<CredentialPath> { Ssn }),
             "Exactly the paths outside the lattice top are recorded as out of bounds.");
         Assert.IsNull(assessment.RestoredMandatoryPaths, "The proposal kept the mandatory floor.");
         Assert.IsNull(assessment.RestoredAncestorPaths, "The proposal named no claim missing an ancestor.");
@@ -149,7 +149,7 @@ internal sealed class DisclosureBoundEnforcementTests
 
         var assessment = SingleAssessment(graph);
         Assert.IsNotNull(assessment.RestoredMandatoryPaths, "The escape below the floor is an auditable event.");
-        Assert.IsTrue(assessment.RestoredMandatoryPaths!.SetEquals(new HashSet<CredentialPath> { Iss, Vct }),
+        Assert.IsTrue(assessment.RestoredMandatoryPaths.SetEquals(new HashSet<CredentialPath> { Iss, Vct }),
             "Exactly the dropped mandatory paths are recorded as restored.");
         Assert.IsNull(assessment.OutOfBoundsPaths, "The proposal named nothing above the ceiling.");
         Assert.IsNull(assessment.RestoredAncestorPaths, "Restored mandatory paths are reported apart from restored ancestors.");
@@ -187,7 +187,7 @@ internal sealed class DisclosureBoundEnforcementTests
 
         var assessment = SingleAssessment(graph);
         Assert.IsNotNull(assessment.RestoredAncestorPaths, "A structurally invalid proposal is an auditable event.");
-        Assert.IsTrue(assessment.RestoredAncestorPaths!.SetEquals(new HashSet<CredentialPath> { Address }),
+        Assert.IsTrue(assessment.RestoredAncestorPaths.SetEquals(new HashSet<CredentialPath> { Address }),
             "Exactly the omitted ancestors are recorded as restored.");
         Assert.IsNull(assessment.OutOfBoundsPaths);
         Assert.IsNull(assessment.RestoredMandatoryPaths);
@@ -195,7 +195,7 @@ internal sealed class DisclosureBoundEnforcementTests
         Assert.AreEqual(PolicyAssessmentEffect.Expanded, assessment.Effect,
             "The effect diff runs against the clamped set, which grew by the nested claim and its container.");
         Assert.IsNotNull(assessment.AddedPaths);
-        Assert.IsTrue(assessment.AddedPaths!.SetEquals(new HashSet<CredentialPath> { AddressCity, Address }),
+        Assert.IsTrue(assessment.AddedPaths.SetEquals(new HashSet<CredentialPath> { AddressCity, Address }),
             "The ancestor closure restored is part of what actually happened to the disclosure set.");
     }
 
@@ -222,7 +222,7 @@ internal sealed class DisclosureBoundEnforcementTests
         Assert.IsFalse(graph.Satisfied);
         Assert.IsEmpty(graph.Decisions, "A rejected credential contributes no disclosure.");
         Assert.IsNotNull(graph.UnsatisfiedRequirements);
-        Assert.Contains("req-1", graph.UnsatisfiedRequirements!);
+        Assert.Contains("req-1", graph.UnsatisfiedRequirements);
 
         var assessment = SingleAssessment(graph);
         Assert.AreEqual(PolicyAssessmentEffect.Rejected, assessment.Effect);
@@ -305,7 +305,7 @@ internal sealed class DisclosureBoundEnforcementTests
         Assert.IsNull(assessment.AddedPaths, "Nothing was added to the disclosure set.");
         Assert.IsNull(assessment.RemovedPaths, "Nothing was removed from the disclosure set.");
         Assert.IsNotNull(assessment.OutOfBoundsPaths, "The attempt is recorded even though it had no effect.");
-        Assert.IsTrue(assessment.OutOfBoundsPaths!.SetEquals(new HashSet<CredentialPath> { Ssn, PassportNumber }));
+        Assert.IsTrue(assessment.OutOfBoundsPaths.SetEquals(new HashSet<CredentialPath> { Ssn, PassportNumber }));
     }
 
 
@@ -689,7 +689,7 @@ internal sealed class DisclosureBoundEnforcementTests
     public async Task PolicyBoundingNeverAdoptsTheReturnedSetAsGiven()
     {
         var returnedByAssessor = new HashSet<CredentialPath> { AddressCity, Ssn };
-        var assessor = Assessor<string>("UnboundedProposal", _ => new HashSet<CredentialPath>(returnedByAssessor));
+        var assessor = Assessor<string>("UnboundedProposal", _ => new(returnedByAssessor));
 
         var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
@@ -725,8 +725,8 @@ internal sealed class DisclosureBoundEnforcementTests
         var assessor = Assessor<string>("ExclusionAmplifier", context =>
         {
             var proposed = new HashSet<CredentialPath>(context.ProposedPaths);
-            proposed.Remove(Iss);
-            proposed.Remove(Vct);
+            _ = proposed.Remove(Iss);
+            _ = proposed.Remove(Vct);
 
             return proposed;
         });
@@ -792,7 +792,7 @@ internal sealed class DisclosureBoundEnforcementTests
         AssertLatticeAdmitsSelection(decision);
 
         var selected = SdDisclosureSelection.SelectDisclosures(issuedToken.DisclosurePaths, decision.SelectedPaths);
-        var emittedClaimNames = selected.Select(d => d.ClaimName!).ToHashSet(StringComparer.Ordinal);
+        var emittedClaimNames = selected.Select(d => d.ClaimName).ToHashSet(StringComparer.Ordinal);
 
         Assert.HasCount(2, selected, "The emitted disclosures are the clamped set's disclosures.");
         Assert.Contains("nationality", emittedClaimNames,
@@ -805,7 +805,7 @@ internal sealed class DisclosureBoundEnforcementTests
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);
 
         var claimNamesOnTheWire = parsed.Disclosures
-            .Select(d => d.ClaimName!)
+            .Select(d => d.ClaimName)
             .ToHashSet(StringComparer.Ordinal);
 
         Assert.Contains("nationality", claimNamesOnTheWire, "The restored mandatory claim is on the wire.");
@@ -825,7 +825,7 @@ internal sealed class DisclosureBoundEnforcementTests
     public async Task ClampIsANoOpForAWellBehavedPipeline()
     {
         var narrowed = new HashSet<CredentialPath> { GivenName };
-        var assessor = Assessor<string>("DataMinimization", _ => new HashSet<CredentialPath>(narrowed));
+        var assessor = Assessor<string>("DataMinimization", _ => new(narrowed));
 
         var computation = new DisclosureComputation<string>([assessor], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
@@ -970,7 +970,7 @@ internal sealed class DisclosureBoundEnforcementTests
         SdDisclosure.CreateProperty(
             TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
             claimName,
-            JsonDocument.Parse($"\"{claimValue}\"").RootElement);
+            JsonElement.Parse($"\"{claimValue}\""));
 
 
     /// <summary>
@@ -984,7 +984,7 @@ internal sealed class DisclosureBoundEnforcementTests
         CredentialDisclosureDecision<TCredential> decision)
     {
         Assert.IsNotNull(decision.Lattice, "A decision the computation produced carries the lattice bounding it.");
-        Assert.IsTrue(decision.Lattice!.IsValid(decision.SelectedPaths),
+        Assert.IsTrue(decision.Lattice.IsValid(decision.SelectedPaths),
             "The lattice must admit the selected set: mandatory floor kept, available ceiling respected, ancestors carried.");
     }
 
@@ -1098,7 +1098,7 @@ internal sealed class DisclosureBoundEnforcementTests
 
         Assert.IsNotNull(found, $"A decision for requirement '{requirementId}' must exist.");
 
-        return found!;
+        return found;
     }
 
 
@@ -1125,7 +1125,7 @@ internal sealed class DisclosureBoundEnforcementTests
 
         Assert.IsNotNull(found, $"A bound violation for requirement '{requirementId}' must exist.");
 
-        return found!;
+        return found;
     }
 
 

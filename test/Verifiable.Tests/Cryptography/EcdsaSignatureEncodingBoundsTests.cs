@@ -20,7 +20,7 @@ internal sealed class EcdsaSignatureEncodingBoundsTests
     [TestMethod]
     public void ConvertP1363ToDerRejectsZeroLengthInput()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             EcdsaSignatureEncoding.ConvertP1363ToDer(ReadOnlySpan<byte>.Empty, BaseMemoryPool.Shared, out _));
     }
 
@@ -34,7 +34,7 @@ internal sealed class EcdsaSignatureEncodingBoundsTests
     {
         byte[] oddLengthSignature = new byte[33];
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             EcdsaSignatureEncoding.ConvertP1363ToDer(oddLengthSignature, BaseMemoryPool.Shared, out _));
     }
 

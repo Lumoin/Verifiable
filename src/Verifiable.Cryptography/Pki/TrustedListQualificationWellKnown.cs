@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -380,6 +379,7 @@ public static class EuQualifiedCertificateTypeMapping
         EuQualifiedCertificateType.ElectronicSignature => WellKnownOids.QcTypeElectronicSignature,
         EuQualifiedCertificateType.ElectronicSeal => WellKnownOids.QcTypeElectronicSeal,
         EuQualifiedCertificateType.WebsiteAuthentication => WellKnownOids.QcTypeWebsiteAuthentication,
+        EuQualifiedCertificateType.None => WellKnownOids.QcTypeElectronicSignature,
         _ => WellKnownOids.QcTypeElectronicSignature
     };
 }

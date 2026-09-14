@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 

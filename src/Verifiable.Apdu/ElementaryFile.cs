@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -17,7 +16,7 @@ namespace Verifiable.Apdu;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ElementaryFile : SensitiveMemory
+public sealed class ElementaryFile: SensitiveMemory
 {
     /// <summary>
     /// Initialises a new <see cref="ElementaryFile"/> from owned file bytes.

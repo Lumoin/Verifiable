@@ -57,7 +57,7 @@ internal sealed class Rfc7523AssertionValidationTests
     public void MissingIssuerIsMissingIssuer()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Iss);
+        _ = payload.Remove(WellKnownJwtClaimNames.Iss);
 
         Rfc7523AssertionValidationResult result = Validate(payload);
 
@@ -70,7 +70,7 @@ internal sealed class Rfc7523AssertionValidationTests
     public void MissingSubjectIsMissingSubject()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Sub);
+        _ = payload.Remove(WellKnownJwtClaimNames.Sub);
 
         Rfc7523AssertionValidationResult result = Validate(payload);
 
@@ -83,7 +83,7 @@ internal sealed class Rfc7523AssertionValidationTests
     public void MissingAudienceIsMissingAudience()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Aud);
+        _ = payload.Remove(WellKnownJwtClaimNames.Aud);
 
         Rfc7523AssertionValidationResult result = Validate(payload);
 
@@ -141,7 +141,7 @@ internal sealed class Rfc7523AssertionValidationTests
     public void MissingExpirationIsMissingExpiration()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Exp);
+        _ = payload.Remove(WellKnownJwtClaimNames.Exp);
 
         Rfc7523AssertionValidationResult result = Validate(payload);
 
@@ -195,7 +195,7 @@ internal sealed class Rfc7523AssertionValidationTests
     public void AbsentIssuedAtStillValidates()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Iat);
+        _ = payload.Remove(WellKnownJwtClaimNames.Iat);
 
         Rfc7523AssertionValidationResult result = Validate(payload);
 

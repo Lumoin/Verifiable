@@ -1,19 +1,13 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
-using Verifiable.Fido2;
-using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
@@ -2373,10 +2367,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
             CtapPinUvAuthTokenState selectedToken = (action.ProtocolId == CtapPinUvAuthProtocolId.One ? freshProtocolOneToken : freshProtocolTwoToken)
                 .BeginUsing(userIsPresent: false, action.Now) with
-                {
-                    Permissions = action.PermissionsToAssign,
-                    PermissionsRpId = action.PermissionsRpId
-                };
+            {
+                Permissions = action.PermissionsToAssign,
+                PermissionsRpId = action.PermissionsRpId
+            };
 
             if(action.ProtocolId == CtapPinUvAuthProtocolId.One)
             {
@@ -2520,10 +2514,10 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
             //codebase minted that way; PIN-path tokens still begin with FALSE.
             CtapPinUvAuthTokenState selectedToken = (action.ProtocolId == CtapPinUvAuthProtocolId.One ? freshProtocolOneToken : freshProtocolTwoToken)
                 .BeginUsing(userIsPresent: true, action.Now) with
-                {
-                    Permissions = action.PermissionsToAssign,
-                    PermissionsRpId = action.PermissionsRpId
-                };
+            {
+                Permissions = action.PermissionsToAssign,
+                PermissionsRpId = action.PermissionsRpId
+            };
 
             if(action.ProtocolId == CtapPinUvAuthProtocolId.One)
             {
@@ -3186,7 +3180,7 @@ public sealed class CtapAuthenticatorSimulator: IObservable<TraceEntry<CtapAuthe
 
             try
             {
-                if(salts.Length != HmacSecretSaltLength && salts.Length != HmacSecretTwoSaltLength)
+                if(salts.Length is not HmacSecretSaltLength and not HmacSecretTwoSaltLength)
                 {
                     return (CtapGetAssertionHmacSecretOutcomeKind.DecryptFailed, null, 0);
                 }

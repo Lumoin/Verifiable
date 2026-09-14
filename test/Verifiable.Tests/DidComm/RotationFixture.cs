@@ -1,14 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
@@ -40,7 +35,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     //A fixed rotation datetime injected as iat — the clock seam, not DateTime.UtcNow.
     private static DateTimeOffset RotationTime { get; } = DateTimeOffset.FromUnixTimeSeconds(1516239022);
 
-    private ExchangeContext Context { get; } = new();
+    private ExchangeContext Context { get; } = [];
     private BaseMemoryPool Pool { get; }
     private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> PriorKeys { get; }
     private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> NewSignKeys { get; }
@@ -378,7 +373,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     {
         foreach(VerificationMethod method in PriorDocument.GetLocalAuthenticationMethods())
         {
-            string kid = method.Id!.StartsWith('#') ? PriorDid + method.Id : method.Id;
+            string kid = method.Id!.StartsWith('#', StringComparison.Ordinal) ? PriorDid + method.Id : method.Id;
             if(string.Equals(kid, PriorKid, StringComparison.Ordinal))
             {
                 return true;
@@ -452,7 +447,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     {
         VerificationMethod method = document.GetLocalAuthenticationMethods()[0];
 
-        return method.Id!.StartsWith('#') ? did + method.Id : method.Id!;
+        return method.Id!.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id!;
     }
 
 
@@ -461,7 +456,7 @@ internal sealed class RotationFixture: IAsyncDisposable
     {
         VerificationMethod method = document.GetLocalKeyAgreementMethods()[0];
 
-        return method.Id!.StartsWith('#') ? did + method.Id : method.Id!;
+        return method.Id!.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id!;
     }
 
 

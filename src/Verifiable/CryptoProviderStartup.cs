@@ -1,6 +1,4 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
@@ -77,57 +75,57 @@ internal static class CryptoProviderStartup
     private static void RegisterSigningAndVerification(TimeProvider timeProvider)
     {
         CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
                 (algorithm, purpose) switch
                 {
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) =>
-                        (SigningDelegate)((privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.SignP256Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken)),
+                        (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.SignP256Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Signing) =>
-                        (SigningDelegate)((privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.SignP384Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken)),
+                        (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.SignP384Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Signing) =>
-                        (SigningDelegate)((privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.SignP521Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken)),
+                        (privateKeyBytes, dataToSign, signaturePool, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.SignP521Async(privateKeyBytes, dataToSign, signaturePool, timeProvider, context, cancellationToken),
                     _ => throw new ArgumentException(
                         $"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 },
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
                 (algorithm, purpose) switch
                 {
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyP256Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyP256Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P384) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyP384Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyP384Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P521) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyP521Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyP521Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa2048) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsa2048Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsa2048Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.Rsa4096) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsa4096Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsa4096Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsaSha256Pkcs1Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha256Pss) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsaSha256PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsaSha384Pkcs1Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsaSha384Pkcs1Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha384Pss) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsaSha384PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsaSha384PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsaSha512Pkcs1Async(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.RsaSha512Pss) && p.Equals(Purpose.Verification) =>
-                        (VerificationDelegate)((dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
-                            MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken)),
+                        (dataToVerify, signature, publicKeyMaterial, context, cancellationToken) =>
+                            MicrosoftCryptographicFunctions.VerifyRsaSha512PssAsync(dataToVerify, signature, publicKeyMaterial, timeProvider, context, cancellationToken),
                     _ => throw new ArgumentException(
                         $"No verification function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 });
@@ -191,7 +189,7 @@ internal static class CryptoProviderStartup
     private static void RegisterKeyCreation(TimeProvider timeProvider)
     {
         KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
                 (algorithm, purpose) switch
                 {
                     (CryptoAlgorithm a, Purpose p) when a.Equals(CryptoAlgorithm.P256) && p.Equals(Purpose.Signing) =>

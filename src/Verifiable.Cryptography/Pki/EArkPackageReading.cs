@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -239,31 +236,31 @@ public static class EArkPackageReading
         private bool hasDataFolder;
 
         /// <summary>The files in the level's <c>metadata</c> folder outside its named sub-folders.</summary>
-        private List<EArkPackageEntry>MetadataFiles { get; } = [];
+        private List<EArkPackageEntry> MetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>metadata/preservation</c> folder.</summary>
-        private List<EArkPackageEntry>PreservationMetadataFiles { get; } = [];
+        private List<EArkPackageEntry> PreservationMetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>metadata/descriptive</c> folder.</summary>
-        private List<EArkPackageEntry>DescriptiveMetadataFiles { get; } = [];
+        private List<EArkPackageEntry> DescriptiveMetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>metadata/other</c> folder.</summary>
-        private List<EArkPackageEntry>OtherMetadataFiles { get; } = [];
+        private List<EArkPackageEntry> OtherMetadataFiles { get; } = [];
 
         /// <summary>The files in the level's <c>schemas</c> folder.</summary>
-        private List<EArkPackageEntry>SchemaFiles { get; } = [];
+        private List<EArkPackageEntry> SchemaFiles { get; } = [];
 
         /// <summary>The files in the level's <c>documentation</c> folder.</summary>
-        private List<EArkPackageEntry>DocumentationFiles { get; } = [];
+        private List<EArkPackageEntry> DocumentationFiles { get; } = [];
 
         /// <summary>The files in the level's <c>data</c> folder.</summary>
-        private List<EArkPackageEntry>DataFiles { get; } = [];
+        private List<EArkPackageEntry> DataFiles { get; } = [];
 
         /// <summary>The files at positions the vocabulary names none of.</summary>
-        private List<EArkPackageEntry>ExtensionFiles { get; } = [];
+        private List<EArkPackageEntry> ExtensionFiles { get; } = [];
 
         /// <summary>The entries carrying a fixed name at a position the specification does not put it at.</summary>
-        private List<EArkPackageEntry>MisplacedEntries { get; } = [];
+        private List<EArkPackageEntry> MisplacedEntries { get; } = [];
 
 
         /// <summary>
@@ -288,6 +285,9 @@ public static class EArkPackageReading
                 EArkPackageEntryPlacement.Data => Record(entry, remaining == 1, ref hasDataFolder, DataFiles),
                 EArkPackageEntryPlacement.Extension => AddFile(entry, ExtensionFiles),
                 EArkPackageEntryPlacement.Misplaced => AddEntry(entry, MisplacedEntries),
+                EArkPackageEntryPlacement.NotEvaluated => true,
+                EArkPackageEntryPlacement.Representations => true,
+                EArkPackageEntryPlacement.RepresentationRoot => true,
                 _ => true
             };
 

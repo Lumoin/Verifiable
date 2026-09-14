@@ -1,9 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Did;
@@ -11,7 +7,6 @@ using Verifiable.Core.Resolvers;
 using Verifiable.DidComm;
 using Verifiable.DidComm.ReturnRoute;
 using Verifiable.DidComm.Routing;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -32,7 +27,7 @@ internal sealed class DidCommReturnRouteTests
     public TestContext TestContext { get; set; } = null!;
 
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string DidPrefix = "did:example";
     private const string Recipient = "did:example:recipient";
@@ -131,9 +126,9 @@ internal sealed class DidCommReturnRouteTests
     [TestMethod]
     public void OffSetAndCaseVariantDirectivesAreRefused()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute("All"));
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute("THREAD", "thread-1"));
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute("hold-everything"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute("All"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute("THREAD", "thread-1"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute("hold-everything"));
     }
 
 
@@ -146,8 +141,8 @@ internal sealed class DidCommReturnRouteTests
     [TestMethod]
     public void WhitespaceCompanionThreadIsRefusedForThread()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread, "   "));
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread, "\t\n"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread, "   "));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread, "\t\n"));
     }
 
 
@@ -178,8 +173,8 @@ internal sealed class DidCommReturnRouteTests
     [TestMethod]
     public void ThreadWithoutCompanionThreadIsRefused()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread));
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread, ""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.Thread, ""));
     }
 
 
@@ -207,8 +202,8 @@ internal sealed class DidCommReturnRouteTests
     [TestMethod]
     public void NonThreadValueCarryingCompanionThreadIsRefused()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.All, "thread-1"));
-        Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.None, "thread-1"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.All, "thread-1"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Message().WithReturnRoute(WellKnownReturnRouteNames.None, "thread-1"));
     }
 
 
@@ -333,10 +328,10 @@ internal sealed class DidCommReturnRouteTests
             }
             """;
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(Encoding.UTF8.GetBytes(ReturnRouteIsNumber), DidCommMessageJson.Parser));
 
-        Assert.ThrowsExactly<JsonException>(() =>
+        _ = Assert.ThrowsExactly<JsonException>(() =>
             DidCommPlaintextExtensions.UnpackPlaintext(Encoding.UTF8.GetBytes(ReturnRouteThreadIsObject), DidCommMessageJson.Parser));
     }
 

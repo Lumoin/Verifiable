@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -281,6 +276,8 @@ public static class ProofOfExistenceExtraction
 
                 break;
 
+            //An unclassified token protects nothing this algorithm can name.
+            case SignatureTimestampClass.Unknown:
             default:
                 break;
         }

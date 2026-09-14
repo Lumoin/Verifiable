@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
@@ -33,7 +32,7 @@ internal sealed class AcdcEdgeEvaluationTests
         //The chain link: the Transcript's Issuer is the Accreditation's Issuee.
         Assert.AreEqual(transcript.Issuer, accreditation.IssueeAid, "The Transcript Issuer must be the Accreditation Issuee for the I2I chain to hold.");
 
-        AcdcFarNodeResolver resolve = nodeSaid => nodeSaid == accreditation.Said
+        AcdcFarNode? resolve(string nodeSaid) => nodeSaid == accreditation.Said
             ? accreditation
             : new AcdcFarNode(nodeSaid, IssueeAid: null, IsValid: true);
 
@@ -52,7 +51,7 @@ internal sealed class AcdcEdgeEvaluationTests
         AcdcEdgeGroup edgeSection = AcdcEdgeReader.Read(Expanded(transcript.Edge));
         AcdcFarNode accreditation = FarNodeFromAcdc(AcdcExampleVectors.ExpandedAcdc);
 
-        AcdcFarNodeResolver resolve = nodeSaid => nodeSaid == accreditation.Said
+        AcdcFarNode? resolve(string nodeSaid) => nodeSaid == accreditation.Said
             ? accreditation
             : new AcdcFarNode(nodeSaid, IssueeAid: null, IsValid: true);
 
@@ -68,7 +67,7 @@ internal sealed class AcdcEdgeEvaluationTests
     public void EvaluatesUntargetedEdgeUnderNi2iDefault()
     {
         AcdcEdgeGroup section = SingleEdge("EFarNodeUntargetedAAAAAAAAAAAAAAAAAAAAAAAAAA", operators: null);
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: null, IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: null, IsValid: true);
 
         Assert.IsTrue(AcdcEdgeEvaluation.Evaluate(section, "EAnyIssuerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", resolve));
     }
@@ -97,7 +96,7 @@ internal sealed class AcdcEdgeEvaluationTests
     {
         //One valid edge (to the valid node) and one invalid edge (to a node the resolver marks invalid), both NI2I.
         const string validNode = "EmemberValidAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: null, IsValid: string.Equals(nodeSaid, validNode, System.StringComparison.Ordinal));
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: null, IsValid: string.Equals(nodeSaid, validNode, System.StringComparison.Ordinal));
 
         Assert.IsFalse(AcdcEdgeEvaluation.Evaluate(Group("AND"), "EI", resolve), "AND with one invalid member is invalid.");
         Assert.IsTrue(AcdcEdgeEvaluation.Evaluate(Group("OR"), "EI", resolve), "OR with one valid member is valid.");
@@ -121,7 +120,7 @@ internal sealed class AcdcEdgeEvaluationTests
     public void RejectsNodeSaidMismatch()
     {
         AcdcEdgeGroup section = SingleEdge("EExpectedNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", operators: ["NI2I"]);
-        AcdcFarNodeResolver resolve = _ => new AcdcFarNode("EDifferentNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", IssueeAid: null, IsValid: true);
+        static AcdcFarNode? resolve(string _) => new("EDifferentNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", IssueeAid: null, IsValid: true);
 
         Assert.IsFalse(AcdcEdgeEvaluation.Evaluate(section, "EI", resolve));
     }
@@ -147,7 +146,7 @@ internal sealed class AcdcEdgeEvaluationTests
     {
         AcdcEdgeGroup section = new(null, null, null, null, [new AcdcEdgeMember("link", new AcdcCompactEdgeNode("ECompactEdgeSaidAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))]);
 
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeEvaluation.Evaluate(section, "EI", _ => new AcdcFarNode("x", null, true)));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeEvaluation.Evaluate(section, "EI", _ => new AcdcFarNode("x", null, true)));
     }
 
 
@@ -158,9 +157,9 @@ internal sealed class AcdcEdgeEvaluationTests
     [TestMethod]
     public void RejectsDi2iWithoutDelegationResolver()
     {
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: "EIssueeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: "EIssueeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", IsValid: true);
 
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeEvaluation.Evaluate(SingleEdge("EFarAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ["DI2I"]), "EI", resolve));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeEvaluation.Evaluate(SingleEdge("EFarAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ["DI2I"]), "EI", resolve));
     }
 
 
@@ -170,10 +169,10 @@ internal sealed class AcdcEdgeEvaluationTests
     [TestMethod]
     public void RejectsAveragingOperators()
     {
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: "EIssueeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: "EIssueeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", IsValid: true);
 
         AcdcEdgeGroup averaging = new(null, null, "AVG", null, [new AcdcEdgeMember("a", new AcdcEdge(null, null, "EFarAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", null, ["NI2I"], null, null))]);
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeEvaluation.Evaluate(averaging, "EI", resolve));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeEvaluation.Evaluate(averaging, "EI", resolve));
     }
 
 
@@ -186,7 +185,7 @@ internal sealed class AcdcEdgeEvaluationTests
     {
         const string issueeAid = "EDi2iIssueeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         AcdcEdgeGroup section = SingleEdge("EDi2iFarNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ["DI2I"]);
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: issueeAid, IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: issueeAid, IsValid: true);
 
         Assert.IsTrue(AcdcEdgeEvaluation.Evaluate(section, issueeAid, resolve, _ => null), "The far node's Issuee itself satisfies DI2I.");
     }
@@ -203,16 +202,16 @@ internal sealed class AcdcEdgeEvaluationTests
         const string middleAid = "EDi2iMiddleAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         const string leafAid = "EDi2iLeafAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         AcdcEdgeGroup section = SingleEdge("EDi2iFarNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ["DI2I"]);
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: issueeAid, IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: issueeAid, IsValid: true);
 
-        AcdcDelegationResolver oneStep = aid => aid switch
+        static string? oneStep(string aid) => aid switch
         {
             leafAid => issueeAid,
             _ => null
         };
         Assert.IsTrue(AcdcEdgeEvaluation.Evaluate(section, leafAid, resolve, oneStep), "An AID directly delegated by the Issuee satisfies DI2I.");
 
-        AcdcDelegationResolver twoStep = aid => aid switch
+        static string? twoStep(string aid) => aid switch
         {
             leafAid => middleAid,
             middleAid => issueeAid,
@@ -232,10 +231,10 @@ internal sealed class AcdcEdgeEvaluationTests
         const string issueeAid = "EDi2iIssueeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         const string strangerAid = "EDi2iStrangerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         AcdcEdgeGroup section = SingleEdge("EDi2iFarNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ["DI2I"]);
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: issueeAid, IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: issueeAid, IsValid: true);
 
         //The near Issuer is delegated, but by an unrelated AID, not the far node's Issuee.
-        AcdcDelegationResolver unrelated = aid => aid switch
+        static string? unrelated(string aid) => aid switch
         {
             strangerAid => "EDi2iOtherDelegatorAAAAAAAAAAAAAAAAAAAAAAAAAA",
             _ => null
@@ -253,7 +252,7 @@ internal sealed class AcdcEdgeEvaluationTests
     public void RejectsDi2iForUntargetedFarNode()
     {
         AcdcEdgeGroup section = SingleEdge("EDi2iFarNodeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", ["DI2I"]);
-        AcdcFarNodeResolver resolve = nodeSaid => new AcdcFarNode(nodeSaid, IssueeAid: null, IsValid: true);
+        static AcdcFarNode? resolve(string nodeSaid) => new(nodeSaid, IssueeAid: null, IsValid: true);
 
         Assert.IsFalse(AcdcEdgeEvaluation.Evaluate(section, "EAnyIssuerAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", resolve, _ => null), "DI2I requires a targeted far node.");
     }

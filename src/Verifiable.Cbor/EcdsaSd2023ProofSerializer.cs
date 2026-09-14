@@ -1,9 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.IO;
-using System.Linq;
+using System.Buffers;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 
@@ -153,7 +149,7 @@ public static class EcdsaSd2023CborSerializer
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        if(!proofValue.StartsWith(MultibaseAlgorithms.Base64Url))
+        if(!proofValue.StartsWith(MultibaseAlgorithms.Base64Url, StringComparison.Ordinal))
         {
             throw new FormatException($"Base proof value must start with '{MultibaseAlgorithms.Base64Url}' indicating base64url-no-pad multibase encoding.");
         }
@@ -372,7 +368,7 @@ public static class EcdsaSd2023CborSerializer
         ArgumentNullException.ThrowIfNull(base64UrlEncoder);
         ArgumentNullException.ThrowIfNull(memoryPool);
 
-        if(!proofValue.StartsWith(MultibaseAlgorithms.Base64Url))
+        if(!proofValue.StartsWith(MultibaseAlgorithms.Base64Url, StringComparison.Ordinal))
         {
             throw new FormatException($"Derived proof value must start with '{MultibaseAlgorithms.Base64Url}' indicating base64url-no-pad multibase encoding.");
         }

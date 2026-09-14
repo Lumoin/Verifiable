@@ -19,10 +19,10 @@ namespace Verifiable.Tests.Jwt
             yield return new object[] { WellKnownCurveValues.Ed448, new Func<string, bool>(WellKnownCurveValues.IsEd448) };
             yield return new object[] { WellKnownCurveValues.P256, new Func<string, bool>(WellKnownCurveValues.IsP256) };
             yield return new object[] { WellKnownCurveValues.P384, new Func<string, bool>(WellKnownCurveValues.IsP384) };
-            yield return new object[] { WellKnownCurveValues.P521, new Func<string, bool>(WellKnownCurveValues.IsP521) };            
+            yield return new object[] { WellKnownCurveValues.P521, new Func<string, bool>(WellKnownCurveValues.IsP521) };
             yield return new object[] { WellKnownCurveValues.Secp256k1, new Func<string, bool>(WellKnownCurveValues.IsSecp256k1) };
             yield return new object[] { WellKnownCurveValues.X25519, new Func<string, bool>(WellKnownCurveValues.IsX25519) };
-            yield return new object[] { WellKnownCurveValues.X448, new Func<string, bool>(WellKnownCurveValues.IsX448) };            
+            yield return new object[] { WellKnownCurveValues.X448, new Func<string, bool>(WellKnownCurveValues.IsX448) };
         }
 
 

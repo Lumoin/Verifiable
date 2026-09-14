@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
+using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -259,7 +259,7 @@ internal sealed class CompositeClaimAssessorTests
                 SpanId: spanId,
                 Baggage: baggage);
 
-            fastAssessorCompleted.TrySetResult(true);
+            _ = fastAssessorCompleted.TrySetResult(true);
             return ValueTask.FromResult(result);
         }
 
@@ -279,7 +279,7 @@ internal sealed class CompositeClaimAssessorTests
         var assessTask = composite.AssessAsync("test-input", TestCorrelationId, cts.Token);
 
         //Wait for the fast assessor to complete, then cancel.
-        await fastAssessorCompleted.Task.ConfigureAwait(false);
+        _ = await fastAssessorCompleted.Task.ConfigureAwait(false);
         await cts.CancelAsync().ConfigureAwait(false);
 
         var result = await assessTask.ConfigureAwait(false);
@@ -317,13 +317,13 @@ internal sealed class CompositeClaimAssessorTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+            Sample = (ref _) => ActivitySamplingResult.AllData
         };
         ActivitySource.AddActivityListener(listener);
 
         using var activity = activitySource.StartActivity("CompositeTest");
-        activity?.AddBaggage("model-version", "v2.1");
-        activity?.AddBaggage("docker-sha", "sha256:abc123");
+        _ = (activity?.AddBaggage("model-version", "v2.1"));
+        _ = (activity?.AddBaggage("docker-sha", "sha256:abc123"));
 
         var result = await composite.AssessAsync("test-input", TestCorrelationId, TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -382,7 +382,7 @@ internal sealed class CompositeClaimAssessorTests
         var rules = new List<ClaimDelegate<string>> { new(SimpleRule, [ClaimId.AlgIsValid]) };
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             new CompositeClaimAssessor<string>(issuer, [], new FakeTimeProvider(TestClock.CanonicalEpoch)));
     }
 

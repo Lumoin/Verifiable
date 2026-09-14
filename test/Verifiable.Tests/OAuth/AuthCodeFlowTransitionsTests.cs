@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Foundation.Automata;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
@@ -28,7 +27,7 @@ internal sealed class AuthCodeFlowTransitionsTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(stepped, "Initiate must produce a transition.");
-        Assert.IsInstanceOfType<PkceGeneratedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<PkceGeneratedState>(pda.CurrentState);
         Assert.AreEqual("flow-1", pda.CurrentState.FlowId);
         Assert.AreEqual("https://as.example.com", pda.CurrentState.ExpectedIssuer);
     }
@@ -38,14 +37,14 @@ internal sealed class AuthCodeFlowTransitionsTests
     public async Task ParBodyComposedTransitionsToParRequestReady()
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
-        await pda.StepAsync(CreateInitiate("flow-2"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(CreateInitiate("flow-2"), TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
             new ParBodyComposed("client_id=test&code_challenge=abc", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(stepped);
-        Assert.IsInstanceOfType<ParRequestReadyState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<ParRequestReadyState>(pda.CurrentState);
     }
 
 
@@ -53,8 +52,8 @@ internal sealed class AuthCodeFlowTransitionsTests
     public async Task ParSucceededTransitionsToParCompletedWithCorrectExpiry()
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
-        await pda.StepAsync(CreateInitiate("flow-3"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(CreateInitiate("flow-3"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(
             new ParBodyComposed("body", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -98,7 +97,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
         await RunToParCompleted(pda, "flow-5", TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new CodeReceived("code", "state", "https://as.example.com", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -125,23 +124,23 @@ internal sealed class AuthCodeFlowTransitionsTests
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
 
-        await pda.StepAsync(CreateInitiate("flow-6"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(CreateInitiate("flow-6"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(
             new ParBodyComposed("client_id=test", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParSucceeded(
                 new ParResponse(new Uri("urn:ietf:params:oauth:request_uri:test"), 60),
                 TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new CodeReceived("code", "state", "https://as.example.com", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new TokenExchangeSucceeded("at.abc", "Bearer", 3600, null, null, TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<TokenReceivedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<TokenReceivedState>(pda.CurrentState);
         Assert.IsTrue(pda.IsAccepted, "TokenReceived is an accept state.");
         Assert.AreEqual(5, pda.StepCount, "Happy path must traverse exactly five transitions.");
     }
@@ -151,7 +150,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     public async Task FailInputTransitionsToFlowFailedFromAnyNonTerminalState()
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
-        await pda.StepAsync(CreateInitiate("flow-7"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(CreateInitiate("flow-7"), TestContext.CancellationToken).ConfigureAwait(false);
 
         DateTimeOffset failedAt = TimeProvider.GetUtcNow();
         bool stepped = await pda.StepAsync(
@@ -169,7 +168,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     public async Task PdaHaltsAfterTokenReceived()
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
-        await pda.StepAsync(CreateInitiate("flow-8"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(CreateInitiate("flow-8"), TestContext.CancellationToken).ConfigureAwait(false);
         await RunToTokenReceived(pda, TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
@@ -185,7 +184,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     public async Task StackDepthRemainsOneOnLinearFlow()
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
-        await pda.StepAsync(CreateInitiate("flow-9"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(CreateInitiate("flow-9"), TestContext.CancellationToken).ConfigureAwait(false);
         await RunToTokenReceived(pda, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(1, pda.StackDepth, "Stack must contain only the sentinel on the linear path.");
@@ -196,7 +195,7 @@ internal sealed class AuthCodeFlowTransitionsTests
     public async Task UndefinedInputOnWrongStateHaltsPda()
     {
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda = CreatePda();
-        await pda.StepAsync(CreateInitiate("flow-10"), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(CreateInitiate("flow-10"), TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
             new CodeReceived("code", "state", "https://as.example.com", TimeProvider.GetUtcNow()),
@@ -231,11 +230,11 @@ internal sealed class AuthCodeFlowTransitionsTests
         string flowId,
         System.Threading.CancellationToken cancellationToken)
     {
-        await pda.StepAsync(CreateInitiate(flowId), cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(CreateInitiate(flowId), cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(
             new ParBodyComposed("client_id=test", TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParSucceeded(
                 new ParResponse(new Uri("urn:ietf:params:oauth:request_uri:test"), 60),
                 TimeProvider.GetUtcNow()),
@@ -246,18 +245,18 @@ internal sealed class AuthCodeFlowTransitionsTests
         PushdownAutomaton<FlowState, FlowInput, AuthCodeStackSymbol> pda,
         System.Threading.CancellationToken cancellationToken)
     {
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParBodyComposed("client_id=test", TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParSucceeded(
                 new ParResponse(new Uri("urn:ietf:params:oauth:request_uri:test"), 60),
                 TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new CodeReceived("code", "state", "https://as.example.com", TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new TokenExchangeSucceeded("at.abc", "Bearer", 3600, null, null, TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
     }

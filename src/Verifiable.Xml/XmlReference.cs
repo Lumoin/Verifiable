@@ -1,7 +1,6 @@
-using System.Collections.Generic;
+using Lumoin.Base;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Base;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -206,7 +205,7 @@ public readonly struct XmlTransform: IEquatable<XmlTransform>
             return false;
         }
 
-        transforms = new List<XmlTransform>(children.Count);
+        transforms = new(children.Count);
         foreach(int child in children)
         {
             if(!XmlSignatureModelGrammar.IsDsElement(table, child, "Transform"u8))

@@ -1,7 +1,3 @@
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
 /// <summary>

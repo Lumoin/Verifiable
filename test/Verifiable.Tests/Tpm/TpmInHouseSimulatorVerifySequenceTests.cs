@@ -1,8 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -12,7 +11,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -2183,9 +2181,9 @@ internal sealed class TpmInHouseSimulatorVerifySequenceTests
         length =
             TpmHeader.HeaderSize
             + sizeof(uint)                          //Handle area: keyHandle (Auth Index None).
-            + (sizeof(ushort) + sequenceAuth.Length) //auth: TPM2B_AUTH.
-            + (sizeof(ushort) + hint.Length)         //hint: TPM2B_SIGNATURE_HINT.
-            + (sizeof(ushort) + context.Length)      //context: TPM2B_SIGNATURE_CTX.
+            + sizeof(ushort) + sequenceAuth.Length //auth: TPM2B_AUTH.
+            + sizeof(ushort) + hint.Length         //hint: TPM2B_SIGNATURE_HINT.
+            + sizeof(ushort) + context.Length      //context: TPM2B_SIGNATURE_CTX.
             + (includeTrailingOctet ? 1 : 0);        //One trailing octet the wire layout does not admit.
 
         IMemoryOwner<byte> owner = pool.Rent(length);

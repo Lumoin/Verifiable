@@ -1,12 +1,9 @@
-using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.DataIntegrity;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cose;
 

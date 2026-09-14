@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;

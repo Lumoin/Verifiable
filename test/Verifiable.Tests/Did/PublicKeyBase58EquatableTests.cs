@@ -75,7 +75,7 @@ namespace Verifiable.Tests.Did
         [TestMethod]
         public void ConstructorThrowsOnNullKey()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyBase58(null!));
+            _ = Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyBase58(null!));
         }
 
 

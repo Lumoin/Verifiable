@@ -1,16 +1,13 @@
-using System.Linq;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -94,10 +91,10 @@ internal sealed class RefreshedIdTokenParityTests
     public async Task RefreshedIdTokenCarriesFreshIatAndParitySidClaimsAndCnf()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId, name: ExpectedName, email: ExpectedEmail, emailVerified: true);
+        _ = host.SeedTestSubject(subject: SubjectId, name: ExpectedName, email: ExpectedEmail, emailVerified: true);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         await host.StartHttpHostAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer hosted = host.Host("default");
@@ -130,7 +127,7 @@ internal sealed class RefreshedIdTokenParityTests
 
             //2. Authorize — in-process on the SAME EndpointServer the Kestrel host serves, establishing
             //   the End-User session (SetSessionId) the refreshed id_token's sid must repeat.
-            ExchangeContext authorizeContext = new();
+            ExchangeContext authorizeContext = [];
             authorizeContext.SetSubjectId(SubjectId);
             authorizeContext.SetSessionId(SessionId);
             RequestFields authorizeFields = new()
@@ -286,7 +283,7 @@ internal sealed class RefreshedIdTokenParityTests
             return firstResponse;
         }
 
-        string freshNonce = nonceValues!.First();
+        string freshNonce = nonceValues.First();
         firstResponse.Dispose();
 
         string retryProof = await BuildTokenEndpointDpopProofAsync(dpopKey, clientRegistration, segment, freshNonce)

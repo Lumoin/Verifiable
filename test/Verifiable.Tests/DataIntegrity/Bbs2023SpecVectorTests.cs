@@ -1,15 +1,13 @@
-using System.Buffers;
-using System.Text;
 using Lumoin.Veridical.Backends.Managed;
 using Lumoin.Veridical.Bbs;
 using Lumoin.Veridical.Core.Algebraic;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -37,7 +35,7 @@ internal sealed class Bbs2023W3cVectorTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    internal static ExchangeContext EmptyContext { get; } = new();
+    internal static ExchangeContext EmptyContext { get; } = [];
 
     /// <summary>The bbs-2023 ciphersuite (BLS12-381-SHA-256).</summary>
     private static BbsCiphersuite Ciphersuite { get; } = BbsCiphersuite.Bls12Curve381Sha256;
@@ -602,7 +600,7 @@ internal sealed class Bbs2023W3cVectorTests
         {
             foreach(int idx in MatchPointerToCanonicalIndexes(pointer.ToString(), allStatements))
             {
-                matched.Add(idx);
+                _ = matched.Add(idx);
             }
         }
 

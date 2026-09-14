@@ -1,5 +1,3 @@
-using Verifiable.Server;
-
 namespace Verifiable.WebFinger;
 
 /// <summary>

@@ -1,12 +1,12 @@
+using Lumoin.Veritas.Cbor;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Lumoin.Veritas.Cbor;
 using System.Text;
 using System.Text.Json;
-using ModelContextProtocol.Client;
-using ModelContextProtocol.Protocol;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
@@ -53,7 +53,7 @@ internal sealed class Fido2CliCompositionRootGapTests
     public void Initialize()
     {
         tempDirectory = Path.Join(Path.GetTempPath(), $"fido2-cli-gap-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDirectory);
+        _ = Directory.CreateDirectory(tempDirectory);
     }
 
 
@@ -128,7 +128,7 @@ internal sealed class Fido2CliCompositionRootGapTests
             //Oracle-keep: independently recomputes SHA-256 of the RP ID so the wire rpIdHash matches
             //what VerifyFido2Assertion's own RP ID check computes.
             byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-            byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 9);
+            byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 9);
             byte[] assertionClientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
             using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(assertionClientDataJson, BaseMemoryPool.Shared);
             byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -438,7 +438,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         //Oracle-keep: independently recomputes SHA-256 of the RP ID so the wire rpIdHash matches
         //what the CLI's own RP ID check computes.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 5);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 5);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -482,7 +482,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         //Oracle-keep: independently recomputes SHA-256 of the RP ID so the wire rpIdHash matches
         //what the CLI's own RP ID check computes.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 6);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 6);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -532,7 +532,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         //Oracle-keep: independently recomputes SHA-256 of the RP ID so the wire rpIdHash matches
         //what the CLI's own RP ID check computes.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 2);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 2);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -695,7 +695,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         //Oracle-keep: independently recomputes SHA-256 of the RP ID so the wire rpIdHash matches
         //what the CLI's own RP ID check computes.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 1);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 1);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -792,7 +792,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         byte[] credentialId = RandomNumberGenerator.GetBytes(16);
         byte[] coseKeyCbor = credentialPublicKeyCbor ?? MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, coseKeyCbor);
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
 
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
@@ -869,7 +869,7 @@ internal sealed class Fido2CliCompositionRootGapTests
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
         byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
         byte[] signature = Fido2AttestationTestVectors.SignWithEcdsaP256(credentialKey, toBeSigned);
@@ -923,7 +923,7 @@ internal sealed class Fido2CliCompositionRootGapTests
 
         byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);

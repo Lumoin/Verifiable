@@ -1,21 +1,11 @@
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
-using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -134,19 +124,19 @@ internal sealed class SdTokenDcqlAdapterPathTests
             .CreateMetadataExtractor<string>(DcqlCredentialFormats.SdJwt)(token);
 
         Assert.IsNotNull(metadata.AvailablePaths, "A parsed credential exposes the paths it can address.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/family_name"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/family_name"), metadata.AvailablePaths,
             "The top-level family_name occupies the root object's own position.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/employer/family_name"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/employer/family_name"), metadata.AvailablePaths,
             "The namesake under employer occupies its parent's path plus the name, not the root's.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/employer"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/employer"), metadata.AvailablePaths,
             "The disclosable container is itself addressable.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/nationalities/1"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/nationalities/1"), metadata.AvailablePaths,
             "An array-element disclosure is addressed by its index in the issuer-signed array.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/vct"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/vct"), metadata.AvailablePaths,
             "The always-disclosed vct claim is addressable beside the disclosures.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/iss"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/iss"), metadata.AvailablePaths,
             "The always-disclosed iss claim is addressable beside the disclosures.");
-        Assert.HasCount(23, metadata.AvailablePaths!,
+        Assert.HasCount(23, metadata.AvailablePaths,
             "The set is exactly the fourteen disclosure paths and the nine unconditionally disclosed nodes; nothing is synthesised.");
     }
 
@@ -254,10 +244,10 @@ internal sealed class SdTokenDcqlAdapterPathTests
         bool isFound = SdTokenDcqlAdapter.ClaimExtractor(token, pattern, out object? value);
 
         Assert.IsTrue(isFound, "The credential carries selectively disclosable nationalities elements.");
-        Assert.IsInstanceOfType<IEnumerable<object?>>(value,
+        _ = Assert.IsInstanceOfType<IEnumerable<object?>>(value,
             "Selecting all elements of an array yields every selected element's value.");
 
-        var selected = ((IEnumerable<object?>)value!).ToHashSet();
+        var selected = ((IEnumerable<object?>)value).ToHashSet();
 
         Assert.HasCount(3, selected,
             "Section 7.1.1: all three element disclosures are selected; the decoy marker is not an element.");
@@ -367,11 +357,11 @@ internal sealed class SdTokenDcqlAdapterPathTests
     [TestMethod]
     public void AClaimsPathComponentOutsideStringsNullsAndNonNegativeIntegersIsRefused()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
             () => PatternSegment.Index(-1),
             "Section 7: an integer component that is not non-negative is not a claims path component.");
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => DcqlClaimPattern.FromKeys(),
             "Section 7: a claims path pointer MUST be a non-empty array, so a pointer with no components is not one.");
     }
@@ -454,9 +444,9 @@ internal sealed class SdTokenDcqlAdapterPathTests
         Assert.IsTrue(result.Matches,
             "Section 6.4.1: the credential satisfies an option, so it is a match for the query.");
         Assert.IsNotNull(result.MatchedPatterns, "A match reports the patterns it matched.");
-        Assert.Contains(DcqlClaimPattern.FromKeys("employer", "family_name"), result.MatchedPatterns!,
+        Assert.Contains(DcqlClaimPattern.FromKeys("employer", "family_name"), result.MatchedPatterns,
             "The satisfiable option's nested path is the one the credential answers.");
-        Assert.DoesNotContain(DcqlClaimPattern.FromKeys("place_of_birth", "locality"), result.MatchedPatterns!,
+        Assert.DoesNotContain(DcqlClaimPattern.FromKeys("place_of_birth", "locality"), result.MatchedPatterns,
             "The unsatisfiable option's path addresses nothing in this credential.");
     }
 
@@ -727,17 +717,17 @@ internal sealed class SdTokenDcqlAdapterPathTests
     /// </summary>
     private static SdToken<string> ParsePlainSdJwt()
     {
-        (string Encoded, string Digest) givenName = NestedSdJwtVcFixtures.EncodeProperty("salt-given-name", "given_name", "\"Erika\"");
+        (string Encoded, string Digest) = NestedSdJwtVcFixtures.EncodeProperty("salt-given-name", "given_name", "\"Erika\"");
 
         string payloadJson = /*lang=json,strict*/ $$"""
         {
             "_sd_alg": "sha-256",
             "iss": "{{NestedSdJwtVcFixtures.Issuer}}",
-            "_sd": ["{{givenName.Digest}}"]
+            "_sd": ["{{Digest}}"]
         }
         """;
 
-        string wireFormat = $"{NestedSdJwtVcFixtures.CreateMinimalJwt(payloadJson)}~{givenName.Encoded}~";
+        string wireFormat = $"{NestedSdJwtVcFixtures.CreateMinimalJwt(payloadJson)}~{Encoded}~";
 
         return SdJwtSerializer.ParseToken(
             wireFormat, TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, TestSalts.TestSaltTag);

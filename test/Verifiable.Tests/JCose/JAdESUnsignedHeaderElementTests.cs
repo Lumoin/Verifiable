@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -36,7 +31,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void ConstructingUnsignedHeadersWithNullElementsThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, null!));
     }
 
 
@@ -48,7 +43,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void ConstructingUnsignedHeadersWithEmptyElementsThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, []));
     }
 
 
@@ -109,7 +104,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     {
         using var headers = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, [MakeUnknownOpaqueElement("x-a", "one")]);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => headers.Append(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => headers.Append(null!));
     }
 
 
@@ -153,8 +148,8 @@ internal sealed class JAdESUnsignedHeaderElementTests
     {
         using var headers = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, [MakeUnknownOpaqueElement("x-a", "one")]);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(-1));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(headers.Count + 1));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(-1));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(headers.Count + 1));
     }
 
 
@@ -230,7 +225,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
         JAdESUnsignedHeaderElement clearXVals = MakeClearCertificateValuesElement();
         JAdESUnsignedHeaderElement opaqueXVals = MakeOpaqueCertificateValuesElement("opaque-xvals-text");
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.ClearJson, [clearXVals, opaqueXVals]));
     }
 
@@ -250,7 +245,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
         JAdESUnsignedHeaderElement opaqueXVals = MakeOpaqueCertificateValuesElement("opaque-xvals-text");
         JAdESUnsignedHeaderElement clearXVals = MakeClearCertificateValuesElement();
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.Base64Url, [opaqueXVals, clearXVals]));
     }
 
@@ -269,7 +264,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     {
         using var clearHeaders = new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.ClearJson, [MakeClearCertificateValuesElement()]);
 
-        Assert.ThrowsExactly<ArgumentException>(() => clearHeaders.Append(MakeOpaqueCertificateValuesElement("opaque-text")));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => clearHeaders.Append(MakeOpaqueCertificateValuesElement("opaque-text")));
     }
 
 
@@ -308,7 +303,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     {
         var container = new AdESTimestampContainer([new AdESTimestampToken { Val = new byte[] { 0x01 } }], canonAlg: "http://example.org/canon");
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESUnsignedHeaderElementSignatureTimestamp(new JAdESClearUnsignedValue<AdESTimestampContainer>(container)));
     }
 
@@ -344,7 +339,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
         var containerWithoutCanonAlg = new AdESTimestampContainer([new AdESTimestampToken { Val = new byte[] { 0x02 } }]);
         var arcTstElement = new JAdESUnsignedHeaderElementArchiveTimestamp(new JAdESClearUnsignedValue<AdESTimestampContainer>(containerWithoutCanonAlg));
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESUnsignedHeaders(JAdESEtsiUIncorporationMode.ClearJson, [arcTstElement]));
     }
 
@@ -443,8 +438,8 @@ internal sealed class JAdESUnsignedHeaderElementTests
     {
         using PooledMemory text = PooledMemory.FromBytes(Encoding.UTF8.GetBytes("value"), BaseMemoryPool.Shared, CryptoTags.JoseEncodedUnsignedHeaderElement);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESUnsignedHeaderElementUnknown(null!, text));
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnsignedHeaderElementUnknown(string.Empty, text));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESUnsignedHeaderElementUnknown(null!, text));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnsignedHeaderElementUnknown(string.Empty, text));
     }
 
 
@@ -452,7 +447,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void SignaturePolicyStoreWithNullContentThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESSignaturePolicyStore(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESSignaturePolicyStore(null!));
     }
 
 
@@ -464,7 +459,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void CertificateValuesWithEmptyItemsThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESCertificateValues([]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESCertificateValues([]));
     }
 
 
@@ -476,7 +471,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void RevocationValuesWithNoMembersThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESRevocationValues());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESRevocationValues());
     }
 
 
@@ -488,7 +483,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void RevocationValuesWithEmptyCrlValuesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESRevocationValues(crlValues: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESRevocationValues(crlValues: []));
     }
 
 
@@ -500,7 +495,7 @@ internal sealed class JAdESUnsignedHeaderElementTests
     [TestMethod]
     public void ValidationDataWithNoMembersThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESValidationData());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESValidationData());
     }
 
 

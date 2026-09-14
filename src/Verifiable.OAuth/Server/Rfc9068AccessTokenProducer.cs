@@ -126,7 +126,7 @@ internal static class Rfc9068AccessTokenProducer
             {
                 foreach(string aud in mapped)
                 {
-                    audiences.Add(aud);
+                    _ = audiences.Add(aud);
                 }
             }
         }

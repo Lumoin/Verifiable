@@ -4,8 +4,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Federation;
 
@@ -402,7 +400,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationFetch, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationFetch, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);
@@ -631,7 +629,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationList, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationList, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);
@@ -704,20 +702,20 @@ public static class FederationEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('[');
+            _ = sb.Append('[');
             for(int i = 0; i < subordinates.Count; ++i)
             {
                 if(i > 0)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
-                sb.Append('"');
+                _ = sb.Append('"');
                 JsonAppender.AppendEscapedString(sb, subordinates[i].Value);
-                sb.Append('"');
+                _ = sb.Append('"');
             }
 
-            sb.Append(']');
+            _ = sb.Append(']');
 
             return sb.ToString();
         }
@@ -838,7 +836,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationResolve, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationResolve, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);
@@ -1075,7 +1073,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationHistoricalKeys, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationHistoricalKeys, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);
@@ -1444,7 +1442,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationTrustMark, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationTrustMark, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);
@@ -1587,7 +1585,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationTrustMarkList, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationTrustMarkList, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);
@@ -1717,7 +1715,7 @@ public static class FederationEndpoints
                 }
 
                 ServerHttpResponse? clientAuthFailure = await EnforceFederationClientAuthenticationAsync(
-                    WellKnownEndpointNames.FederationTrustMarkStatus, fields, (ClientRecord)registration, context, server, ct).ConfigureAwait(false);
+                    WellKnownEndpointNames.FederationTrustMarkStatus, fields, registration, context, server, ct).ConfigureAwait(false);
                 if(clientAuthFailure is not null)
                 {
                     return (null, clientAuthFailure);

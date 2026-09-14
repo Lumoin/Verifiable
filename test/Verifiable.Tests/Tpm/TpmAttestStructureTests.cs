@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -137,7 +133,7 @@ internal sealed class TpmAttestStructureTests
         Assert.AreEqual(0x0001000200030004UL, parsed.FirmwareVersion);
 
         Assert.IsNotNull(parsed.Attested.Quote);
-        Assert.AreEqual(1, parsed.Attested.Quote!.PcrSelect.Count);
+        Assert.AreEqual(1, parsed.Attested.Quote.PcrSelect.Count);
         Assert.AreEqual(PcrBank, parsed.Attested.Quote.PcrSelect[0].HashAlgorithm);
         Assert.IsTrue(parsed.Attested.Quote.PcrDigest.AsReadOnlySpan().SequenceEqual(SamplePcrDigest));
     }
@@ -222,7 +218,7 @@ internal sealed class TpmAttestStructureTests
         //The certify arm parses (and the quote arm is absent for this type).
         Assert.IsNull(parsed.Attested.Quote);
         Assert.IsNotNull(parsed.Attested.Certify);
-        Assert.IsTrue(parsed.Attested.Certify!.Name.Span.SequenceEqual(SampleCertifiedName));
+        Assert.IsTrue(parsed.Attested.Certify.Name.Span.SequenceEqual(SampleCertifiedName));
         Assert.IsTrue(parsed.Attested.Certify.QualifiedName.Span.SequenceEqual(SampleCertifiedQualifiedName));
     }
 

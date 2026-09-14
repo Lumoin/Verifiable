@@ -52,11 +52,11 @@ internal sealed class SdTokenDcqlAdapterTests
         string familyNameDigest = SdJwtPathExtraction.ComputeDisclosureDigest(
             familyNameEncoded, WellKnownHashAlgorithms.Sha256Iana, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
 
-        JsonElement employerValue = JsonDocument.Parse(/*lang=json,strict*/ $$"""
+        JsonElement employerValue = JsonElement.Parse(/*lang=json,strict*/ $$"""
         {
             "_sd": ["{{familyNameDigest}}"]
         }
-        """).RootElement;
+        """);
         SdDisclosure employer = SdDisclosure.CreateProperty(
             TestSalts.FromBytes(Encoding.UTF8.GetBytes("salt-employer")), "employer", employerValue);
 
@@ -140,17 +140,17 @@ internal sealed class SdTokenDcqlAdapterTests
             "No TrustedAuthorityEvidenceSource was supplied, so the metadata carries no trust evidence.");
         Assert.IsNotNull(metadata.AvailablePaths,
             "A parsed credential exposes the positions a claims path pointer can address.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/given_name"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/given_name"), metadata.AvailablePaths,
             "RFC 9901 Section 4.2.1: a top-level disclosure sits at the root object's path plus its name.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/employer"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/employer"), metadata.AvailablePaths,
             "RFC 9901 Section 4.2.6: the recursive disclosure is itself addressable.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/employer/family_name"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/employer/family_name"), metadata.AvailablePaths,
             "RFC 9901 Section 9.3: the nested namesake sits at its own containing object's path plus its name.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/iss"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/iss"), metadata.AvailablePaths,
             "SD-JWT VC Section 2.2.2.3: iss cannot be selectively disclosed, so it is addressable beside the disclosures.");
-        Assert.Contains(CredentialPath.FromJsonPointer("/vct"), metadata.AvailablePaths!,
+        Assert.Contains(CredentialPath.FromJsonPointer("/vct"), metadata.AvailablePaths,
             "SD-JWT VC Section 2.2.2.3: vct cannot be selectively disclosed, so it is addressable beside the disclosures.");
-        Assert.HasCount(5, metadata.AvailablePaths!,
+        Assert.HasCount(5, metadata.AvailablePaths,
             "The credential addresses exactly its three disclosures and its two unconditionally disclosed claims.");
     }
 
@@ -260,7 +260,7 @@ internal sealed class SdTokenDcqlAdapterTests
         SdDisclosure.CreateProperty(
             TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
             claimName,
-            JsonDocument.Parse($"\"{claimValue}\"").RootElement);
+            JsonElement.Parse($"\"{claimValue}\""));
 
 
     private static string CreateMinimalJwt(string payloadJson)

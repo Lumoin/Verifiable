@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
@@ -12,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// (Part 2: Structures, clause 6.7, Table 19).
 /// </para>
 /// </remarks>
-public enum TpmClockAdjustConstants : sbyte
+public enum TpmClockAdjustConstants: sbyte
 {
     /// <summary>
     /// slow the Clock update rate by one coarse adjustment step

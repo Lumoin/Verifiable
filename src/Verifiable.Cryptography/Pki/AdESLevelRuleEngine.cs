@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -85,6 +82,12 @@ public static class AdESLevelRuleEngine
                 AddFinding(violations, labelFinding, row, level, AdESRowCheckKind.MissingRequired, occurrenceCount),
             AdESPresence.ShallNotBePresent when occurrenceCount > 0 =>
                 AddFinding(violations, labelFinding, row, level, AdESRowCheckKind.PresentButForbidden, occurrenceCount),
+            AdESPresence.ShallBePresent => false,
+            AdESPresence.ShallNotBePresent => false,
+            AdESPresence.MayBePresent => false,
+            AdESPresence.ShallBeProvided => false,
+            AdESPresence.ConditionedPresence => false,
+            AdESPresence.ShouldNotBePresent => false,
             _ => false
         };
 

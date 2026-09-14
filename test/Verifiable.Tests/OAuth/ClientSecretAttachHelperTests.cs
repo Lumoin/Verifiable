@@ -1,7 +1,6 @@
-using System.Collections.Immutable;
-using System.Net.Http;
-using System.Text;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
+using System.Text;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;

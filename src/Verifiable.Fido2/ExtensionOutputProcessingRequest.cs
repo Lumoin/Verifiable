@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 
 namespace Verifiable.Fido2;

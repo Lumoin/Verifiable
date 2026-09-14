@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Text;
 using Verifiable.Cryptography;
@@ -51,7 +50,7 @@ public static class WebPlusHashedKey
 
         int byteCount = Encoding.UTF8.GetByteCount(mbPubKey);
         using IMemoryOwner<byte> owner = pool.Rent(byteCount);
-        Encoding.UTF8.GetBytes(mbPubKey, owner.Memory.Span[..byteCount]);
+        _ = Encoding.UTF8.GetBytes(mbPubKey, owner.Memory.Span[..byteCount]);
 
         return await WebPlusMbHash.ComputeAsync(owner.Memory[..byteCount], multihashCode, digestLength, computeDigest, digestTag, base64UrlEncoder, pool, cancellationToken).ConfigureAwait(false);
     }

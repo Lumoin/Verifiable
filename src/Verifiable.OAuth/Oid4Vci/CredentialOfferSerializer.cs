@@ -1,6 +1,5 @@
 using System.Text;
 using Verifiable.JCose;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -50,7 +49,7 @@ public static class CredentialOfferSerializer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(
                 sb, CredentialIssuerMetadataParameterNames.CredentialIssuer,
@@ -65,7 +64,7 @@ public static class CredentialOfferSerializer
                     sb, CredentialOfferParameterNames.Grants, BuildGrantsJson(offer), ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -461,7 +460,7 @@ public static class CredentialOfferSerializer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             if(offer.PreAuthorizedCodeGrant is PreAuthorizedCodeOfferGrant preAuthorized)
@@ -478,7 +477,7 @@ public static class CredentialOfferSerializer
                     BuildAuthorizationCodeGrantJson(authorizationCode), ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -494,7 +493,7 @@ public static class CredentialOfferSerializer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(
                 sb, OAuthRequestParameterNames.PreAuthorizedCode, grant.PreAuthorizedCode, ref first);
@@ -513,7 +512,7 @@ public static class CredentialOfferSerializer
                     sb, CredentialOfferParameterNames.AuthorizationServer, grant.AuthorizationServer, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -529,7 +528,7 @@ public static class CredentialOfferSerializer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             if(!string.IsNullOrEmpty(txCode.InputMode))
@@ -550,7 +549,7 @@ public static class CredentialOfferSerializer
                     sb, CredentialOfferParameterNames.Description, txCode.Description, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -566,7 +565,7 @@ public static class CredentialOfferSerializer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             if(!string.IsNullOrEmpty(grant.IssuerState))
@@ -581,7 +580,7 @@ public static class CredentialOfferSerializer
                     sb, CredentialOfferParameterNames.AuthorizationServer, grant.AuthorizationServer, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

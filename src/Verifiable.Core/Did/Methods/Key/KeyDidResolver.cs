@@ -1,14 +1,7 @@
-using System;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -252,6 +245,6 @@ public static class KeyDidResolver
         VerificationMethod[] existing = document.VerificationMethod ?? [];
         document.VerificationMethod = [.. existing, keyAgreementMethod];
 
-        document.WithKeyAgreement(verificationMethodId);
+        _ = document.WithKeyAgreement(verificationMethodId);
     }
 }

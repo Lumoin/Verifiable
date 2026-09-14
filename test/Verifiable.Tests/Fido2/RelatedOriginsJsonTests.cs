@@ -3,8 +3,6 @@ using System.Text;
 using Verifiable.Fido2;
 using Verifiable.Json;
 
-using static Verifiable.Tests.Fido2.Fido2TestVectors;
-
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
@@ -93,7 +91,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """{"origins":[]}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -103,7 +101,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """{"origins":["https://a.example", 42]}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -113,7 +111,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """{"origins":{"a":"b"}}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -123,7 +121,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """{"origins":"https://a.example"}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -133,7 +131,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """{"origins":["https://a.example"],"origins":["https://b.example"]}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -143,7 +141,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """["https://a.example"]""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -153,7 +151,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = "{not json";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -163,7 +161,7 @@ internal sealed class RelatedOriginsJsonTests
     {
         const string json = """{"origins":["https://a.example"]} garbage""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -179,7 +177,7 @@ internal sealed class RelatedOriginsJsonTests
         string deeplyNestedArray = Fido2TestVectors.BuildDeeplyNestedArray(depth: 70);
         string json = "{\"origins\":[\"https://a.example\"],\"deep\":" + deeplyNestedArray + "}";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RelatedOriginsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -215,7 +213,7 @@ internal sealed class RelatedOriginsJsonTests
         RelatedOriginsDocument document = new() { Origins = [] };
         ArrayBufferWriter<byte> buffer = new();
 
-        Assert.ThrowsExactly<ArgumentException>(() => RelatedOriginsJsonWriter.Write(document, buffer));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => RelatedOriginsJsonWriter.Write(document, buffer));
     }
 
 
@@ -244,6 +242,6 @@ internal sealed class RelatedOriginsJsonTests
         RelatedOriginsDocument document = new() { Origins = [invalidOrigin] };
         ArrayBufferWriter<byte> buffer = new();
 
-        Assert.ThrowsExactly<ArgumentException>(() => RelatedOriginsJsonWriter.Write(document, buffer), caseName);
+        _ = Assert.ThrowsExactly<ArgumentException>(() => RelatedOriginsJsonWriter.Write(document, buffer), caseName);
     }
 }

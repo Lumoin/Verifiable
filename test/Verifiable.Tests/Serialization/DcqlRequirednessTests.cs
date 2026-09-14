@@ -30,7 +30,7 @@ internal sealed class DcqlRequirednessTests
     {
         //OID4VP 1.0 §6.1: a Credential Query without 'meta' is non-conformant; the
         //strict (default) reader rejects it.
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<DcqlQuery>(MetaAbsentWire, Strict));
     }
 
@@ -69,7 +69,7 @@ internal sealed class DcqlRequirednessTests
         const string wire =
             """{"credentials":[{"id":"pid","format":"dc+sd-jwt","meta":{},"claims":[{"path":["family_name"]}],"claim_sets":[["family_name"]]}]}""";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<DcqlQuery>(wire, Strict));
     }
 

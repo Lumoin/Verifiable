@@ -1,7 +1,3 @@
-using System;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>

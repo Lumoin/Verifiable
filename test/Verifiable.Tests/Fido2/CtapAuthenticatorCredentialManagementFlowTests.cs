@@ -1,10 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
@@ -56,7 +51,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("cm-capstone-a",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("cm-capstone-a", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         await EstablishPinAsync(harness, pool, cancellationToken).ConfigureAwait(false);
@@ -127,7 +122,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         using(CredentialId deleteCarrier = CredentialId.Create(rpaUser1.CredentialIdBytes, pool))
         {
             var deleteDescriptor = new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = deleteCarrier };
-            await AssertGatedCmStatusAsync(
+            _ = await AssertGatedCmStatusAsync(
                 harness, pool, cmToken, WellKnownCtapCredentialManagementSubCommands.DeleteCredential, null, deleteDescriptor, null,
                 WellKnownCtapStatusCodes.Ok, cancellationToken).ConfigureAwait(false);
         }
@@ -157,7 +152,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         {
             var renameDescriptor = new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = renameCredentialCarrier };
             var renameUser = new CtapPublicKeyCredentialUserEntity(renameUserId, RenamedName, RenamedDisplayName);
-            await AssertGatedCmStatusAsync(
+            _ = await AssertGatedCmStatusAsync(
                 harness, pool, cmToken, WellKnownCtapCredentialManagementSubCommands.UpdateUserInformation, null, renameDescriptor, renameUser,
                 WellKnownCtapStatusCodes.Ok, cancellationToken).ConfigureAwait(false);
         }
@@ -191,7 +186,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("cm-capstone-b",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("cm-capstone-b", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         var coldGetNextRequest = new CtapCredentialManagementRequest(SubCommand: WellKnownCtapCredentialManagementSubCommands.EnumerateRpsGetNextRp);
@@ -212,20 +207,20 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         byte[] rpaHash = ComputeRpIdHash(RpA);
         byte[] boundToken = await IssueCmTokenAsync(harness, pool, RpA, cancellationToken).ConfigureAwait(false);
 
-        await AssertGatedCmStatusAsync(
+        _ = await AssertGatedCmStatusAsync(
             harness, pool, boundToken, WellKnownCtapCredentialManagementSubCommands.GetCredsMetadata, null, null, null,
             WellKnownCtapStatusCodes.PinAuthInvalid, cancellationToken).ConfigureAwait(false);
-        await AssertGatedCmStatusAsync(
+        _ = await AssertGatedCmStatusAsync(
             harness, pool, boundToken, WellKnownCtapCredentialManagementSubCommands.EnumerateRpsBegin, null, null, null,
             WellKnownCtapStatusCodes.PinAuthInvalid, cancellationToken).ConfigureAwait(false);
-        await AssertGatedCmStatusAsync(
+        _ = await AssertGatedCmStatusAsync(
             harness, pool, boundToken, WellKnownCtapCredentialManagementSubCommands.EnumerateCredentialsBegin, rpaHash, null, null,
             WellKnownCtapStatusCodes.PinAuthInvalid, cancellationToken).ConfigureAwait(false);
 
         using(CredentialId deleteACarrier = CredentialId.Create(credentialA.CredentialIdBytes, pool))
         {
             var deleteADescriptor = new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = deleteACarrier };
-            await AssertGatedCmStatusAsync(
+            _ = await AssertGatedCmStatusAsync(
                 harness, pool, boundToken, WellKnownCtapCredentialManagementSubCommands.DeleteCredential, null, deleteADescriptor, null,
                 WellKnownCtapStatusCodes.Ok, cancellationToken).ConfigureAwait(false);
         }
@@ -233,7 +228,7 @@ internal sealed class CtapAuthenticatorCredentialManagementFlowTests
         using(CredentialId deleteBCarrier = CredentialId.Create(credentialB.CredentialIdBytes, pool))
         {
             var deleteBDescriptor = new PublicKeyCredentialDescriptor { Type = WellKnownPublicKeyCredentialTypes.PublicKey, Id = deleteBCarrier };
-            await AssertGatedCmStatusAsync(
+            _ = await AssertGatedCmStatusAsync(
                 harness, pool, boundToken, WellKnownCtapCredentialManagementSubCommands.DeleteCredential, null, deleteBDescriptor, null,
                 WellKnownCtapStatusCodes.PinAuthInvalid, cancellationToken).ConfigureAwait(false);
         }

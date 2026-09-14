@@ -1,9 +1,7 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 
 namespace Verifiable.Tests.JCose;
 
@@ -61,7 +59,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullUniqueIdentifierThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure(null!, "ref", "protection", "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure(null!, "ref", "protection", "coexistence"));
     }
 
 
@@ -69,7 +67,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithWhiteSpaceUniqueIdentifierThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => _ = new CBAdESAlternativeMechanismDisclosure("   ", "ref", "protection", "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => _ = new CBAdESAlternativeMechanismDisclosure("   ", "ref", "protection", "coexistence"));
     }
 
 
@@ -77,7 +75,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullSemanticsAndSyntaxReferenceThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure("id", null!, "protection", "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure("id", null!, "protection", "coexistence"));
     }
 
 
@@ -85,7 +83,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullProtectionStrategyThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure("id", "ref", null!, "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure("id", "ref", null!, "coexistence"));
     }
 
 
@@ -93,7 +91,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullCoexistenceStrategyThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure("id", "ref", "protection", null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new CBAdESAlternativeMechanismDisclosure("id", "ref", "protection", null!));
     }
 
 
@@ -104,7 +102,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
         var registry = new CBAdESAlternativeMechanismDisclosureRegistry();
         var disclosure = MakeDisclosure();
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register(null!, disclosure));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register(null!, disclosure));
     }
 
 
@@ -114,7 +112,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
     {
         var registry = new CBAdESAlternativeMechanismDisclosureRegistry();
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register(new CBAdESUnsignedHeaderElementIntegerLabel(1), null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register(new CBAdESUnsignedHeaderElementIntegerLabel(1), null!));
     }
 
 
@@ -146,7 +144,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
         var registry = new CBAdESAlternativeMechanismDisclosureRegistry();
         var disclosure = MakeDisclosure();
 
-        Assert.ThrowsExactly<ArgumentException>(() => registry.Register(new CBAdESUnsignedHeaderElementIntegerLabel(profiledLabel), disclosure));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => registry.Register(new CBAdESUnsignedHeaderElementIntegerLabel(profiledLabel), disclosure));
     }
 
 
@@ -158,7 +156,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
         var label = new CBAdESUnsignedHeaderElementIntegerLabel(90210);
         registry.Register(label, MakeDisclosure());
 
-        Assert.ThrowsExactly<ArgumentException>(() => registry.Register(new CBAdESUnsignedHeaderElementIntegerLabel(90210), MakeDisclosure()));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => registry.Register(new CBAdESUnsignedHeaderElementIntegerLabel(90210), MakeDisclosure()));
     }
 
 
@@ -199,7 +197,7 @@ internal sealed class CBAdESAlternativeMechanismDisclosureTests
         Assert.IsNotNull(result);
         using(result)
         {
-            CBAdESUnsignedHeaders header = result!;
+            CBAdESUnsignedHeaders header = result;
             Assert.HasCount(1, header);
             Assert.IsTrue(header[0] is CBAdESUnsignedHeaderElementUnknown, "The catch-all arm must round-trip the unrecognized label, not drop it.");
 

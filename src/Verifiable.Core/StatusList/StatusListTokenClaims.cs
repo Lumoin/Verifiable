@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -302,13 +299,13 @@ public static class StatusListTokenClaims
         (result, bool isWholeNumber) = value switch
         {
             long l => (l, true),
-            int i => ((long)i, true),
-            short s => ((long)s, true),
-            byte b => ((long)b, true),
-            uint ui => ((long)ui, true),
+            int i => (i, true),
+            short s => (s, true),
+            byte b => (b, true),
+            uint ui => (ui, true),
             ulong ul when ul <= long.MaxValue => ((long)ul, true),
-            sbyte sb => ((long)sb, true),
-            ushort us => ((long)us, true),
+            sbyte sb => (sb, true),
+            ushort us => (us, true),
             decimal d when d >= long.MinValue && d <= long.MaxValue && d == Math.Truncate(d) => ((long)d, true),
             _ => (0L, false)
         };

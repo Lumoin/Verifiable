@@ -36,6 +36,6 @@ public static class TpmDeviceExtensions
 {
     extension(TpmDevice device)
     {
-     
+
     }
 }

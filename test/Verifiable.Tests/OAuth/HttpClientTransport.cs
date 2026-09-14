@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -187,7 +185,7 @@ internal static class HttpClientTransport
                 //content collection as a fallback so values like
                 //Content-Type that the OAuth client occasionally surfaces
                 //land in the right place.
-                request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                _ = request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
             }
         }
     }
@@ -239,7 +237,7 @@ internal static class HttpClientTransport
 
         if(headers.TryGetValue(TraceStateHeaderName, out string? traceState))
         {
-            transportMetadata ??= new Dictionary<string, string>(StringComparer.Ordinal);
+            transportMetadata ??= new(StringComparer.Ordinal);
             transportMetadata[HttpResponseDataKeys.TraceState] = traceState;
         }
 

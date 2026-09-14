@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -986,13 +982,13 @@ public static class LongTermValidation
         DateTimeOffset instant,
         ProofOfExistenceOrigin origin,
         ValidationObjectIdentity? establishedBy) => new()
-    {
-        ObjectIdentity = objectIdentity,
-        Instant = instant,
-        Scope = ProofOfExistenceScope.Object,
-        Origin = origin,
-        EstablishedBy = establishedBy
-    };
+        {
+            ObjectIdentity = objectIdentity,
+            Instant = instant,
+            Scope = ProofOfExistenceScope.Object,
+            Origin = origin,
+            EstablishedBy = establishedBy
+        };
 
 
     /// <summary>The generation time of one time-stamp attribute and the position the signature carries it at, which is what step 5)a) of clause 5.6.3.4 orders the attributes by.</summary>

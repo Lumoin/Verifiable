@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
@@ -121,7 +120,7 @@ internal sealed class PackedCertificateProfileTests
     {
         AttestationResult result = await VerifyConformantChainWithLeafOverrideRawAsync(country: "FI");
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -357,7 +356,7 @@ internal sealed class PackedCertificateProfileTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
     }
 
 
@@ -380,7 +379,7 @@ internal sealed class PackedCertificateProfileTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(result);
         Assert.AreEqual(Fido2AttestationErrors.MalformedStatement.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 

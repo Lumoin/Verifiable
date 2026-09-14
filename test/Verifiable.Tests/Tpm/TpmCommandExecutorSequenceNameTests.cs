@@ -1,15 +1,11 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -340,7 +336,7 @@ internal sealed class TpmCommandExecutorSequenceNameTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
@@ -382,7 +378,7 @@ internal sealed class TpmCommandExecutorSequenceNameTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool handlerPool,
             CancellationToken cancellationToken)
@@ -793,12 +789,12 @@ internal sealed class TpmCommandExecutorSequenceNameTests
     private static byte[] BuildHeaderOnlyErrorFrame(uint responseCode)
     {
         byte[] frame = new byte[HeaderSize];
-        frame[0] = (byte)(TpmStNoSessions >> 8);
-        frame[1] = (byte)(TpmStNoSessions & 0xFF);
-        frame[2] = (byte)(HeaderSize >> 24);
-        frame[3] = (byte)(HeaderSize >> 16);
-        frame[4] = (byte)(HeaderSize >> 8);
-        frame[5] = (byte)(HeaderSize & 0xFF);
+        frame[0] = TpmStNoSessions >> 8;
+        frame[1] = TpmStNoSessions & 0xFF;
+        frame[2] = HeaderSize >> 24;
+        frame[3] = HeaderSize >> 16;
+        frame[4] = HeaderSize >> 8;
+        frame[5] = HeaderSize & 0xFF;
         frame[6] = (byte)(responseCode >> 24);
         frame[7] = (byte)(responseCode >> 16);
         frame[8] = (byte)(responseCode >> 8);

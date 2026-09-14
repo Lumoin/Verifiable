@@ -1,11 +1,8 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -118,7 +115,7 @@ internal sealed class SecureMessagingCardSessionTests
         protectedCommand.AsReadOnlySpan().CopyTo(tampered.Memory.Span);
         tampered.Memory.Span[7] ^= 0x01;
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
             async () =>
             {
                 using SecureMessagingCommand _ = await card.UnprotectCommandAsync(

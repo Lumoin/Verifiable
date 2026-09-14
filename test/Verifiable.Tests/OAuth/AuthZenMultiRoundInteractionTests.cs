@@ -6,7 +6,6 @@ using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.OAuth;
 using Verifiable.OAuth.AuthZen;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -61,7 +60,7 @@ internal sealed class AuthZenMultiRoundInteractionTests
             new Uri(ClientId),
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         var policy = new StepUpPolicy(requiredAcr: MfaAcr);
         app.Server.OAuth().EvaluateAccessAsync = policy.EvaluateAsync;
 
@@ -102,7 +101,7 @@ internal sealed class AuthZenMultiRoundInteractionTests
             new Uri(ClientId),
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         var policy = new EntitlementPolicy(TimeProvider, requestUrl: "https://iga.example.com/requests/new");
         app.Server.OAuth().EvaluateAccessAsync = policy.EvaluateAsync;
 
@@ -280,7 +279,7 @@ internal sealed class AuthZenMultiRoundInteractionTests
 
         if(request.Subject.Properties is { } properties)
         {
-            JsonObject propertyObject = new();
+            JsonObject propertyObject = [];
             foreach(KeyValuePair<string, object> entry in properties)
             {
                 propertyObject[entry.Key] = JsonValue.Create((string)entry.Value);

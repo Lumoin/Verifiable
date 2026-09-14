@@ -1,16 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Encodings;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -18,11 +15,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -158,8 +150,8 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
         byte[] recovered = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA384, TpmAlgIdConstants.TPM_ALG_SHA384);
         Assert.IsTrue(recovered.AsSpan().SequenceEqual(plaintext), "SHA-384 for both lhash and MGF1 must recover exactly what the TPM encrypted.");
 
-        Assert.ThrowsExactly<InvalidCipherTextException>(() => _ = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA384, TpmAlgIdConstants.TPM_ALG_SHA256));
-        Assert.ThrowsExactly<InvalidCipherTextException>(() => _ = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA256, TpmAlgIdConstants.TPM_ALG_SHA256));
+        _ = Assert.ThrowsExactly<InvalidCipherTextException>(() => _ = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA384, TpmAlgIdConstants.TPM_ALG_SHA256));
+        _ = Assert.ThrowsExactly<InvalidCipherTextException>(() => _ = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA256, TpmAlgIdConstants.TPM_ALG_SHA256));
     }
 
     /// <summary>
@@ -192,7 +184,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
         byte[] recovered = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA384, TpmAlgIdConstants.TPM_ALG_SHA384);
         Assert.IsTrue(recovered.AsSpan().SequenceEqual(plaintext), "SHA-384 for both lhash and MGF1 must recover exactly what the TPM encrypted.");
 
-        Assert.ThrowsExactly<InvalidCipherTextException>(() => _ = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA384, TpmAlgIdConstants.TPM_ALG_SHA256));
+        _ = Assert.ThrowsExactly<InvalidCipherTextException>(() => _ = DecryptOaepOffTpmWithHashes(key.Key, ciphertext, label, TpmAlgIdConstants.TPM_ALG_SHA384, TpmAlgIdConstants.TPM_ALG_SHA256));
     }
 
     /// <summary>
@@ -701,7 +693,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
             tpm, registry, pool, mistypedHandle, "x"u8.ToArray(), TpmtRsaDecrypt.Null, ReadOnlyMemory<byte>.Empty);
         Assert.AreEqual(
             HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), encrypted.ResponseCode,
-            $"Table 44: keyHandle is TPM2_RSA_Encrypt()'s sole handle (index 0); a handle of type 0x{(mistypedHandle >> 24):X2} is outside the transient/persistent ranges (Table 49 carries no '+').");
+            $"Table 44: keyHandle is TPM2_RSA_Encrypt()'s sole handle (index 0); a handle of type 0x{mistypedHandle >> 24:X2} is outside the transient/persistent ranges (Table 49 carries no '+').");
         DisposeIfSuccess(encrypted);
     }
 
@@ -862,6 +854,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
         {
             WireShape.OverWideMessage => HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0),
             WireShape.OverWideLabel => HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 2),
+            WireShape.TrailingOctet => TpmRcConstants.TPM_RC_SIZE,
             _ => TpmRcConstants.TPM_RC_SIZE
         };
 
@@ -912,7 +905,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using var simulator = new TpmSimulator(
-            $"tpm-in-house-rsa-encrypt-{nameof(RsaEncryptFailureModeIsRefusedWithFailure)}",selfTest: TpmSelfTestBehavior.Fails, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+            $"tpm-in-house-rsa-encrypt-{nameof(RsaEncryptFailureModeIsRefusedWithFailure)}", selfTest: TpmSelfTestBehavior.Fails, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -1118,7 +1111,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
     /// <typeparam name="T">The response type.</typeparam>
     /// <param name="result">The result to release.</param>
     private static void DisposeIfSuccess<T>(TpmResult<T> result)
-        where T: IDisposable
+        where T : IDisposable
     {
         if(result.IsSuccess)
         {
@@ -1420,7 +1413,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptTests
 
         /// <summary>Mints a fresh RSA-2048 key pair.</summary>
         /// <returns>The material; the caller disposes it.</returns>
-        public static RsaKeyMaterial Generate() => new(RSA.Create((int)RsaKeyBits));
+        public static RsaKeyMaterial Generate() => new(RSA.Create(RsaKeyBits));
 
         /// <summary>Releases the framework key and clears the prime.</summary>
         public void Dispose()

@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -426,7 +423,7 @@ public static class VerificationMethodResolutionExtensions
             }
 
             string resolvedReference = reference;
-            if(reference.StartsWith('#') && document.Id is not null)
+            if(reference.StartsWith('#', StringComparison.Ordinal) && document.Id is not null)
             {
                 resolvedReference = document.Id + reference;
             }
@@ -608,7 +605,7 @@ public static class VerificationMethodResolutionExtensions
             return null;
         }
 
-        var normalizedId = id.StartsWith('#') && document.Id is not null
+        var normalizedId = id.StartsWith('#', StringComparison.Ordinal) && document.Id is not null
             ? document.Id + id
             : id;
 

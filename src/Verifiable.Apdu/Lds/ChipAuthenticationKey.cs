@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Apdu.Lds;
 

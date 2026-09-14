@@ -201,7 +201,7 @@ public static class JoseCriticalHeaderValidation
     {
         int byteCount = System.Text.Encoding.UTF8.GetByteCount(name);
         Span<byte> nameBytes = byteCount <= 128 ? stackalloc byte[byteCount] : new byte[byteCount];
-        System.Text.Encoding.UTF8.GetBytes(name, nameBytes);
+        _ = System.Text.Encoding.UTF8.GetBytes(name, nameBytes);
 
         return JwkJsonReader.ContainsKey(headerJson, nameBytes);
     }

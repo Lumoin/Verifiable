@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;

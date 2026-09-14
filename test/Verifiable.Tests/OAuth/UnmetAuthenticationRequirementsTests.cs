@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -44,7 +42,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task StaleAuthenticationBeyondMaxAgeFailsWithUnmetRequirement()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -76,7 +74,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task ErrorRedirectCarriesIssParameter()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Haip10);
 
@@ -101,7 +99,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task FreshAuthenticationWithinMaxAgeSucceeds()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -125,7 +123,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task MaxAgeZeroRequiresFreshAuthentication()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -157,7 +155,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task MaxAgeZeroRejectsASessionThatIsNotFreshEvenWithinClockSkew()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -183,7 +181,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task MaxAgeWithoutEstablishedAuthTimeFailsClosed()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -208,7 +206,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task MalformedMaxAgeIsRejectedAtPar()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -227,7 +225,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
@@ -245,7 +243,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task AcrUnsatisfiedByApplicationVerdictFailsWithUnmetRequirement()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -280,7 +278,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task AcrSatisfiedByApplicationVerdictSucceeds()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -312,7 +310,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task ApplicationVerdictReceivesRequestedAndEstablishedAcr()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -329,7 +327,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
                 return ValueTask.FromResult(AuthorizationRequestDecision.Permit);
             };
 
-        await DriveToAuthorizeAsync(
+        _ = await DriveToAuthorizeAsync(
             host, material, acrValues: "loa-substantial loa-high",
             establishedAcr: "loa-substantial").ConfigureAwait(false);
 
@@ -352,7 +350,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task AcrValuesWithoutAnEvaluatorAreNotEnforced()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -375,7 +373,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task ApplicationDenialWithAccessDeniedReasonMapsToAccessDeniedError()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -407,7 +405,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
     public async Task PushedScopeIsAuthoritativeAndAuthorizeGetScopeIsIgnored()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -433,7 +431,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
@@ -447,7 +445,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             [OAuthRequestParameterNames.RequestUri] = requestUri,
             [OAuthRequestParameterNames.Scope] = "openid email profile"
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -498,7 +496,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
@@ -510,7 +508,7 @@ internal sealed class UnmetAuthenticationRequirementsTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         if(authTime is { } t)
         {

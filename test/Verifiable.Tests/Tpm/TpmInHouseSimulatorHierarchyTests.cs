@@ -1,11 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -16,11 +13,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -436,11 +428,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
         Assert.IsNotNull(capturedCommand, "The capturing transport must have observed the rotation command.");
         Assert.IsNotNull(capturedResponse, "The capturing transport must have observed the rotation response.");
 
-        byte[] commandNonceCaller = ReadCommandSessionNonces(capturedCommand!, handleCount: 1)[0];
-        (int hmacStart, int hmacLength, byte[] responseNonceTpm, byte sessionAttributes) = ReadFirstResponseSessionEntry(capturedResponse!);
+        byte[] commandNonceCaller = ReadCommandSessionNonces(capturedCommand, handleCount: 1)[0];
+        (int hmacStart, int hmacLength, byte[] responseNonceTpm, byte sessionAttributes) = ReadFirstResponseSessionEntry(capturedResponse);
 
         byte[] hmacData = await BuildResponseHmacDataAsync(
-            capturedResponse!, TpmCcConstants.TPM_CC_HierarchyChangeAuth, responseNonceTpm, commandNonceCaller, sessionAttributes, pool).ConfigureAwait(false);
+            capturedResponse, TpmCcConstants.TPM_CC_HierarchyChangeAuth, responseNonceTpm, commandNonceCaller, sessionAttributes, pool).ConfigureAwait(false);
 
         //An unbound, unsalted session's sessionKey is the Empty Buffer (Part 1, clause 16.6.9), so the whole
         //HMAC key is the authorization value term alone, trailing zeros already removed (clause 16.6.4.3).
@@ -452,7 +444,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             newKeyedHmac.AsSpan().SequenceEqual(oldKeyedHmac),
             "The two candidate keys must produce different HMACs, or this test would prove nothing.");
         Assert.IsTrue(
-            capturedResponse!.AsSpan(hmacStart, hmacLength).SequenceEqual(newKeyedHmac),
+            capturedResponse.AsSpan(hmacStart, hmacLength).SequenceEqual(newKeyedHmac),
             "The TPM must key the response HMAC on the NEW authorization value: the rotation commits before the response is framed.");
 
         //The command itself was genuine, so the rotation happened; only the caller could not verify the framing.
@@ -1789,16 +1781,16 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
             ReadCommandSessionEntries(rotationCommand, handleCount: 1);
         Assert.HasCount(2, entries, "The rotation carries the authorizing session and a separate decrypt companion.");
 
-        (byte[] StartCommand, byte[] NonceTpm) decryptSessionStart = FindStartAuthSessionExchange(pairs, entries[1].Handle);
-        byte[] startNonceCaller = ReadStartAuthSessionNonceCaller(decryptSessionStart.StartCommand);
+        (byte[] StartCommand, byte[] NonceTpm) = FindStartAuthSessionExchange(pairs, entries[1].Handle);
+        byte[] startNonceCaller = ReadStartAuthSessionNonceCaller(StartCommand);
 
         using IMemoryOwner<byte> sessionKey = await Kdfa.DeriveAsync(
-            HashAlgorithmName.SHA256, StripTrailingZeros(candidateAuthValue), "ATH", decryptSessionStart.NonceTpm, startNonceCaller,
+            HashAlgorithmName.SHA256, StripTrailingZeros(candidateAuthValue), "ATH", NonceTpm, startNonceCaller,
             Sha256DigestSize * 8, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         byte[] recovered = ReadNewAuthParameter(rotationCommand, handleCount: 1);
         await TpmParameterEncryption.XorAsync(
-            HashAlgorithmName.SHA256, sessionKey.Memory[..Sha256DigestSize], entries[1].NonceCaller, decryptSessionStart.NonceTpm,
+            HashAlgorithmName.SHA256, sessionKey.Memory[..Sha256DigestSize], entries[1].NonceCaller, NonceTpm,
             recovered, pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         return recovered;
@@ -1867,11 +1859,11 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     /// <returns>The matching command bytes.</returns>
     private static byte[] FirstCommand(List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, TpmCcConstants code)
     {
-        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) pair in pairs)
+        foreach((TpmCcConstants Code, byte[] Command, _) in pairs)
         {
-            if(pair.Code == code)
+            if(Code == code)
             {
-                return pair.Command;
+                return Command;
             }
         }
 
@@ -1889,14 +1881,14 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     private static (byte[] StartCommand, byte[] NonceTpm) FindStartAuthSessionExchange(
         List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, uint sessionHandle)
     {
-        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) pair in pairs)
+        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) in pairs)
         {
-            if(pair.Code != TpmCcConstants.TPM_CC_StartAuthSession || pair.Response.Length == 0)
+            if(Code != TpmCcConstants.TPM_CC_StartAuthSession || Response.Length == 0)
             {
                 continue;
             }
 
-            var reader = new TpmReader(pair.Response);
+            var reader = new TpmReader(Response);
             _ = TpmHeader.Parse(ref reader);
             if(reader.ReadUInt32() != sessionHandle)
             {
@@ -1905,7 +1897,7 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
 
             ushort nonceSize = reader.ReadUInt16();
 
-            return (pair.Command, reader.PeekBytes(nonceSize).ToArray());
+            return (Command, reader.PeekBytes(nonceSize).ToArray());
         }
 
         throw new InvalidOperationException($"No captured TPM2_StartAuthSession created session handle 0x{sessionHandle:X8}.");
@@ -1975,9 +1967,9 @@ internal sealed class TpmInHouseSimulatorHierarchyTests
     private static byte[][] ReadCommandSessionNonces(byte[] command, int handleCount)
     {
         var nonces = new List<byte[]>(2);
-        foreach((uint Handle, byte[] NonceCaller, byte Attributes, int HmacStart, int HmacLength) entry in ReadCommandSessionEntries(command, handleCount))
+        foreach((_, byte[] NonceCaller, _, _, _) in ReadCommandSessionEntries(command, handleCount))
         {
-            nonces.Add(entry.NonceCaller);
+            nonces.Add(NonceCaller);
         }
 
         return [.. nonces];

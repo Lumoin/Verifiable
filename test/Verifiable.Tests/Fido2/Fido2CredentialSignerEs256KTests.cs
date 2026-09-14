@@ -1,12 +1,11 @@
-using System.Formats.Asn1;
-using System.Security.Cryptography;
 using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
 using Org.BouncyCastle.Math;
+using System.Formats.Asn1;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -56,7 +55,7 @@ internal sealed class Fido2CredentialSignerEs256KTests
     private const string CredentialKeyIdentifier = "fido2-credential-signer-es256k-test-key";
 
     /// <summary>The <c>authData</c> flags byte this class's ceremony carries: user present and user verified.</summary>
-    private const byte ValidFlags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit);
+    private const byte ValidFlags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit;
 
     /// <summary>
     /// A default user handle <see cref="VerifyAsync"/> uses for both <c>response.userHandle</c> and the

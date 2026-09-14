@@ -1,6 +1,4 @@
-using System;
 using Org.BouncyCastle.Crypto.Digests;
-using Verifiable.BouncyCastle;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography;
 using Verifiable.Json;

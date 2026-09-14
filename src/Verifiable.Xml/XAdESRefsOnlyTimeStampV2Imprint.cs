@@ -1,6 +1,5 @@
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Base;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -275,7 +274,7 @@ public static class XAdESRefsOnlyTimeStampV2Imprint
                 return false;
             }
 
-            output.AddRange(canonical!.AsReadOnlySpan());
+            _ = output.AddRange(canonical.AsReadOnlySpan());
             error = default;
 
             return true;

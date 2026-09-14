@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
@@ -97,12 +96,12 @@ internal sealed class SdCwtVerificationTests
         //the whole issuance pipeline (IssueSdCwtTokenAsync -> SdIssuance -> SdCwtPipeline.Redact ->
         //SdCwtClaimRedaction -> DecoyDigests.Augment -> policy), not just the redaction step.
         var probe = new DecoyProbe { DecoysPerLocation = 3 };
-        DecoyDigestCountDelegate policy = static context =>
+        static int policy(DecoyDigestContext context)
         {
             var engine = (DecoyProbe)context.State!;
 
             return engine.Decide(context);
-        };
+        }
 
         using SdToken<ReadOnlyMemory<byte>> token = await IssueAsync(
             privateKey, TestContext.CancellationToken, new DecoyDigestOptions(policy, probe)).ConfigureAwait(false);

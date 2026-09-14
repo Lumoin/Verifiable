@@ -161,8 +161,8 @@ public sealed class AuthorizationServerCodecs
         {
             var sb = new StringBuilder(
                 "AuthorizationServerCodecs is missing required delegates: ");
-            sb.AppendJoin(", ", missing);
-            sb.Append('.');
+            _ = sb.AppendJoin(", ", missing);
+            _ = sb.Append('.');
             throw new InvalidOperationException(sb.ToString());
         }
 

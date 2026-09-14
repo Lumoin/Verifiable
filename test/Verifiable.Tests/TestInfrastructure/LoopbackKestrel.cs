@@ -1,9 +1,8 @@
-using System;
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Logging;
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -84,9 +83,9 @@ internal static class LoopbackKestrel
     {
         ArgumentNullException.ThrowIfNull(logging);
 
-        logging.ClearProviders();
-        logging.AddProvider(LoopbackKestrelDiagnostics.Provider);
-        logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
-        logging.AddFilter("Microsoft.Hosting", LogLevel.Warning);
+        _ = logging.ClearProviders();
+        _ = logging.AddProvider(LoopbackKestrelDiagnostics.Provider);
+        _ = logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+        _ = logging.AddFilter("Microsoft.Hosting", LogLevel.Warning);
     }
 }

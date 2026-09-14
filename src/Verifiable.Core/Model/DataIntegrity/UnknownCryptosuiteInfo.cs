@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Core.Model.DataIntegrity;

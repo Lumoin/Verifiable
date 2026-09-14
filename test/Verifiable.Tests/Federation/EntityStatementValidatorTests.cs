@@ -1,9 +1,9 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Federation;
 
@@ -663,7 +663,7 @@ internal sealed class EntityStatementValidatorTests
             Subject = new EntityIdentifier("https://subordinate.example.test"),
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new UnverifiedJwtPayload(new Dictionary<string, object>(StringComparer.Ordinal)
+            Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 [WellKnownJwtClaimNames.Iss] = "https://superior.example.test",
                 [WellKnownJwtClaimNames.Sub] = "https://subordinate.example.test",
@@ -711,7 +711,7 @@ internal sealed class EntityStatementValidatorTests
             Subject = new EntityIdentifier("https://anchor.example.test"),
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new UnverifiedJwtPayload(new Dictionary<string, object>(StringComparer.Ordinal)
+            Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 [WellKnownJwtClaimNames.Iss] = "https://anchor.example.test",
                 [WellKnownJwtClaimNames.Sub] = "https://anchor.example.test",
@@ -761,7 +761,7 @@ internal sealed class EntityStatementValidatorTests
             Subject = new EntityIdentifier("https://rp.example.test"),
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new UnverifiedJwtPayload(new Dictionary<string, object>(StringComparer.Ordinal)
+            Payload = new(new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 [WellKnownJwtClaimNames.Iss] = "https://op.example.test",
                 [WellKnownJwtClaimNames.Sub] = "https://rp.example.test",

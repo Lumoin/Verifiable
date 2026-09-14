@@ -1,15 +1,13 @@
-using System.Text.Json;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Validation;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 
 namespace Verifiable.Tests.Builders
@@ -113,7 +111,7 @@ namespace Verifiable.Tests.Builders
             Assert.AreEqual(testData.ExpectedKeyFormat, actualKeyFormat.GetType());
 
             //The builder produced DID identifier type should match WebDidMethod, as the type of the document is web DID.
-            Assert.IsInstanceOfType<WebDidMethod>(webDidDocument.Id);
+            _ = Assert.IsInstanceOfType<WebDidMethod>(webDidDocument.Id);
 
             //This catches if there is a mismatch in generated tag for the key format
             //AND if the identifier does not match the used crypto algorithm. In

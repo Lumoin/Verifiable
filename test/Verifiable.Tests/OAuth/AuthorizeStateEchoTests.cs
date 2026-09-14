@@ -1,11 +1,9 @@
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -40,7 +38,7 @@ internal sealed class AuthorizeStateEchoTests
     public async Task SuccessRedirectEchoesStateVerbatim()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -66,7 +64,7 @@ internal sealed class AuthorizeStateEchoTests
     public async Task ErrorRedirectEchoesState()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -90,7 +88,7 @@ internal sealed class AuthorizeStateEchoTests
     public async Task SuccessRedirectOmitsStateWhenRequestHadNone()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -137,7 +135,7 @@ internal sealed class AuthorizeStateEchoTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
@@ -149,7 +147,7 @@ internal sealed class AuthorizeStateEchoTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetAuthTime(staleAuth
             ? TimeProvider.GetUtcNow() - TimeSpan.FromHours(1)

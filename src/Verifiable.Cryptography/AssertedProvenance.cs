@@ -27,7 +27,7 @@ namespace Verifiable.Cryptography;
 /// </remarks>
 public sealed class AssertedProvenance: VerificationProvenance, IEquatable<AssertedProvenance>
 {
-    private AssertedProvenance(KeyId? identity): base(identity)
+    private AssertedProvenance(KeyId? identity) : base(identity)
     {
     }
 

@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography.Pki;
@@ -224,6 +223,8 @@ public static class PreservationResultWellKnown
         PreservationOperationOutcome.UnknownDeletionMode => UnknownDeletionMode,
         PreservationOperationOutcome.UnknownDeltaContainerType => UnknownDeltaContainerType,
         PreservationOperationOutcome.DeltaContainerInternalProblem => DeltaContainerInternalProblem,
+        PreservationOperationOutcome.Succeeded => null,
+        PreservationOperationOutcome.NotEvaluated => null,
         _ => null
     };
 

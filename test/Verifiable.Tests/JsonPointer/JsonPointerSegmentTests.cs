@@ -1,4 +1,3 @@
-using Lumoin.Veritas.JsonPointer;
 using Seg = Lumoin.Veritas.JsonPointer.JsonPointerSegment;
 
 namespace Verifiable.Tests.JsonPointer;
@@ -25,7 +24,7 @@ internal sealed class JsonPointerSegmentTests
     [TestMethod]
     public void CreateThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => Seg.Create(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => Seg.Create(null!));
     }
 
     [TestMethod]
@@ -47,7 +46,7 @@ internal sealed class JsonPointerSegmentTests
     [TestMethod]
     public void FromIndexThrowsOnNegative()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => Seg.FromIndex(-1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Seg.FromIndex(-1));
     }
 
     [TestMethod]

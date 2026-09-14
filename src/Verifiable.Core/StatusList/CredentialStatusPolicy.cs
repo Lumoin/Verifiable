@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Core.Dcql;
 
 namespace Verifiable.Core.StatusList;

@@ -1,7 +1,5 @@
-using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
@@ -126,7 +124,7 @@ internal sealed class KbCwtIssuanceTests
 
         Assert.IsTrue(header.ContainsKey(CoseHeaderParameters.Typ), "Protected header must carry typ (16).");
         Assert.AreEqual(
-            (long)SdKbtIssuance.KbtTypeValue,
+            SdKbtIssuance.KbtTypeValue,
             Convert.ToInt64(header[CoseHeaderParameters.Typ], CultureInfo.InvariantCulture),
             "typ must be the KBT type value 294.");
 
@@ -180,7 +178,7 @@ internal sealed class KbCwtIssuanceTests
         foreach(SdDisclosure disclosure in parsedPresentation.Disclosures)
         {
             Assert.IsNotNull(disclosure.ClaimName);
-            claimNames.Add(disclosure.ClaimName!);
+            _ = claimNames.Add(disclosure.ClaimName);
         }
 
         Assert.Contains(ClaimKeyGivenName.ToString(CultureInfo.InvariantCulture), claimNames);
@@ -313,7 +311,7 @@ internal sealed class KbCwtIssuanceTests
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             using EncodedCoseSign1 _ = await KbCwtIssuance.IssueAsync(
                 presentationToken,
@@ -421,7 +419,7 @@ internal sealed class KbCwtIssuanceTests
 
         Assert.IsNotNull(aud, "aud (3) must be present in a KBT payload.");
         Assert.IsNotNull(iat, "iat (6) must be present in a KBT payload.");
-        return (aud!, iat!.Value, cnonce, hasIss, hasSub);
+        return (aud, iat.Value, cnonce, hasIss, hasSub);
     }
 
 

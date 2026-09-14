@@ -1,5 +1,4 @@
 using Verifiable.Core;
-using Verifiable.Server;
 
 namespace Verifiable.Vcalm;
 
@@ -415,12 +414,11 @@ public sealed class VcalmIntegration: ServerIntegration
     /// <summary>
     /// The §3.6.1 credential-template evaluation seam — the registry the workflow surface (V-5c)
     /// consumes to turn an issue request's template + exchange variables into a credential body.
-    /// Defaults to a registry with the two built-in evaluators wired: <c>jsonata</c> backed by the
-    /// minimal in-repo JSONata engine in <c>Verifiable.JsonPointer</c>, and a <c>literal</c>
-    /// pass-through. A deployment registers the full JSONata engine from <c>Lumoin.Veritas</c> for
-    /// <c>jsonata</c> through <see cref="VcalmTemplateEvaluatorRegistry.Register"/> to supersede the
-    /// minimal one as the production evaluator. The seam carries the neutral JSON model, not
-    /// <c>System.Text.Json</c> (serialization firewall).
+    /// Defaults to a registry with only the <c>literal</c> pass-through wired; a deployment registers
+    /// a real JSONata engine (for example <c>Lumoin.Veritas.Jsonata</c>) for <c>jsonata</c> through
+    /// <see cref="VcalmTemplateEvaluatorRegistry.Register"/> — <c>Verifiable.Vcalm</c> takes no
+    /// reference to one. The seam carries raw UTF-8 JSON bytes, not <c>System.Text.Json</c>
+    /// (serialization firewall).
     /// </summary>
     public VcalmTemplateEvaluatorRegistry VcalmTemplateEvaluators { get; set; } = new();
 
@@ -544,16 +542,6 @@ public sealed class VcalmIntegration: ServerIntegration
     /// names a callback does not fire it.
     /// </summary>
     public DeliverVcalmCallbackDelegate? DeliverVcalmCallbackAsync { get; set; }
-
-    /// <summary>
-    /// Adapts a verbatim JSON fragment to the neutral <see cref="JsonPointer.Jsonata.JsonataValue"/>
-    /// model the §3.6 exchange engine feeds to the credential-template evaluation (the exchange's
-    /// <c>variables.results</c> and an issue request's per-request <c>variables</c>). The default JSON
-    /// implementation lives in <c>Verifiable.Json</c> (serialization firewall). Optional — when unwired,
-    /// an <c>issueRequests</c> template is evaluated against an empty variable context, so a constant
-    /// (literal) credential body still renders but a variable-referencing template navigates to nothing.
-    /// </summary>
-    public ParseVcalmTemplateInputDelegate? ParseVcalmTemplateInputAsync { get; set; }
 
     /// <summary>
     /// Resolves the §3.7.4 protocols map for a §3.7.1 interaction id — the protocol identifier →

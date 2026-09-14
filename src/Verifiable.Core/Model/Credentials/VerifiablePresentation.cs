@@ -1,9 +1,6 @@
-using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.DataIntegrity;
-using Verifiable.Foundation;
 
 namespace Verifiable.Core.Model.Credentials
 {

@@ -149,7 +149,7 @@ internal sealed class DateTimeStampFormatTests
     [TestMethod]
     public void ParseThrowsForNullValue()
     {
-        Assert.Throws<ArgumentNullException>(() => DateTimeStampFormat.Parse(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => DateTimeStampFormat.Parse(null!));
     }
 
 

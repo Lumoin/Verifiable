@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 
 namespace Verifiable.Fido2.Ctap.Authenticator.Custody;

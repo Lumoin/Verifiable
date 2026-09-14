@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.Did.Methods.WebVh;
 
 namespace Verifiable.Tests.Resolver;
@@ -77,27 +76,27 @@ internal sealed class WebVhDidResolverTests
     [DataRow("did:webvh:QmScid:example.com:.")]             //Literal current dot-segment.
     public void RejectsIpHostAndUnsafePathSegment(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve(did));
     }
 
 
     [TestMethod]
     public void RejectsNonWebVhIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve("did:web:example.com"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve("did:web:example.com"));
     }
 
 
     [TestMethod]
     public void RejectsIdentifierWithoutDomain()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve("did:webvh:QmScidExample"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve("did:webvh:QmScidExample"));
     }
 
 
     [TestMethod]
     public void RejectsNullOrWhitespace()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve(string.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebVhDidResolver.Resolve(string.Empty));
     }
 }

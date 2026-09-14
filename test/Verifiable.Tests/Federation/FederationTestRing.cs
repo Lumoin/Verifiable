@@ -1,11 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -281,19 +277,19 @@ internal static class FederationTestRing
         //Independent-oracle site: verifies the compact JWS Jws.SignAsync produced
         //(wire-exported library output) with a self-contained ECDsa implementation,
         //a self-consistency firewall proving the library against an independent verifier.
-        VerificationDelegate verificationDelegate = (dataToVerify, signature, publicKeyBytesArg, _, _) =>
+        static ValueTask<(bool IsVerified, CryptoEvent? Event)> verificationDelegate(ReadOnlyMemory<byte> dataToVerify, ReadOnlyMemory<byte> signature, ReadOnlyMemory<byte> publicKeyBytesArg, System.Collections.Frozen.FrozenDictionary<string, object>? _1 = null, CancellationToken _2 = default)
         {
             using ECDsa ecdsa = ECDsa.Create();
             ecdsa.ImportSubjectPublicKeyInfo(publicKeyBytesArg.Span, out _);
             return ValueTask.FromResult<(bool, CryptoEvent?)>((ecdsa.VerifyData(dataToVerify.Span, signature.Span, HashAlgorithmName.SHA256), null));
-        };
+        }
 
         return await Jws.VerifyAsync(
             compactJws,
             TestSetup.Base64UrlDecoder,
             BaseMemoryPool.Shared,
             publicKey,
-            verificationDelegate,
+verificationDelegate,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -516,14 +512,6 @@ internal static class FederationTestRing
         {
             target[kvp.Key] = kvp.Value;
         }
-    }
-
-
-    private static Dictionary<string, object> DecodeJwtPart(ReadOnlySpan<byte> bytes)
-    {
-        string json = Encoding.UTF8.GetString(bytes);
-        return JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
-            json, TestSetup.DefaultSerializationOptions)!;
     }
 
 

@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
-using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 

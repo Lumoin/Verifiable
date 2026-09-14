@@ -1,10 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -12,11 +10,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -438,7 +431,7 @@ internal sealed class TpmInHouseSimulatorContextSaveTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using var simulator = new TpmSimulator(
-            $"tpm-in-house-context-save-{nameof(ContextSaveFailureModeIsRefusedWithFailure)}",selfTest: TpmSelfTestBehavior.Fails, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+            $"tpm-in-house-context-save-{nameof(ContextSaveFailureModeIsRefusedWithFailure)}", selfTest: TpmSelfTestBehavior.Fails, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 
@@ -527,7 +520,7 @@ internal sealed class TpmInHouseSimulatorContextSaveTests
     /// <typeparam name="T">The response type.</typeparam>
     /// <param name="result">The result to release.</param>
     private static void DisposeIfSuccess<T>(TpmResult<T> result)
-        where T: IDisposable
+        where T : IDisposable
     {
         if(result.IsSuccess)
         {

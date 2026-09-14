@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -195,7 +192,7 @@ internal static class CtapLargeBlobsFixtures
         byte[] token, CtapPinUvAuthProtocolId protocolId, int subCommand, ReadOnlyMemory<byte> subCommandParams, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         byte[] message = new byte[2 + subCommandParams.Length];
-        message[0] = (byte)WellKnownCtapBioEnrollmentModalities.Fingerprint;
+        message[0] = WellKnownCtapBioEnrollmentModalities.Fingerprint;
         message[1] = (byte)subCommand;
         subCommandParams.Span.CopyTo(message.AsSpan(2));
 

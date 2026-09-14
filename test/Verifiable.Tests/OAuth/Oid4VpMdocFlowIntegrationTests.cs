@@ -1,5 +1,5 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core.Dcql;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -111,7 +111,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
         //verifier PDA advances to VerifierJarServed.
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -129,7 +129,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "The cross-device mdoc presentation must reach the ResponseSent wallet terminal.");
 
         run.AssertClaims((PresentationVerifiedState)app.GetFlowState(parHandle).State);
@@ -159,7 +159,7 @@ internal sealed class Oid4VpMdocFlowIntegrationTests
                 run, MdocVpFixture.BuildMdocTrustedAuthoritiesPreparedQuery(authorityKeyIdentifier))
                 .ConfigureAwait(false);
 
-            Assert.IsInstanceOfType<PresentationVerifiedState>(state,
+            _ = Assert.IsInstanceOfType<PresentationVerifiedState>(state,
                 "An mdoc whose leaf AuthorityKeyIdentifier is in trusted_authorities must verify.");
         }
     }

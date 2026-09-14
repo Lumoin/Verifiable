@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -285,9 +283,7 @@ public sealed class ProofOfExistenceSet
             return this;
         }
 
-        List<ProofOfExistence> combined = new(Proofs.Count + 1);
-        combined.AddRange(Proofs);
-        combined.Add(proof);
+        List<ProofOfExistence> combined = [.. Proofs, proof];
 
         return new ProofOfExistenceSet(combined);
     }

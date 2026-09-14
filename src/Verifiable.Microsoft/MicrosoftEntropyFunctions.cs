@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
@@ -71,8 +70,8 @@ public static class MicrosoftEntropyFunctions
         {
             CryptoProviderInstrumentation.SetProviderAttributes(
                 activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
-            activity.SetTag(CryptoTelemetry.Purpose,
+            _ = activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
+            _ = activity.SetTag(CryptoTelemetry.Purpose,
                 stamped.TryGet<Purpose>(out Purpose p) ? p.ToString() : string.Empty);
         }
 
@@ -111,8 +110,8 @@ public static class MicrosoftEntropyFunctions
         {
             CryptoProviderInstrumentation.SetProviderAttributes(
                 activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
-            activity.SetTag(CryptoTelemetry.Purpose,
+            _ = activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
+            _ = activity.SetTag(CryptoTelemetry.Purpose,
                 stamped.TryGet<Purpose>(out Purpose p) ? p.ToString() : string.Empty);
         }
 

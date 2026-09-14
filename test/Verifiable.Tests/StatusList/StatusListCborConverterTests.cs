@@ -1,10 +1,8 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
-using Lumoin.Base;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.StatusList;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -19,34 +17,34 @@ internal sealed class StatusListCborConverterTests
     /// Gets the capacity used for small status lists in tests.
     /// </summary>
     private int SmallListCapacity { get; } = StatusListTestConstants.SmallListCapacity;
-    
+
     /// <summary>
     /// Gets the default capacity for a medium-sized list used in status list tests.
     /// </summary>
     private int MediumListCapacity { get; } = StatusListTestConstants.MediumListCapacity;
-    
+
     /// <summary>
     /// Gets the index of the suspended credential used for testing purposes.
     /// </summary>
     private int SuspendedCredentialIndex { get; } = StatusListTestConstants.SuspendedCredentialIndex;
-    
+
     /// <summary>
     /// Gets the example subject value used for token generation in test scenarios.
     /// </summary>
     /// <remarks>This property is intended for use in testing contexts where a consistent token subject is
     /// required. It is not intended for use in production code.</remarks>
     private string ExampleTokenSubject { get; } = StatusListTestConstants.ExampleTokenSubject;
-    
+
     /// <summary>
     /// Gets the hexadecimal CBOR encoding of a one-bit status list for testing purposes.
     /// </summary>
     private string OneBitCborHex { get; } = StatusListTestConstants.OneBitCborHex;
-    
+
     /// <summary>
     /// Gets the hexadecimal string representation of the two-bit CBOR value used for testing.
     /// </summary>
     private string TwoBitCborHex { get; } = StatusListTestConstants.TwoBitCborHex;
-    
+
     /// <summary>
     /// Represents the base time used for test status calculations.
     /// </summary>
@@ -243,7 +241,7 @@ internal sealed class StatusListCborConverterTests
         var converter = new StatusListTokenCborConverter(Pool);
         var reader = new CborReader(encoded, CborOptions.Lax);
 
-        Assert.ThrowsExactly<CborContentException>(() => converter.Read(reader));
+        _ = Assert.ThrowsExactly<CborContentException>(() => converter.Read(reader));
     }
 
 
@@ -261,7 +259,7 @@ internal sealed class StatusListCborConverterTests
         var converter = new StatusListCborConverter(Pool);
         var reader = new CborReader(encoded, CborOptions.Lax);
 
-        Assert.ThrowsExactly<CborContentException>(() =>
+        _ = Assert.ThrowsExactly<CborContentException>(() =>
             converter.Read(reader));
     }
 
@@ -280,7 +278,7 @@ internal sealed class StatusListCborConverterTests
         var converter = new StatusListCborConverter(Pool);
         var reader = new CborReader(encoded, CborOptions.Lax);
 
-        Assert.ThrowsExactly<CborContentException>(() =>
+        _ = Assert.ThrowsExactly<CborContentException>(() =>
             converter.Read(reader));
     }
 
@@ -299,7 +297,7 @@ internal sealed class StatusListCborConverterTests
         var converter = new StatusListReferenceCborConverter();
         var reader = new CborReader(encoded, CborOptions.Lax);
 
-        Assert.ThrowsExactly<CborContentException>(() =>
+        _ = Assert.ThrowsExactly<CborContentException>(() =>
             converter.Read(reader));
     }
 

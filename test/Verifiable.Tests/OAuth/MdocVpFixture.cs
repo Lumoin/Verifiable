@@ -1,8 +1,8 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
@@ -16,7 +16,6 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.Microsoft;
-using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
@@ -140,7 +139,7 @@ internal static class MdocVpFixture
         Assert.IsTrue(verified.Credentials.TryGetValue(new CredentialQueryId(PidCredentialQueryId),
             out VpCredentialClaims? credential),
             "Verified credentials must be keyed by the DCQL credential query id.");
-        IReadOnlyDictionary<CredentialPath, string> claims = credential!.Extracted;
+        IReadOnlyDictionary<CredentialPath, string> claims = credential.Extracted;
         CredentialPath familyNamePath = CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.FamilyName);
         CredentialPath givenNamePath = CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.GivenName);
         CredentialPath birthDatePath = CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.BirthDate);

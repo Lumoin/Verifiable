@@ -192,7 +192,7 @@ public static class WellKnownHashAlgorithms
             return false;
         }
 
-        return string.Equals(value, Sha256, StringComparison.OrdinalIgnoreCase) 
+        return string.Equals(value, Sha256, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, Sha256Iana, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, Sha256Cose, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, "sha256", StringComparison.OrdinalIgnoreCase);

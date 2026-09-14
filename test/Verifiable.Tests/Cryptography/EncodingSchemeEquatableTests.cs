@@ -19,7 +19,7 @@ namespace Verifiable.Tests.Cryptography
         /// </summary>
         private static EncodingScheme EncodingScheme2 { get; } = EncodingScheme.Raw;
 
-        
+
 
         [TestMethod]
         public void InstancesWithDifferentCodesAreNotEqual()
@@ -71,7 +71,7 @@ namespace Verifiable.Tests.Cryptography
             Assert.IsFalse(result2);
         }
 
-                
+
         [TestMethod]
         public void PurposeAndObjectEqualityComparisonWithDifferentValuesSucceeds()
         {

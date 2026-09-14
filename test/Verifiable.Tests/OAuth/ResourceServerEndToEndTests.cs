@@ -1,12 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;

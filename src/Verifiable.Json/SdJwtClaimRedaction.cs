@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -301,7 +299,7 @@ public static class SdJwtClaimRedaction
         Dictionary<CredentialPath, List<string>> digestsByParent)
     {
         //Check if this level has disclosable claims.
-        groupedPaths.TryGetValue(currentPath, out IReadOnlySet<string>? disclosableAtThisLevel);
+        _ = groupedPaths.TryGetValue(currentPath, out IReadOnlySet<string>? disclosableAtThisLevel);
 
         foreach(JsonProperty prop in element.EnumerateObject())
         {

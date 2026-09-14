@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -178,7 +178,7 @@ public static class MdocCborDeviceSignedSigner
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
 
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString(message.ProtectedHeader.AsReadOnlySpan());
         writer.WriteStartMap(0);

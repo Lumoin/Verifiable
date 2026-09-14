@@ -1,8 +1,8 @@
+using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using Lumoin.Veritas.Cbor;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -108,7 +108,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             FetchResponse = StubFetchResponseAsync
         };
 
-        Assert.IsInstanceOfType<CBAdESAttachedPayloadTimestampAcquisitionSource>(context.Source);
+        _ = Assert.IsInstanceOfType<CBAdESAttachedPayloadTimestampAcquisitionSource>(context.Source);
         Assert.IsNull(context.Dereference);
     }
 
@@ -117,7 +117,7 @@ internal sealed class CBAdESSignatureAugmentationTests
     [TestMethod]
     public void CBAdESSigDReferencedPayloadTimestampAcquisitionSource_EmptyReferences_Throws()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESSigDReferencedPayloadTimestampAcquisitionSource([]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESSigDReferencedPayloadTimestampAcquisitionSource([]));
     }
 
 
@@ -409,8 +409,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 augmented = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/one/",
-                    FetchResponse = firstResponder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = wireBytes,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/one/",
+                    FetchResponse = firstResponder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -423,8 +427,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 augmented = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = onceAugmented, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/two/",
-                    FetchResponse = secondResponder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = onceAugmented,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/two/",
+                    FetchResponse = secondResponder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -469,8 +477,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 augmented = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/one/",
-                    FetchResponse = firstResponder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = wireBytes,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/one/",
+                    FetchResponse = firstResponder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -484,8 +496,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 augmented = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = withOneSigTst, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/two/",
-                    FetchResponse = secondResponder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = withOneSigTst,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/two/",
+                    FetchResponse = secondResponder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -524,8 +540,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             using var metered = new MeteredHousePool();
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, TargetLevel = AdESBaselineLevel.BLT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                TargetLevel = AdESBaselineLevel.BLT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -565,8 +584,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using var metered = new MeteredHousePool();
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, SigningCertificate = wrongKindCarrier, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                SigningCertificate = wrongKindCarrier,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -602,8 +625,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using var metered = new MeteredHousePool();
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                SigningCertificate = signingCertificate,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -651,8 +678,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using var metered = new MeteredHousePool();
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                SigningCertificate = signingCertificate,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -697,8 +728,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using var metered = new MeteredHousePool();
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                SigningCertificate = signingCertificate,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -736,9 +771,13 @@ internal sealed class CBAdESSignatureAugmentationTests
             using var metered = new MeteredHousePool();
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, SigningCertificate = signingCertificate,
-                SigningCertificateRevokedAt = TestClock.CanonicalEpoch.AddHours(1), TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                SigningCertificate = signingCertificate,
+                SigningCertificateRevokedAt = TestClock.CanonicalEpoch.AddHours(1),
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -772,8 +811,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             var responder = new CallCountingTimestampResponder();
             var context = new CBAdESReferencesFamilyTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -806,8 +848,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             var responder = new CallCountingTimestampResponder();
             var context = new CBAdESReferencesFamilyTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = responder.FetchAsync, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = responder.FetchAsync,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
             CBAdESAugmentationException exception = await Assert.ThrowsExactlyAsync<CBAdESAugmentationException>(async () =>
@@ -1025,7 +1070,7 @@ internal sealed class CBAdESSignatureAugmentationTests
     {
         var responder = new CallCountingTimestampResponder();
 
-        CBAdESDetachedObjectDereferenceDelegate alwaysFails = (uriReference, dereferenceContext, rentPool, cancellationToken) =>
+        static ValueTask<CBAdESDetachedObjectDereferenceResult> alwaysFails(string uriReference, CBAdESDetachedObjectDereferenceContext dereferenceContext, BaseMemoryPool rentPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult<CBAdESDetachedObjectDereferenceResult>(new CBAdESDetachedObjectDereferenceFailure("unreachable in this test"));
 
         var context = new CBAdESPayloadTimestampAcquisitionContext
@@ -1038,7 +1083,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             DereferenceContext = new CBAdESDetachedObjectDereferenceContext(null, null)
         };
 
-        await Assert.ThrowsExactlyAsync<CBAdESDetachedObjectDereferenceException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CBAdESDetachedObjectDereferenceException>(async () =>
             await CBAdESSignatureAugmentation.AcquirePayloadTimestampAsync(
                 context, CBAdESLevelMessageImprintAdapters.BuildPayloadTimestampMessageImprintInput, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
 
@@ -1062,11 +1107,11 @@ internal sealed class CBAdESSignatureAugmentationTests
         var responder = new CallCountingTimestampResponder();
         using var metered = new MeteredHousePool();
 
-        CBAdESDetachedObjectDereferenceDelegate alwaysSucceeds = (uriReference, dereferenceContext, rentPool, cancellationToken) =>
+        static ValueTask<CBAdESDetachedObjectDereferenceResult> alwaysSucceeds(string uriReference, CBAdESDetachedObjectDereferenceContext dereferenceContext, BaseMemoryPool rentPool, CancellationToken cancellationToken)
         {
             PooledMemory pooled = PooledMemory.FromBytes("metered-pool dereferenced content"u8.ToArray(), rentPool, Tag.Create(Purpose.Data));
             return ValueTask.FromResult<CBAdESDetachedObjectDereferenceResult>(new CBAdESDetachedObjectDereferenceSuccess(pooled));
-        };
+        }
 
         var context = new CBAdESPayloadTimestampAcquisitionContext
         {
@@ -1113,8 +1158,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step1 = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/sigtst/",
-                    FetchResponse = firstResponder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = wireBytes,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/sigtst/",
+                    FetchResponse = firstResponder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -1137,8 +1186,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step2 = await CBAdESSignatureAugmentation.AddReferencesAsync(
                 new CBAdESReferencesContext
                 {
-                    WireBytes = withSigTst, SigningCertificate = signingCertificate, CertificatesToReference = [referencedCertificate],
-                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = withSigTst,
+                    SigningCertificate = signingCertificate,
+                    CertificatesToReference = [referencedCertificate],
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -1151,8 +1203,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step3 = await CBAdESSignatureAugmentation.AddSignatureAndReferencesTimestampAsync(
                 new CBAdESReferencesFamilyTimestampContext
                 {
-                    WireBytes = withRefs, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/sigrtst/",
-                    FetchResponse = secondResponder.FetchAsync, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = withRefs,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/sigrtst/",
+                    FetchResponse = secondResponder.FetchAsync,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader,
@@ -1213,8 +1268,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step = await CBAdESSignatureAugmentation.AddReferencesAsync(
                 new CBAdESReferencesContext
                 {
-                    WireBytes = wireBytes, SigningCertificate = signingCertificate, CertificatesToReference = [referencedCertificate],
-                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TargetLevel = AdESBaselineLevel.BB
+                    WireBytes = wireBytes,
+                    SigningCertificate = signingCertificate,
+                    CertificatesToReference = [referencedCertificate],
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TargetLevel = AdESBaselineLevel.BB
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -1260,8 +1318,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                    FetchResponse = responder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = wireBytes,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/",
+                    FetchResponse = responder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -1283,7 +1345,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(afterStrip)
             {
                 Assert.HasCount(1, afterStrip.UnsignedHeaders!, "The retained sigTst survives; no refs-family element was ever present to strip away.");
-                Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementSignatureTimestamp>(afterStrip.UnsignedHeaders![0]);
+                _ = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementSignatureTimestamp>(afterStrip.UnsignedHeaders![0]);
             }
         }
     }
@@ -1314,8 +1376,12 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step1 = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                 new CBAdESSignatureTimestampContext
                 {
-                    WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                    FetchResponse = responder.FetchAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = wireBytes,
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TsaUri = "https://tsa.example/",
+                    FetchResponse = responder.FetchAsync,
+                    SigningCertificate = signingCertificate,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -1330,8 +1396,11 @@ internal sealed class CBAdESSignatureAugmentationTests
             using(EncodedCoseSign1 step2 = await CBAdESSignatureAugmentation.AddReferencesAsync(
                 new CBAdESReferencesContext
                 {
-                    WireBytes = withSigTst, SigningCertificate = signingCertificate, CertificatesToReference = [referencedCertificate],
-                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TargetLevel = AdESBaselineLevel.BT
+                    WireBytes = withSigTst,
+                    SigningCertificate = signingCertificate,
+                    CertificatesToReference = [referencedCertificate],
+                    MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                    TargetLevel = AdESBaselineLevel.BT
                 },
                 CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
                 CBAdESSignatureSerialization.TrySpliceCBAdESUnprotectedHeader, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false))
@@ -1373,11 +1442,15 @@ internal sealed class CBAdESSignatureAugmentationTests
 
             var context = new CBAdESSignatureTimestampContext
             {
-                WireBytes = wireBytes, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256, TsaUri = "https://tsa.example/",
-                FetchResponse = ThrowsOperationCanceledFetchResponseAsync, SigningCertificate = signingCertificate, TargetLevel = AdESBaselineLevel.BT
+                WireBytes = wireBytes,
+                MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256,
+                TsaUri = "https://tsa.example/",
+                FetchResponse = ThrowsOperationCanceledFetchResponseAsync,
+                SigningCertificate = signingCertificate,
+                TargetLevel = AdESBaselineLevel.BT
             };
 
-            await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             {
                 using EncodedCoseSign1 _ = await CBAdESSignatureAugmentation.AddSignatureTimestampAsync(
                     context, CBAdESSignatureSerialization.ParseCBAdESSign1, CBAdESSignatureSerialization.SerializeCBAdESSign1,
@@ -1510,7 +1583,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             {
                 Assert.IsTrue(beforeAugmentation.IsSuccess);
                 var unknown = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementUnknown>(beforeAugmentation.UnsignedHeaders![0]);
-                Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementIntegerLabel>(unknown.Label);
+                _ = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementIntegerLabel>(unknown.Label);
                 unknownElementBeforeAugmentation = ReadRawUnsignedHeaderElement(beforeAugmentation.RawUnsignedHeaders!, 0);
             }
 
@@ -2040,7 +2113,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             {
                 Assert.IsTrue(parsed.IsSuccess);
                 Assert.HasCount(3, parsed.UnsignedHeaders!, "sigTst, the counter-signature element, then arcTst -- the new gate does not block a legitimately-complete signature.");
-                Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementArchiveTimestamp>(parsed.UnsignedHeaders![2]);
+                _ = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementArchiveTimestamp>(parsed.UnsignedHeaders![2]);
             }
         }
     }
@@ -2359,7 +2432,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             {
                 Assert.IsTrue(parsed.IsSuccess);
                 Assert.HasCount(3, parsed.UnsignedHeaders!, "sigTst, gap-filled valData, then arcTst -- valData BEFORE arcTst (clause 5.3.5.2 step 1's ordering).");
-                Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementValidationData>(parsed.UnsignedHeaders![1]);
+                _ = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementValidationData>(parsed.UnsignedHeaders![1]);
                 var arcTstElement = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementArchiveTimestamp>(parsed.UnsignedHeaders![2]);
                 Assert.HasCount(1, arcTstElement.ArchiveTimestamp.TimestampContainer.TstTokens);
 
@@ -2429,7 +2502,7 @@ internal sealed class CBAdESSignatureAugmentationTests
             {
                 Assert.IsTrue(parsed.IsSuccess);
                 Assert.HasCount(3, parsed.UnsignedHeaders!, "sigTst, arcTst#1, arcTst#2.");
-                Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementArchiveTimestamp>(parsed.UnsignedHeaders![1]);
+                _ = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementArchiveTimestamp>(parsed.UnsignedHeaders![1]);
                 var secondArcTstElement = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementArchiveTimestamp>(parsed.UnsignedHeaders![2]);
                 Assert.HasCount(1, secondArcTstElement.ArchiveTimestamp.TimestampContainer.TstTokens);
 
@@ -2759,7 +2832,7 @@ internal sealed class CBAdESSignatureAugmentationTests
 
             var writerBuffer = new ArrayBufferWriter<byte>();
             var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-            writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+            writer.WriteTag(new CborTag(CoseTags.Sign1));
             writer.WriteStartArray(4);
 
             writer.WriteByteString(protectedHeaderBytes);

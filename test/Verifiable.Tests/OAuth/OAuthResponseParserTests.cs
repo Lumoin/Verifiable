@@ -23,7 +23,7 @@ internal sealed class OAuthResponseParsersTests
 
         Assert.IsTrue(result.IsSuccess);
         Assert.AreEqual("urn:ietf:params:oauth:request_uri:abc",
-            result.Value!.RequestUri.ToString());
+            result.Value.RequestUri.ToString());
         Assert.AreEqual(60, result.Value.ExpiresIn);
     }
 
@@ -37,7 +37,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseParResponse(response);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(90, result.Value!.ExpiresIn);
+        Assert.AreEqual(90, result.Value.ExpiresIn);
     }
 
     [TestMethod]
@@ -50,7 +50,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseParResponse(response);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(45, result.Value!.ExpiresIn);
+        Assert.AreEqual(45, result.Value.ExpiresIn);
     }
 
 
@@ -104,7 +104,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseParResponse(response);
 
         Assert.IsFalse(result.IsSuccess);
-        string? statusCode = result.Error!.Support.Context?[HttpResponseDataKeys.StatusCode];
+        string? statusCode = result.Error.Support.Context?[HttpResponseDataKeys.StatusCode];
         Assert.AreEqual("401", statusCode,
             "HTTP status code must be surfaced in DecisionSupport context.");
     }
@@ -124,7 +124,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseParResponse(response);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.AreEqual("00-abc123-def456-01", result.Error!.Support.CorrelationId,
+        Assert.AreEqual("00-abc123-def456-01", result.Error.Support.CorrelationId,
             "traceparent must become the CorrelationId on the DecisionSupport.");
     }
 
@@ -137,7 +137,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseParResponse(Respond(string.Empty));
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
     }
 
     [TestMethod]
@@ -150,7 +150,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseParResponse(response);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
     }
 
     [TestMethod]
@@ -219,7 +219,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual("tok123", result.Value!.AccessToken);
+        Assert.AreEqual("tok123", result.Value.AccessToken);
         Assert.AreEqual("Bearer", result.Value.TokenType);
         Assert.AreEqual(3600, result.Value.ExpiresIn);
     }
@@ -234,7 +234,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual("rt", result.Value!.RefreshToken);
+        Assert.AreEqual("rt", result.Value.RefreshToken);
         Assert.AreEqual("openid", result.Value.Scope);
     }
 
@@ -248,7 +248,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.IsNull(result.Value!.ExpiresIn,
+        Assert.IsNull(result.Value.ExpiresIn,
             "expires_in must be null when not present in the response.");
     }
 
@@ -281,7 +281,7 @@ internal sealed class OAuthResponseParsersTests
             OAuthResponseParsers.ParseTokenResponse(response, DateTimeOffset.UnixEpoch);
 
         Assert.IsFalse(result.IsSuccess);
-        Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
+        _ = Assert.IsInstanceOfType<OAuthMalformedResponse>(result.Error);
     }
 
     [TestMethod]
@@ -358,7 +358,7 @@ internal sealed class OAuthResponseParsersTests
 
         if(contentType is not null || metadata is not null)
         {
-            transport = new Dictionary<string, string>();
+            transport = [];
             if(contentType is not null)
             {
                 transport[HttpResponseDataKeys.ContentType] = contentType;

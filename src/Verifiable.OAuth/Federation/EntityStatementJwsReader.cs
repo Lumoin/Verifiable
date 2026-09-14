@@ -56,8 +56,8 @@ internal static class EntityStatementJwsReader
         {
             using IMemoryOwner<byte> headerBytes = base64UrlDecoder(parts[0], pool);
             using IMemoryOwner<byte> payloadBytes = base64UrlDecoder(parts[1], pool);
-            header = new UnverifiedJwtHeader(headerDeserializer(headerBytes.Memory.Span));
-            payload = new UnverifiedJwtPayload(payloadDeserializer(payloadBytes.Memory.Span));
+            header = new(headerDeserializer(headerBytes.Memory.Span));
+            payload = new(payloadDeserializer(payloadBytes.Memory.Span));
         }
         catch(Exception)
         {

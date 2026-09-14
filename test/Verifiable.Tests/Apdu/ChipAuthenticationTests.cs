@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.Pace;
@@ -209,7 +206,7 @@ internal sealed class ChipAuthenticationTests
     }
 
 
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 

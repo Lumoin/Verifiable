@@ -1,16 +1,7 @@
-using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tests.Tpm;
 

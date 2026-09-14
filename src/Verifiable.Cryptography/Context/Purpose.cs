@@ -149,10 +149,11 @@ public readonly struct Purpose: IEquatable<Purpose>
     public static Purpose Salt { get; } = new Purpose(14);
 
 
-    private static List<Purpose> RegisteredPurposes { get; } = new([
+    private static List<Purpose> RegisteredPurposes { get; } =
+    [
         None, Verification, Signing, Exchange, Wrapped, Signature,
         Encryption, Nonce, Hmac, Digest, Transport, Data, Mac, Decrypted, Salt
-    ]);
+    ];
 
     /// <summary>Gets all registered purpose values.</summary>
     public static IReadOnlyList<Purpose> Purposes => RegisteredPurposes.AsReadOnly();

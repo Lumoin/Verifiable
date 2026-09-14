@@ -21,7 +21,14 @@ public abstract record AuthCodeServerFlowInput: FlowInput;
 /// </remarks>
 /// <param name="FlowId">The fresh identifier generated for this flow.</param>
 /// <param name="RequestUri">The <c>request_uri</c> assigned to this PAR entry.</param>
-/// <param name="CodeChallenge">The validated S256 code challenge.</param>
+/// <param name="CodeChallenge">The validated code challenge.</param>
+/// <param name="CodeChallengeMethod">
+/// The validated <c>code_challenge_method</c> — <c>S256</c> or, under a deployment that accepts it,
+/// <c>plain</c> — per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. Carried
+/// forward so the token endpoint verifies <c>code_verifier</c> against this PERSISTED method,
+/// never against a method named on the token request itself.
+/// </param>
 /// <param name="RedirectUri">The validated redirect URI.</param>
 /// <param name="Scope">The requested scope.</param>
 /// <param name="ClientId">The client identifier from the request.</param>
@@ -52,6 +59,7 @@ public sealed record ServerParValidated(
     string FlowId,
     Uri RequestUri,
     string CodeChallenge,
+    string CodeChallengeMethod,
     Uri RedirectUri,
     string Scope,
     string ClientId,
@@ -83,6 +91,16 @@ public sealed record ServerParValidated(
 /// <param name="AuthTime">The UTC instant at which the subject authenticated.</param>
 /// <param name="Scope">The scope granted at the authorization endpoint.</param>
 /// <param name="CompletedAt">The UTC instant the authorization completed.</param>
+/// <param name="ExpiresAt">
+/// The UTC instant the issued authorization code expires, computed at the authorize site as
+/// <c>CompletedAt + context.AuthorizationCodeLifetime</c> per
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>: "A
+/// maximum authorization code lifetime of 10 minutes is RECOMMENDED." Carried explicitly rather
+/// than left for the transition to inherit <see cref="ParRequestReceivedState.ExpiresAt"/> — the
+/// <c>request_uri</c>'s own, typically shorter, lifetime — so the code's expiry is governed by the
+/// authorization-code policy regardless of how much of the <c>request_uri</c> lifetime remained
+/// when the authorize step ran.
+/// </param>
 /// <param name="SessionId">
 /// The End-User's authentication session identifier (<c>sid</c>), carried into the
 /// ID Token's <c>sid</c> claim. <see langword="null"/> when the deployment stamps no
@@ -100,6 +118,7 @@ public sealed record ServerAuthorizeCompleted(
     DateTimeOffset AuthTime,
     string Scope,
     DateTimeOffset CompletedAt,
+    DateTimeOffset ExpiresAt,
     string? SessionId = null,
     string? Acr = null): AuthCodeServerFlowInput;
 
@@ -124,9 +143,14 @@ public sealed record ServerAuthorizeCompleted(
 /// <param name="IssuedTokens">The per-token-type audit metadata for tokens emitted in this response.</param>
 /// <param name="IssuedAt">The UTC instant the response was assembled.</param>
 /// <param name="ExpiresAt">
-/// The UTC instant the longest-lived token in <paramref name="IssuedTokens"/>
-/// expires. Used to populate the inherited <c>ExpiresAt</c> on
-/// <see cref="ServerTokenIssuedState"/> for stale-state cleanup.
+/// The UTC instant the resulting <see cref="ServerTokenIssuedState"/> should be treated as stale.
+/// For a code-grant issuance this is the longest-lived token in <paramref name="IssuedTokens"/>.
+/// For a refresh rotation it is at least the freshly-minted successor refresh token's own
+/// expiry — never merely the access token's — so the retired record a later reuse of the
+/// just-rotated-out token resolves to (<see cref="AuthCode.AuthCodeEndpoints.HandleRefreshTokenReuseAsync"/>)
+/// outlives every token that presentation could be asked to revoke; an access-token-only expiry
+/// would let <c>EndpointServer.HandleCoreAsync</c>'s expiry gate discard the retired record while
+/// the successor it protects is still live.
 /// </param>
 [DebuggerDisplay("ServerTokenExchangeSucceeded ({IssuedTokens.Audits.Count} tokens)")]
 public sealed record ServerTokenExchangeSucceeded(
@@ -144,7 +168,86 @@ public sealed record ServerTokenExchangeSucceeded(
     /// transition that consumes this input.
     /// </summary>
     public ConfirmationMethod? Confirmation { get; init; }
+
+    /// <summary>
+    /// The client identifier the redeemed code was bound to, carried forward from
+    /// <see cref="States.ServerCodeIssuedState.ClientId"/> so a later replay of this same code
+    /// can be re-verified exactly as a first presentation would.
+    /// <see langword="null"/> when this input transitions a refresh-rotated flow instead of a
+    /// code grant.
+    /// </summary>
+    public string? ClientId { get; init; }
+
+    /// <summary>
+    /// The redirect URI the redeemed code was bound to, carried forward from
+    /// <see cref="States.ServerCodeIssuedState.RedirectUri"/> for the same replay-verification
+    /// purpose as <see cref="ClientId"/>.
+    /// </summary>
+    public Uri? RedirectUri { get; init; }
+
+    /// <summary>
+    /// The PKCE code challenge the redeemed code was bound to, carried forward from
+    /// <see cref="States.ServerCodeIssuedState.CodeChallenge"/> for the same replay-verification
+    /// purpose as <see cref="ClientId"/>.
+    /// </summary>
+    public string? CodeChallenge { get; init; }
+
+    /// <summary>
+    /// The <c>code_challenge_method</c> the redeemed code was bound to, carried forward from
+    /// <see cref="States.ServerCodeIssuedState.CodeChallengeMethod"/> for the same
+    /// replay-verification purpose as <see cref="ClientId"/>.
+    /// </summary>
+    public string? CodeChallengeMethod { get; init; }
+
+    /// <summary>
+    /// The internal flow identifier of the sibling refresh-token state this response also
+    /// issued, or <see langword="null"/> when none was issued. Recorded onto
+    /// <see cref="States.ServerTokenIssuedState.RefreshFlowId"/> so a valid replay of this code
+    /// can revoke the refresh token by deleting its backing record.
+    /// </summary>
+    public string? RefreshFlowId { get; init; }
+
+    /// <summary>
+    /// The internal flow identifier of the freshly-rotated refresh token this response issued in
+    /// place of the one just redeemed, or <see langword="null"/> when this input transitions a
+    /// code-grant flow instead of a refresh rotation (or the deployment issues no refresh tokens).
+    /// Recorded onto <see cref="States.ServerTokenIssuedState.SuccessorRefreshFlowId"/> — the
+    /// family link a later reuse of the JUST-RETIRED refresh token walks to revoke the current
+    /// successor per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2">RFC 9700 §4.14.2</see>.
+    /// </summary>
+    public string? SuccessorRefreshFlowId { get; init; }
 }
+
+
+/// <summary>
+/// Carries a VALID replay of an already-redeemed authorization code, detected by
+/// <see cref="AuthCodeEndpoints.HandleAuthorizationCodeReplayAsync"/> after revocation has run.
+/// Transitions <see cref="ServerTokenIssuedState"/> back to itself with
+/// <see cref="ServerTokenIssuedState.RevokedAt"/> set to <see cref="RevokedAt"/> and every other
+/// field copied forward unchanged (a record <c>with</c> expression) — the PDA stays pure; the
+/// revocation side effects (calling the optional revoke delegate, deleting the sibling refresh
+/// record) have already happened in the endpoint before this input is constructed, exactly as
+/// token minting's own side effects precede <see cref="ServerTokenExchangeSucceeded"/>.
+/// </summary>
+/// <param name="RevokedAt">The UTC instant the replay was detected and revocation ran.</param>
+[DebuggerDisplay("ServerAuthorizationCodeReplayDetected RevokedAt={RevokedAt}")]
+public sealed record ServerAuthorizationCodeReplayDetected(
+    DateTimeOffset RevokedAt): AuthCodeServerFlowInput;
+
+
+/// <summary>
+/// Carries a valid reuse of a retired refresh token after family revocation has run.
+/// The pure transition copies the retired state and sets only its revocation timestamp,
+/// allowing the runner to persist a sequential once-only marker. This records the result of
+/// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+/// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
+/// authorization grant associated with it."
+/// </summary>
+/// <param name="RevokedAt">The server UTC instant the valid reuse triggered revocation.</param>
+[DebuggerDisplay("ServerRefreshTokenReuseDetected RevokedAt={RevokedAt}")]
+public sealed record ServerRefreshTokenReuseDetected(
+    DateTimeOffset RevokedAt): AuthCodeServerFlowInput;
 
 
 /// <summary>
@@ -186,7 +289,14 @@ public sealed record ServerFail(
 /// </remarks>
 /// <param name="FlowId">The fresh identifier generated for this flow.</param>
 /// <param name="CodeHash">SHA-256 hash of the authorization code returned to the client.</param>
-/// <param name="CodeChallenge">The validated S256 code challenge.</param>
+/// <param name="CodeChallenge">The validated code challenge.</param>
+/// <param name="CodeChallengeMethod">
+/// The validated <c>code_challenge_method</c> — <c>S256</c> or, under a deployment that accepts it,
+/// <c>plain</c> — per
+/// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. Carried
+/// forward so the token endpoint verifies <c>code_verifier</c> against this PERSISTED method,
+/// never against a method named on the token request itself.
+/// </param>
 /// <param name="RedirectUri">The validated redirect URI.</param>
 /// <param name="Scope">The requested scope.</param>
 /// <param name="ClientId">The client identifier from the request.</param>
@@ -222,6 +332,7 @@ public sealed record ServerDirectAuthorizeCompleted(
     string FlowId,
     string CodeHash,
     string CodeChallenge,
+    string CodeChallengeMethod,
     Uri RedirectUri,
     string Scope,
     string ClientId,

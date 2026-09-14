@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Collections.Frozen;
 
 namespace Verifiable.Cryptography;

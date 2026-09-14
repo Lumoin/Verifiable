@@ -1,10 +1,8 @@
-using System.Collections.Immutable;
-using System.Net.Http;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
+using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.OAuth;
-using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Pkce;

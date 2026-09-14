@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -44,7 +42,7 @@ public sealed class SignatureValidationResources: IDisposable
     /// <returns>The same carrier.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="resource"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">Thrown when the run has already been disposed.</exception>
-    public T Track<T>(T resource) where T: IDisposable
+    public T Track<T>(T resource) where T : IDisposable
     {
         ArgumentNullException.ThrowIfNull(resource);
         ObjectDisposedException.ThrowIf(disposed, this);

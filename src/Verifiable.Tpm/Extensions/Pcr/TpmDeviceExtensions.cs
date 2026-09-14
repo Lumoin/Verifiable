@@ -1,14 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Extensions.Pcr;
 
@@ -189,7 +181,7 @@ public static class TpmDeviceExtensions
                 //Copy the digest since the response will be disposed.
                 byte[] digestCopy = digest.AsReadOnlySpan().ToArray();
                 values[pcrIndex] = digestCopy;
-                remainingPcrs.Remove(pcrIndex);
+                _ = remainingPcrs.Remove(pcrIndex);
 
                 if(digestSize == 0)
                 {
@@ -215,7 +207,7 @@ public static class TpmDeviceExtensions
             {
                 if((bitmap[byteIndex] & (1 << bitIndex)) != 0)
                 {
-                    indices.Add(byteIndex * 8 + bitIndex);
+                    indices.Add((byteIndex * 8) + bitIndex);
                 }
             }
         }

@@ -1,11 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -13,12 +12,6 @@ using Verifiable.Tpm.Extensions.Hierarchy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -81,9 +74,6 @@ internal sealed class TpmInHouseSimulatorGetSessionAuditDigestTests
 
     /// <summary>A wrong guess at the endorsement hierarchy's password.</summary>
     private static byte[] WrongEndorsementHierarchyPasswordBytes { get; } = [0xC1, 0xC2, 0xC3, 0xC4];
-
-    /// <summary>The DA-protected signer's own password in wire form.</summary>
-    private static byte[] SigningKeyPasswordBytes { get; } = System.Text.Encoding.UTF8.GetBytes(SigningKeyPassword);
 
     /// <summary>A wrong guess at the signing key's password.</summary>
     private static byte[] WrongSigningKeyPasswordBytes { get; } = [0xD1, 0xD2, 0xD3, 0xD4];
@@ -829,7 +819,7 @@ internal sealed class TpmInHouseSimulatorGetSessionAuditDigestTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using var simulator = new TpmSimulator(
-            "tpm-in-house-get-session-audit-digest-failure-mode",selfTest: TpmSelfTestBehavior.Fails,
+            "tpm-in-house-get-session-audit-digest-failure-mode", selfTest: TpmSelfTestBehavior.Fails,
             signingBackend: BouncyCastleTpmEccSigningBackend.Create(), rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);

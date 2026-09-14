@@ -197,7 +197,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_RSA);
 
         Assert.IsFalse(TpmiAlgHash.IsAlgHash(TpmAlgIdConstants.TPM_ALG_RSA));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgHash(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgHash(wireBytes));
     }
 
     /// <summary>
@@ -211,7 +211,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
         Assert.IsFalse(TpmiAlgHash.IsAlgHash(TpmAlgIdConstants.TPM_ALG_NULL));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgHash(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgHash(wireBytes));
     }
 
     /// <summary>
@@ -277,7 +277,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_AES);
 
         Assert.IsFalse(TpmiAlgSigScheme.IsSigScheme(TpmAlgIdConstants.TPM_ALG_AES));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSigScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSigScheme(wireBytes));
     }
 
     /// <summary>
@@ -290,7 +290,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSigScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSigScheme(wireBytes));
     }
 
     /// <summary>
@@ -450,7 +450,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_ECDSA);
 
         Assert.IsFalse(TpmiAlgRsaScheme.IsRsaScheme(TpmAlgIdConstants.TPM_ALG_ECDSA));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgRsaScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgRsaScheme(wireBytes));
     }
 
     /// <summary>
@@ -463,7 +463,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgRsaScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgRsaScheme(wireBytes));
     }
 
     /// <summary>
@@ -527,7 +527,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_RSASSA);
 
         Assert.IsFalse(TpmiAlgEccScheme.IsEccScheme(TpmAlgIdConstants.TPM_ALG_RSASSA));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgEccScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgEccScheme(wireBytes));
     }
 
     /// <summary>
@@ -540,7 +540,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgEccScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgEccScheme(wireBytes));
     }
 
     /// <summary>
@@ -720,7 +720,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_SHA256);
 
         Assert.IsFalse(TpmiAlgPublic.IsPublic(TpmAlgIdConstants.TPM_ALG_SHA256));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgPublic(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgPublic(wireBytes));
     }
 
     /// <summary>
@@ -734,7 +734,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
         Assert.IsFalse(TpmiAlgPublic.IsPublic(TpmAlgIdConstants.TPM_ALG_NULL));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgPublic(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgPublic(wireBytes));
     }
 
     /// <summary>
@@ -784,7 +784,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeUInt16(undefinedCurve);
 
         Assert.IsFalse(TpmiEccCurve.IsEccCurve((TpmEccCurveConstants)undefinedCurve));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseEccCurve(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseEccCurve(wireBytes));
     }
 
     /// <summary>
@@ -798,7 +798,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeUInt16((ushort)TpmEccCurveConstants.TPM_ECC_NONE);
 
         Assert.IsFalse(TpmiEccCurve.IsEccCurve(TpmEccCurveConstants.TPM_ECC_NONE));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseEccCurve(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseEccCurve(wireBytes));
     }
 
     /// <summary>
@@ -866,7 +866,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeUInt16(1234);
 
         Assert.IsFalse(TpmiRsaKeyBits.IsRsaKeyBits(1234));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseRsaKeyBits(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseRsaKeyBits(wireBytes));
     }
 
     /// <summary>
@@ -913,7 +913,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_RSA);
 
         Assert.IsFalse(TpmiAlgSym.IsAlgSym(TpmAlgIdConstants.TPM_ALG_RSA));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSym(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSym(wireBytes));
     }
 
     /// <summary>
@@ -926,7 +926,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSym(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgSym(wireBytes));
     }
 
     /// <summary>
@@ -1015,7 +1015,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_AES);
 
         Assert.IsFalse(TpmiAlgKdf.IsKdf(TpmAlgIdConstants.TPM_ALG_AES));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgKdf(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgKdf(wireBytes));
     }
 
     /// <summary>
@@ -1028,7 +1028,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgKdf(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseAlgKdf(wireBytes));
     }
 
     /// <summary>
@@ -1148,7 +1148,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseHa(wireBytes, pool));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseHa(wireBytes, pool));
     }
 
     /// <summary>
@@ -1162,7 +1162,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
         byte[] shortDigest = new byte[16];
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        Assert.ThrowsExactly<ArgumentException>(() => TpmtHa.Create(TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256), shortDigest, pool));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => TpmtHa.Create(TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256), shortDigest, pool));
     }
 
     /// <summary>
@@ -1309,7 +1309,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     [TestMethod]
     public void TpmtSigSchemeCreateRefusesEcdaaSelector()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => TpmtSigScheme.Create(TpmAlgIdConstants.TPM_ALG_ECDAA, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => TpmtSigScheme.Create(TpmAlgIdConstants.TPM_ALG_ECDAA, TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_SHA256)));
     }
 
     /// <summary>
@@ -1322,7 +1322,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_AES);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseSigScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseSigScheme(wireBytes));
     }
 
     /// <summary>
@@ -1335,7 +1335,7 @@ internal sealed class TpmInterfaceAlgorithmTypeTests
     {
         byte[] wireBytes = EncodeAlg(TpmAlgIdConstants.TPM_ALG_NULL);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseSigScheme(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseSigScheme(wireBytes));
     }
 
     /// <summary>

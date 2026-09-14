@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
 using CryptoLibraryInfo = Verifiable.Cryptography.Provider.CryptoLibrary;
 
@@ -105,9 +104,9 @@ public static class MicrosoftHmacFunctions
         {
             CryptoProviderInstrumentation.SetProviderAttributes(
                 activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
-            activity.SetTag(CryptoTelemetry.Hmac.InputLength, message.Length);
-            activity.SetTag(CryptoTelemetry.Hmac.OutputLength, outputByteLength);
+            _ = activity.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
+            _ = activity.SetTag(CryptoTelemetry.Hmac.InputLength, message.Length);
+            _ = activity.SetTag(CryptoTelemetry.Hmac.OutputLength, outputByteLength);
         }
 
         IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
@@ -225,8 +224,8 @@ public static class MicrosoftHmacFunctions
         {
             CryptoProviderInstrumentation.SetProviderAttributes(
                 activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
-            activity.SetTag(CryptoTelemetry.Hmac.InputLength, message.Length);
+            _ = activity.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
+            _ = activity.SetTag(CryptoTelemetry.Hmac.InputLength, message.Length);
         }
 
         bool isValid;
@@ -268,7 +267,7 @@ public static class MicrosoftHmacFunctions
             tempSpan.Clear();
         }
 
-        activity?.SetTag(CryptoTelemetry.Hmac.Valid, isValid);
+        _ = (activity?.SetTag(CryptoTelemetry.Hmac.Valid, isValid));
         activity?.Stop();
 
         VerificationOutcome outcome = isValid

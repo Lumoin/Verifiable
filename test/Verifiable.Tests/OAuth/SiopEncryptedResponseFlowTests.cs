@@ -5,7 +5,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -13,7 +12,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Siop.Wallet;
@@ -89,7 +87,7 @@ internal sealed class SiopEncryptedResponseFlowTests
             allowedEncAlgorithms: AllowedEncAlgorithms,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         //=== Step 2: the wallet mints a plain id_token, then encrypts it as a compact JWE. ===
         var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -115,7 +113,7 @@ internal sealed class SiopEncryptedResponseFlowTests
                 [OAuthRequestParameterNames.IdToken] = compactJwe,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //=== Step 4: 200 and the terminal verified state with the expected subject + nonce. ===
@@ -168,7 +166,7 @@ internal sealed class SiopEncryptedResponseFlowTests
                 [OAuthRequestParameterNames.IdToken] = compactJwe,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
@@ -237,7 +235,7 @@ internal sealed class SiopEncryptedResponseFlowTests
                 [OAuthRequestParameterNames.IdToken] = notCompactJwe,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
@@ -284,7 +282,7 @@ internal sealed class SiopEncryptedResponseFlowTests
         Assert.IsTrue(
             document.RootElement.TryGetProperty(OAuthRequestParameterNames.Error, out JsonElement error),
             "RFC 6749 §4.1.2.1: error is REQUIRED in the error response.");
-        document.RootElement.TryGetProperty(
+        _ = document.RootElement.TryGetProperty(
             OAuthRequestParameterNames.ErrorDescription, out JsonElement description);
 
         return (error.GetString()!, description.ValueKind == JsonValueKind.String ? description.GetString() : null);
@@ -331,11 +329,11 @@ internal sealed class SiopEncryptedResponseFlowTests
                 [OAuthRequestParameterNames.IdToken] = tampered,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
-        Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(host.GetFlowState(requestHandle).State);
     }
 
 
@@ -375,11 +373,11 @@ internal sealed class SiopEncryptedResponseFlowTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
-        Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(
+        _ = Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(
             host.GetFlowState(requestHandle).State);
     }
 

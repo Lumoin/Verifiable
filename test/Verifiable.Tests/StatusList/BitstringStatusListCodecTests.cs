@@ -1,8 +1,4 @@
-using System;
-using System.Buffers;
-using System.IO;
 using Verifiable.Core.StatusList;
-using Verifiable.Cryptography;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
@@ -112,7 +108,7 @@ internal sealed class BitstringStatusListCodecTests
     {
         using var lsb = StatusListType.Create(BitstringStatusListCodec.MinimumEntries, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentException>(() => BitstringStatusListCodec.EncodeList(lsb));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => BitstringStatusListCodec.EncodeList(lsb));
     }
 
 
@@ -121,7 +117,7 @@ internal sealed class BitstringStatusListCodecTests
     {
         using var tooSmall = StatusListType.Create(64, StatusListBitSize.OneBit, Pool, BitOrder.MostSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentException>(() => BitstringStatusListCodec.EncodeList(tooSmall));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => BitstringStatusListCodec.EncodeList(tooSmall));
     }
 
 
@@ -129,7 +125,7 @@ internal sealed class BitstringStatusListCodecTests
     public void DecodeRejectsValueWithoutMultibasePrefix()
     {
         //A base64url body lacking the leading 'u' Multibase prefix is not a conforming encodedList.
-        Assert.ThrowsExactly<FormatException>(() => BitstringStatusListCodec.DecodeList("H4sIAAAAAAAAA", StatusListBitSize.OneBit, Pool));
+        _ = Assert.ThrowsExactly<FormatException>(() => BitstringStatusListCodec.DecodeList("H4sIAAAAAAAAA", StatusListBitSize.OneBit, Pool));
     }
 
 
@@ -137,6 +133,6 @@ internal sealed class BitstringStatusListCodecTests
     public void DecodeRejectsNonGzipPayload()
     {
         //Valid Multibase base64url ('u' + "AAAA" => 0x000000) but not GZIP-framed.
-        Assert.ThrowsExactly<InvalidDataException>(() => BitstringStatusListCodec.DecodeList("uAAAA", StatusListBitSize.OneBit, Pool));
+        _ = Assert.ThrowsExactly<InvalidDataException>(() => BitstringStatusListCodec.DecodeList("uAAAA", StatusListBitSize.OneBit, Pool));
     }
 }

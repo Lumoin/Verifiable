@@ -1,19 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -345,7 +338,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
         byte[] digest = new byte[P256ComponentSize];
         byte[] body = BuildEcdsaSignatureBody(
             TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
-            declaredRSize: (ushort)(Tpm2bEccParameter.MaxSize + 1), actualRBytesProvided: Tpm2bEccParameter.MaxSize + 1,
+            declaredRSize: Tpm2bEccParameter.MaxSize + 1, actualRBytesProvided: Tpm2bEccParameter.MaxSize + 1,
             declaredSSize: P256ComponentSize, actualSBytesProvided: P256ComponentSize);
 
         TpmRcConstants code = await SubmitVerifySignatureCommandAsync(simulator, pool, ArbitraryKeyHandle, digest, body).ConfigureAwait(false);
@@ -364,7 +357,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
         byte[] body = BuildEcdsaSignatureBody(
             TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
             declaredRSize: P256ComponentSize, actualRBytesProvided: P256ComponentSize,
-            declaredSSize: (ushort)(Tpm2bEccParameter.MaxSize + 1), actualSBytesProvided: Tpm2bEccParameter.MaxSize + 1);
+            declaredSSize: Tpm2bEccParameter.MaxSize + 1, actualSBytesProvided: Tpm2bEccParameter.MaxSize + 1);
 
         TpmRcConstants code = await SubmitVerifySignatureCommandAsync(simulator, pool, ArbitraryKeyHandle, digest, body).ConfigureAwait(false);
 
@@ -385,7 +378,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
         byte[] digest = new byte[P256ComponentSize];
         byte[] body = BuildRsaSignatureBody(
             TpmAlgIdConstants.TPM_ALG_RSASSA, TpmAlgIdConstants.TPM_ALG_SHA256,
-            declaredSigSize: (ushort)(Tpm2bPublicKeyRsa.MaxRsaKeyBytes + 1), actualSigBytesProvided: Tpm2bPublicKeyRsa.MaxRsaKeyBytes + 1);
+            declaredSigSize: Tpm2bPublicKeyRsa.MaxRsaKeyBytes + 1, actualSigBytesProvided: Tpm2bPublicKeyRsa.MaxRsaKeyBytes + 1);
 
         TpmRcConstants code = await SubmitVerifySignatureCommandAsync(simulator, pool, ArbitraryKeyHandle, digest, body).ConfigureAwait(false);
 
@@ -485,7 +478,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
         byte[] digest = new byte[P256ComponentSize];
         byte[] body = BuildEcdsaSignatureBody(
             TpmAlgIdConstants.TPM_ALG_ECDSA, TpmAlgIdConstants.TPM_ALG_SHA256,
-            declaredRSize: (ushort)(Tpm2bEccParameter.MaxSize + 1), actualRBytesProvided: Tpm2bEccParameter.MaxSize + 1,
+            declaredRSize: Tpm2bEccParameter.MaxSize + 1, actualRBytesProvided: Tpm2bEccParameter.MaxSize + 1,
             declaredSSize: 0, actualSBytesProvided: 0);
 
         TpmRcConstants code = await SubmitVerifySignatureCommandAsync(simulator, trackingPool.Pool, ArbitraryKeyHandle, digest, body).ConfigureAwait(false);
@@ -994,7 +987,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
         TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg,
         int declaredRSize, int actualRBytesProvided, int declaredSSize, int actualSBytesProvided)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + actualRBytesProvided + sizeof(ushort) + actualSBytesProvided];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + actualRBytesProvided + sizeof(ushort) + actualSBytesProvided];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)sigAlg);
         writer.WriteUInt16((ushort)hashAlg);
@@ -1024,7 +1017,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// <returns>The marshaled body.</returns>
     private static byte[] BuildRsaSignatureBody(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, int declaredSigSize, int actualSigBytesProvided)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + actualSigBytesProvided];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + actualSigBytesProvided];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)sigAlg);
         writer.WriteUInt16((ushort)hashAlg);
@@ -1092,7 +1085,7 @@ internal sealed class TpmInHouseSimulatorVerifySignatureTests
     /// <returns>The marshaled body.</returns>
     private static byte[] BuildEcdsaSignatureBodyFromComponents(TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> signatureR, ReadOnlySpan<byte> signatureS)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + signatureR.Length + sizeof(ushort) + signatureS.Length];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + signatureR.Length + sizeof(ushort) + signatureS.Length];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_ECDSA);
         writer.WriteUInt16((ushort)hashAlg);

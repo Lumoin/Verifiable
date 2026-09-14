@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.StatusList;
 
 /// <summary>
@@ -27,5 +25,5 @@ public class StatusListValidationException: Exception
     /// </summary>
     /// <param name="message">A description of the validation failure.</param>
     /// <param name="innerException">The underlying exception, or <see langword="null"/> when there is none.</param>
-    public StatusListValidationException(string message, Exception? innerException): base(message, innerException) { }
+    public StatusListValidationException(string message, Exception? innerException) : base(message, innerException) { }
 }

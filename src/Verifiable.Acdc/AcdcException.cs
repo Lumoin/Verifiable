@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Acdc;
 
 /// <summary>
@@ -21,7 +19,7 @@ public sealed class AcdcException: Exception
     /// Creates an <see cref="AcdcException"/> with a message.
     /// </summary>
     /// <param name="message">The message describing the violation.</param>
-    public AcdcException(string message): base(message)
+    public AcdcException(string message) : base(message)
     {
     }
 
@@ -31,7 +29,7 @@ public sealed class AcdcException: Exception
     /// </summary>
     /// <param name="message">The message describing the violation.</param>
     /// <param name="innerException">The underlying cause.</param>
-    public AcdcException(string message, Exception innerException): base(message, innerException)
+    public AcdcException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

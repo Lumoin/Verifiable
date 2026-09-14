@@ -71,17 +71,17 @@ public static class AttestationObjectCborReader
 
                 switch(key)
                 {
-                    case(FormatKey):
+                    case FormatKey:
                     {
                         format = reader.ReadTextString();
                         break;
                     }
-                    case(AttestationStatementKey):
+                    case AttestationStatementKey:
                     {
                         attestationStatement = reader.ReadEncodedValue();
                         break;
                     }
-                    case(AuthenticatorDataKey):
+                    case AuthenticatorDataKey:
                     {
                         authenticatorData = ReadByteStringContentsAsSlice(reader);
                         break;

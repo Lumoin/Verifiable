@@ -5,7 +5,6 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -13,18 +12,15 @@ using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Server;
-using Verifiable.Tests.TestDataProviders;
-using Verifiable.Tests.TestInfrastructure;
-
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Server.Metadata;
 using Verifiable.Server.Routing;
+using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 namespace Verifiable.Tests.OAuth;
 
 /// <summary>
@@ -47,21 +43,38 @@ internal sealed class AuthorizationServerFeatureTests
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-    private const string VerifierClientId = "https://verifier.example.com";
 
-    private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
+    /// <summary>
+    /// The shared verifier client identifier used by feature and live-alteration fixtures.
+    /// </summary>
+    internal const string VerifierClientId = "https://verifier.example.com";
+
+
+    /// <summary>
+    /// The shared verifier issuer URI used to resolve endpoints in feature and live-alteration fixtures.
+    /// </summary>
+    internal static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
+
 
     private const string IssuerId = "https://issuer.example.com";
     private const string IssuerKeyId = "did:web:issuer.example.com#key-1";
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
-    private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
+
+    /// <summary>
+    /// The immutable presentation and metadata capabilities shared by feature and live-alteration fixtures.
+    /// </summary>
+    internal static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint,
             WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint);
 
-    private static ImmutableHashSet<CapabilityIdentifier> JwksCapabilities { get; } =
+
+    /// <summary>
+    /// The immutable JWKS-only capability set shared by feature and live-alteration fixtures.
+    /// </summary>
+    internal static ImmutableHashSet<CapabilityIdentifier> JwksCapabilities { get; } =
         [WellKnownCapabilityIdentifiers.OAuthJwksEndpoint];
 
 
@@ -145,7 +158,7 @@ internal sealed class AuthorizationServerFeatureTests
     public void PolicyProfileCreateRejectsDuplicateCode()
     {
         //Code 0 is registered as Strict — Create(0) must throw.
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => PolicyProfile.Create(0));
     }
 
@@ -179,9 +192,9 @@ internal sealed class AuthorizationServerFeatureTests
         ClientRecord haip = MakeMinimalRegistration(PolicyProfile.Haip10);
         ClientRecord rfc = MakeMinimalRegistration(PolicyProfile.Rfc6749WithPkce);
 
-        ExchangeContext strictContext = new();
-        ExchangeContext haipContext = new();
-        ExchangeContext rfcContext = new();
+        ExchangeContext strictContext = [];
+        ExchangeContext haipContext = [];
+        ExchangeContext rfcContext = [];
 
         await PolicyProfiles.DefaultResolvePolicyAsync(
             strict, strictContext, TestContext.CancellationToken).ConfigureAwait(false);
@@ -215,8 +228,8 @@ internal sealed class AuthorizationServerFeatureTests
         ClientRecord verifier = MakeMinimalRegistration(PolicyProfile.Oid4VpVerifier);
         ClientRecord fapi = MakeMinimalRegistration(PolicyProfile.Fapi20);
 
-        ExchangeContext verifierContext = new();
-        ExchangeContext fapiContext = new();
+        ExchangeContext verifierContext = [];
+        ExchangeContext fapiContext = [];
 
         await PolicyProfiles.DefaultResolvePolicyAsync(
             verifier, verifierContext, TestContext.CancellationToken).ConfigureAwait(false);
@@ -251,15 +264,15 @@ internal sealed class AuthorizationServerFeatureTests
         HostedAuthorizationServer host = HostedAuthorizationServer.Build(
             name: "timing-derivation",
             timeProvider: TimeProvider,
-            subjectClaims: new Dictionary<string, Verifiable.OAuth.Oidc.OidcClaims>(),
-            resolveIssuerKey: (string _) => null,
+            subjectClaims: [],
+            resolveIssuerKey: _ => null,
             vpValidator: new Verifiable.Core.Assessment.ClaimIssuer<Verifiable.OAuth.Validation.ValidationContext>(
                 "vp-timing-derivation",
                 Verifiable.OAuth.Validation.ValidationProfiles.Haip10SdJwtRules(),
                 TimeProvider),
             timings: customTimings);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetServer(host.Server);
 
         await PolicyProfiles.DefaultResolvePolicyAsync(
@@ -282,7 +295,7 @@ internal sealed class AuthorizationServerFeatureTests
         //test-side registrations.
         PolicyProfile custom = PolicyProfile.Create(9001);
         ClientRecord registration = MakeMinimalRegistration(custom);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
 
         await PolicyProfiles.DefaultResolvePolicyAsync(
             registration, context, TestContext.CancellationToken).ConfigureAwait(false);
@@ -312,6 +325,8 @@ internal sealed class AuthorizationServerFeatureTests
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(true),
             ResolvePolicyAsync = (registration, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
             MemoryPool = BaseMemoryPool.Shared
@@ -346,6 +361,8 @@ internal sealed class AuthorizationServerFeatureTests
                 ValueTask.CompletedTask,
             LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
                 ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(true),
             //ResolvePolicyAsync deliberately omitted.
             MemoryPool = BaseMemoryPool.Shared
         };
@@ -358,6 +375,127 @@ internal sealed class AuthorizationServerFeatureTests
             ex.Message,
             StringComparison.Ordinal,
             "Error must name ResolvePolicyAsync.");
+    }
+
+
+    [TestMethod]
+    public void IntegrationValidateThrowsWhenClaimFlowStateAsyncIsMissing()
+    {
+        //ClaimServerFlowStateDelegate is the fourth required storage primitive beside
+        //Load/Save/DeleteServerFlowStateDelegate (documents/AuthorizationServerDesign.md §4): the
+        //atomic compare-and-claim the token endpoint uses to make an authorization code's
+        //exactly-once redemption hold under concurrent requests. A host missing it must fail at
+        //startup, not with a NullReferenceException at the first redemption.
+        AuthorizationServerIntegration integration = new()
+        {
+            ExtractTenantIdAsync = (ctx, ct) =>
+                ValueTask.FromResult<TenantId?>(null),
+            LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
+                ValueTask.FromResult<IRegistrationRecord?>(null),
+            SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
+            LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            //ClaimFlowStateAsync deliberately omitted.
+            ResolvePolicyAsync = (registration, ctx, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
+            MemoryPool = BaseMemoryPool.Shared
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
+
+        Assert.Contains(
+            nameof(ServerIntegration.ClaimFlowStateAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name ClaimFlowStateAsync.");
+        Assert.IsFalse(integration.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
+    /// "SHOULD revoke (when possible)" needs a refresh-record invalidation mechanism even when
+    /// audited-token revocation is unavailable. DeleteFlowStateAsync is required by the base
+    /// integration; missing wiring produces the named configuration fault.
+    /// </summary>
+    [TestMethod]
+    public void IntegrationValidateThrowsWhenDeleteFlowStateAsyncIsMissing()
+    {
+        AuthorizationServerIntegration integration = new()
+        {
+            ExtractTenantIdAsync = (ctx, ct) =>
+                ValueTask.FromResult<TenantId?>(null),
+            LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
+                ValueTask.FromResult<IRegistrationRecord?>(null),
+            SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
+            LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(true),
+            //DeleteFlowStateAsync deliberately omitted.
+            ResolvePolicyAsync = (registration, ctx, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
+            MemoryPool = BaseMemoryPool.Shared
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
+
+        Assert.Contains(
+            nameof(ServerIntegration.DeleteFlowStateAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name DeleteFlowStateAsync.");
+        Assert.IsFalse(integration.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
+    }
+
+
+    /// <summary>
+    /// <see cref="Verifiable.Server.Pipeline.EndpointChain.BuildForRequestAsync"/> dereferences
+    /// <see cref="ServerIntegration.ResolveEndpointUriAsync"/> unconditionally for every allowed
+    /// endpoint candidate; a host that omits it would otherwise pass <see cref="ServerIntegration.Validate"/>
+    /// and only fail with a <see cref="NullReferenceException"/> deep inside the first dispatch
+    /// that reaches an allowed candidate. Required at validation so the failure is the named
+    /// configuration fault instead.
+    /// </summary>
+    [TestMethod]
+    public void IntegrationValidateThrowsWhenResolveEndpointUriAsyncIsMissing()
+    {
+        AuthorizationServerIntegration integration = new()
+        {
+            ExtractTenantIdAsync = (ctx, ct) =>
+                ValueTask.FromResult<TenantId?>(null),
+            LoadClientRegistrationAsync = (tenantId, ctx, ct) =>
+                ValueTask.FromResult<IRegistrationRecord?>(null),
+            SaveFlowStateAsync = (tenantId, key, state, stepCount, ctx, ct) =>
+                ValueTask.CompletedTask,
+            LoadFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ClaimFlowStateAsync = (tenantId, key, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(true),
+            DeleteFlowStateAsync = (tenantId, key, ctx, ct) =>
+                ValueTask.CompletedTask,
+            //ResolveEndpointUriAsync deliberately omitted.
+            ResolvePolicyAsync = (registration, ctx, ct) =>
+                PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)registration, ctx, ct),
+            MemoryPool = BaseMemoryPool.Shared
+        };
+
+        InvalidOperationException ex =
+            Assert.ThrowsExactly<InvalidOperationException>(integration.Validate);
+
+        Assert.Contains(
+            nameof(ServerIntegration.ResolveEndpointUriAsync),
+            ex.Message,
+            StringComparison.Ordinal,
+            "Error must name ResolveEndpointUriAsync.");
+        Assert.IsFalse(integration.IsValidated,
+            "IsValidated must remain false after a Validate() that threw.");
     }
 
 
@@ -424,121 +562,6 @@ internal sealed class AuthorizationServerFeatureTests
     }
 
 
-    [TestMethod]
-    public async Task RegisterClientFiresClientRegisteredEventWithCorrectPayload()
-    {
-        List<ClientRegistrationEvent> received = [];
-
-
-
-        await using TestHostShell app = new(TimeProvider);
-
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        //Filter to events for this test's segment only — the static subject is
-        //shared across all tests in the process so other tests' events may appear.
-        string segment = keys.Registration.TenantId;
-        ClientRegistrationEvent[] forThisSegment = received
-            .Where(e => string.Equals(e.TenantId, segment, StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.HasCount(1, forThisSegment,
-            "Exactly one ClientRegistered event must be emitted for this segment.");
-        Assert.IsInstanceOfType<ClientRegistered>(forThisSegment[0],
-            "The emitted event must be ClientRegistered.");
-
-        ClientRegistered evt = (ClientRegistered)forThisSegment[0];
-        Assert.AreEqual(VerifierClientId, evt.ClientId,
-            "ClientRegistered must carry the registered client identifier.");
-        Assert.AreEqual(segment, evt.TenantId.Value,
-            "ClientRegistered must carry the endpoint segment.");
-        Assert.AreSame(keys.Registration, evt.Registration,
-            "ClientRegistered must carry the exact ClientRecord instance.");
-    }
-
-
-    //Observable: registration store is populated before dispatch.
-    //
-    //The routing table must be updated synchronously by the subscriber so that
-    //the first dispatch call after RegisterClient can resolve the registration.
-
-    [TestMethod]
-    public async Task RegistrationStoreIsPopulatedImmediatelyAfterRegisterClient()
-    {
-        await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        Assert.IsTrue(
-            app.RegistrationStore.ContainsKey(keys.Registration.TenantId),
-            "Registration store must contain the segment immediately after RegisterClient.");
-
-        ClientRecord stored = app.RegistrationStore[keys.Registration.TenantId];
-        Assert.AreEqual(VerifierClientId, stored.ClientId,
-            "Stored registration must carry the correct client identifier.");
-    }
-
-
-    //Observable: deregistration removes from routing table immediately.
-    //
-    //A production app that deregisters a client must have the routing table
-    //updated before the next request arrives. Dispatch to the deregistered
-    //segment must return 404.
-
-    [TestMethod]
-    public async Task DeregisterClientRemovesFromRoutingTableAndDispatchReturns404()
-    {
-        List<ClientRegistrationEvent> received = [];
-
-
-
-        await using TestHostShell app = new(TimeProvider);
-
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        string segment = keys.Registration.TenantId;
-
-        Assert.IsTrue(app.RegistrationStore.ContainsKey(segment),
-            "Registration must be present before deregistration.");
-
-        app.DeregisterClient(segment, "Test deregistration.");
-
-        Assert.IsFalse(app.RegistrationStore.ContainsKey(segment),
-            "Registration must be removed from routing table immediately after deregistration.");
-
-        //Filter to this segment only — the static subject is shared across tests.
-        ClientRegistrationEvent[] forThisSegment = received
-            .Where(e => string.Equals(e.TenantId, segment, StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.HasCount(2, forThisSegment,
-            "ClientRegistered then ClientDeregistered must be emitted for this segment.");
-        Assert.IsInstanceOfType<ClientRegistered>(forThisSegment[0]);
-        Assert.IsInstanceOfType<ClientDeregistered>(forThisSegment[1]);
-
-        ClientDeregistered deregistered = (ClientDeregistered)forThisSegment[1];
-        Assert.AreEqual(segment, deregistered.TenantId.Value,
-            "ClientDeregistered must carry the correct endpoint segment.");
-        Assert.AreEqual("Test deregistration.", deregistered.Reason,
-            "ClientDeregistered must carry the deregistration reason.");
-
-        //A dispatch to the deregistered segment must return 404.
-        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.AuthCodePar,
-            "POST",
-            new RequestFields(),
-            new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(404, response.StatusCode,
-            "Dispatch to a deregistered segment must return 404.");
-    }
-
-
     //Observable: key rotation updates registration and new flows use new key.
     //
     //Key rotation is a common production operation. The old signing key must
@@ -573,7 +596,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         Assert.HasCount(2, forThisSegment,
             "ClientRegistered then ClientUpdated must be emitted for this segment.");
-        Assert.IsInstanceOfType<ClientUpdated>(forThisSegment[1],
+        _ = Assert.IsInstanceOfType<ClientUpdated>(forThisSegment[1],
             "Second event must be ClientUpdated.");
 
         ClientUpdated updated = (ClientUpdated)forThisSegment[1];
@@ -611,7 +634,7 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJar = await app.HandleJarRequestAsync(rotatedKeys,
             parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId,
@@ -629,7 +652,7 @@ internal sealed class AuthorizationServerFeatureTests
             redirectUri: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Flow started after key rotation must reach PresentationVerified.");
         Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
@@ -706,7 +729,7 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJarA = await app.HandleJarRequestAsync(keysA,
             parHandleA, TestContext.CancellationToken).ConfigureAwait(false);
 
-        walletA.HandleQrScan(requestUriA, walletFlowId);
+        _ = walletA.HandleQrScan(requestUriA, walletFlowId);
 
         await walletA.HandleJarFetchAsync(
             walletFlowId,
@@ -718,13 +741,13 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJweA = await walletA.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
-        await app.HandleDirectPostAsync(keysA,
+        _ = await app.HandleDirectPostAsync(keysA,
             parHandleA,
             compactJweA,
             redirectUri: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandleA).State,
             "Tenant A flow must reach PresentationVerified.");
 
@@ -734,54 +757,6 @@ internal sealed class AuthorizationServerFeatureTests
         Assert.AreEqual("https://tenant-b.example.com",
             app.RegistrationStore[segmentB].ClientId,
             "Tenant B registration must retain its original client identifier.");
-    }
-
-
-    //Observable: capability granted event fires and is carried correctly.
-    //
-    //Verifies that OnCapabilityGranted produces a CapabilityGranted event with
-    //the correct payload — a production app would use this to activate new
-    //endpoints for a client without a full re-registration.
-
-    [TestMethod]
-    public async Task CapabilityGrantedEventCarriesCorrectPayload()
-    {
-        List<ClientRegistrationEvent> received = [];
-
-
-
-        await using TestHostShell app = new(TimeProvider);
-
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        string segment = keys.Registration.TenantId;
-
-        app.Server.GrantCapability(
-            keys.Registration,
-            WellKnownCapabilityIdentifiers.VcVerifiableCredentialIssuance,
-            new ExchangeContext());
-
-        //Filter to this segment — the static subject is shared across tests.
-        ClientRegistrationEvent[] forThisSegment = received
-            .Where(e => string.Equals(e.TenantId, segment, StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.HasCount(2, forThisSegment,
-            "ClientRegistered then CapabilityGranted must be emitted for this segment.");
-        Assert.IsInstanceOfType<CapabilityGranted>(forThisSegment[1],
-            "Second event must be CapabilityGranted.");
-
-        CapabilityGranted evt = (CapabilityGranted)forThisSegment[1];
-        Assert.AreEqual(VerifierClientId, evt.ClientId,
-            "CapabilityGranted must carry the client identifier.");
-        Assert.AreEqual(segment, evt.TenantId.Value,
-            "CapabilityGranted must carry the endpoint segment.");
-        Assert.AreEqual(
-            WellKnownCapabilityIdentifiers.VcVerifiableCredentialIssuance,
-            evt.Capability,
-            "CapabilityGranted must carry the granted capability.");
     }
 
 
@@ -838,7 +813,7 @@ internal sealed class AuthorizationServerFeatureTests
         PreparedDcqlQuery query = CreatePreparedQuery();
         TransactionNonce nonce = new("nonce-par-shape-01");
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTransactionNonce(nonce);
         context.SetPreparedQuery(query);
         context.SetDecryptionKeyId(keys.EncryptionKeyId);
@@ -884,7 +859,7 @@ internal sealed class AuthorizationServerFeatureTests
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keys.Registration.TenantId);
         context.SetCorrelationKey(parHandle);
 
@@ -944,7 +919,7 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJar = await app.HandleJarRequestAsync(keys,
             parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId, requestUri, compactJar, keys.SigningPublicKey,
@@ -954,7 +929,7 @@ internal sealed class AuthorizationServerFeatureTests
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
         //Dispatch direct_post directly to inspect raw response shape.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keys.Registration.TenantId);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -1012,7 +987,7 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJar = await app.HandleJarRequestAsync(keys,
             parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId, requestUri, compactJar, keys.SigningPublicKey,
@@ -1021,7 +996,7 @@ internal sealed class AuthorizationServerFeatureTests
         string compactJwe = await wallet.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keys.Registration.TenantId);
         context.SetOid4VpRedirectUri(sameDeviceRedirectUri);
 
@@ -1062,7 +1037,7 @@ internal sealed class AuthorizationServerFeatureTests
             WellKnownEndpointNames.AuthCodePar,
             "POST",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,
@@ -1156,7 +1131,7 @@ internal sealed class AuthorizationServerFeatureTests
         //The ASP.NET skin populates the context bag with whatever request-scoped
         //data the application wants — segment, issuer, tenant, caller IP, billing tier.
         //The library passes this bag to all delegates unchanged.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTransactionNonce(new TransactionNonce("nonce-journey-01"));
         context.SetPreparedQuery(CreatePreparedQuery());
         context.SetDecryptionKeyId(keys.EncryptionKeyId);
@@ -1351,13 +1326,13 @@ internal sealed class AuthorizationServerFeatureTests
 
         //The ASP.NET skin adds tenant and caller tier to the context bag.
         //In production this comes from JWT claims, HTTP headers, DI services, etc.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
         context["app.tenantId"] = tenantId;
         context["app.callerTier"] = callerTier;
 
-        await app.DispatchAtEndpointAsync(
+        _ = await app.DispatchAtEndpointAsync(
             segment,
             WellKnownEndpointNames.MetadataJwks,
             "GET",
@@ -1411,7 +1386,7 @@ internal sealed class AuthorizationServerFeatureTests
         };
 
         //Unrestricted caller — receives the full JWKS.
-        ExchangeContext unrestrictedContext = new();
+        ExchangeContext unrestrictedContext = [];
         unrestrictedContext.SetTenantId(segment);
         unrestrictedContext.SetIssuer(VerifierBaseUri);
         unrestrictedContext["app.restricted"] = false;
@@ -1424,7 +1399,7 @@ internal sealed class AuthorizationServerFeatureTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //Restricted caller — receives an empty JWKS.
-        ExchangeContext restrictedContext = new();
+        ExchangeContext restrictedContext = [];
         restrictedContext.SetTenantId(segment);
         restrictedContext.SetIssuer(VerifierBaseUri);
         restrictedContext["app.restricted"] = true;
@@ -1466,7 +1441,7 @@ internal sealed class AuthorizationServerFeatureTests
 
         //The ASP.NET skin places the issuer URI in the context bag.
         //The discovery BuildInputAsync reads it to compute absolute endpoint URIs.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
@@ -1532,7 +1507,7 @@ internal sealed class AuthorizationServerFeatureTests
         using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
         string segment = keys.Registration.TenantId;
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 
@@ -1562,493 +1537,6 @@ internal sealed class AuthorizationServerFeatureTests
 
 
     [TestMethod]
-    public async Task AfterKeyRotationJwksContainsNewKid()
-    {
-        await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial originalKeys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        string segment = originalKeys.Registration.TenantId;
-
-        using VerifierKeyMaterial rotatedKeys = app.RotateSigningKey(segment);
-
-        ExchangeContext context = new();
-        context.SetTenantId(segment);
-        context.SetIssuer(VerifierBaseUri);
-
-        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(200, response.StatusCode,
-            "JWKS endpoint must return HTTP 200 after key rotation.");
-
-        using JsonDocument doc = JsonDocument.Parse(response.Body);
-        JsonElement[] jwkArray = doc.RootElement
-            .GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray().ToArray();
-
-        //After rotation the routing table carries the updated registration with the
-        //new SigningKeyId. BuildJwksDocumentAsync receives the updated registration
-        //and returns the new key. Whether the old key also appears depends on the
-        //delegate implementation — in TestHostShell it follows the current
-        //registration's SigningKeyId.
-        bool foundRotatedKey = jwkArray.Any(jwk =>
-            jwk.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid) &&
-            string.Equals(kid.GetString(), rotatedKeys.SigningKeyId.Value, StringComparison.Ordinal));
-
-        Assert.IsTrue(foundRotatedKey,
-            "JWKS must contain the new signing key's kid after rotation.");
-    }
-
-
-    [TestMethod]
-    public async Task DeregisteredClientJwksAndDiscoveryReturn404()
-    {
-        await using TestHostShell app = new(TimeProvider);
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        string segment = keys.Registration.TenantId;
-        app.DeregisterClient(segment, "Client offboarded.");
-
-        ExchangeContext context = new();
-        context.SetTenantId(segment);
-        context.SetIssuer(VerifierBaseUri);
-
-        ServerHttpResponse jwksResponse = await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        ServerHttpResponse discoveryResponse = await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.MetadataDiscovery,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(404, jwksResponse.StatusCode,
-            "JWKS endpoint must return 404 after deregistration.");
-        Assert.AreEqual(404, discoveryResponse.StatusCode,
-            "Discovery endpoint must return 404 after deregistration.");
-    }
-
-
-    //Caching contract: the library always calls BuildJwksDocumentAsync on every
-    //request — it never caches. Caching, precomputation, invalidation, regional
-    //distribution, and change-gating are entirely the application's concern,
-    //wired through the delegate and driven by AuthorizationServer.
-    //
-    //These tests verify the library's side of the contract:
-    //  - BuildJwksDocumentAsync is called on every JWKS request
-    //  - ClientUpdated fires on key rotation — the application's cache eviction
-    //    subscriber reacts to this signal
-    //  - The context bag reaches the delegate unchanged on every call, carrying
-    //    whatever the application placed there (region, time-of-day, caller tier)
-
-    [TestMethod]
-    public async Task LibraryCallsBuildJwksDocumentDelegateOnEveryRequest()
-    {
-        //The library never caches. The delegate is called on every JWKS request.
-        //The application's delegate implementation decides whether to hit a cache,
-        //compute fresh, or serve a precomputed document — the library does not know
-        //and must not know.
-        int callCount = 0;
-
-        await using TestHostShell app = new(TimeProvider);
-
-        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
-        {
-            callCount++;
-            return ValueTask.FromResult(new JwksDocument { Keys = [] });
-        };
-
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-        string segment = keys.Registration.TenantId;
-
-        ExchangeContext context = new();
-        context.SetTenantId(segment);
-        context.SetIssuer(VerifierBaseUri);
-
-        const int requestCount = 3;
-        for(int i = 0; i < requestCount; i++)
-        {
-            await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        }
-
-        Assert.AreEqual(requestCount, callCount,
-            "BuildJwksDocumentAsync must be called once per JWKS request. " +
-            "The library never caches — caching is the application's concern.");
-    }
-
-
-    [TestMethod]
-    public async Task KeyRotationFiresClientUpdatedEventForCacheInvalidation()
-    {
-        //Key rotation emits ClientUpdated via AuthorizationServer.
-        //An application's cache invalidation subscriber reacts to this event —
-        //the library provides the signal, the application decides what to evict
-        //and when (immediately, after approval, gated by time-of-day policy, etc.).
-        List<ClientRegistrationEvent> received = [];
-
-
-
-        await using TestHostShell app = new(TimeProvider);
-
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(received));
-        using VerifierKeyMaterial originalKeys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        string segment = originalKeys.Registration.TenantId;
-
-        //Simulate: application has cached the JWKS for this segment.
-        //The cache key is the segment; the cached value is the JWKS document.
-        JwksDocument? cachedDocument = new()
-        {
-            Keys = [new JsonWebKey { Kty = WellKnownKeyTypeValues.Ec, Kid = originalKeys.SigningKeyId.Value }]
-        };
-
-        //The application's cache-aware delegate: serve from cache when available,
-        //invalidate on ClientUpdated, recompute on next request.
-        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
-        {
-            JwksDocument doc = cachedDocument
-                ?? new JwksDocument { Keys = [new JsonWebKey { Kty = WellKnownKeyTypeValues.Ec, Kid = registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning).Value }] };
-
-            return ValueTask.FromResult(doc);
-        };
-
-        //Rotate — emits ClientUpdated.
-        using VerifierKeyMaterial rotatedKeys = app.RotateSigningKey(segment);
-
-        //The application's subscriber receives ClientUpdated and evicts the cache.
-        ClientRegistrationEvent[] forThisSegment = received
-            .Where(e => string.Equals(e.TenantId, segment, StringComparison.Ordinal))
-            .ToArray();
-
-        ClientUpdated? updateEvent = forThisSegment.OfType<ClientUpdated>().FirstOrDefault();
-
-        Assert.IsNotNull(updateEvent,
-            "ClientUpdated must be emitted on key rotation so cache subscribers can invalidate.");
-        Assert.AreEqual(originalKeys.SigningKeyId, updateEvent.Previous.GetDefaultSigningKeyId(KeyUsageContext.JarSigning),
-            "ClientUpdated.Previous must carry the original key identifier for targeted eviction.");
-        Assert.AreEqual(rotatedKeys.SigningKeyId, updateEvent.Current.GetDefaultSigningKeyId(KeyUsageContext.JarSigning),
-            "ClientUpdated.Current must carry the new key identifier to warm the replacement cache entry.");
-
-        //Application evicts after receiving the event.
-        cachedDocument = null;
-
-        //Next JWKS request recomputes with the new key.
-        ExchangeContext context = new();
-        context.SetTenantId(segment);
-        context.SetIssuer(VerifierBaseUri);
-
-        ServerHttpResponse response = await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(200, response.StatusCode,
-            "JWKS request after cache eviction must succeed.");
-
-        using JsonDocument doc = JsonDocument.Parse(response.Body);
-        JsonElement[] jwkArray = doc.RootElement
-            .GetProperty(WellKnownJwkMemberNames.Keys).EnumerateArray().ToArray();
-
-        bool foundNewKey = jwkArray.Any(jwk =>
-            jwk.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid) &&
-            string.Equals(kid.GetString(), rotatedKeys.SigningKeyId.Value, StringComparison.Ordinal));
-
-        Assert.IsTrue(foundNewKey,
-            "After cache eviction and recompute, JWKS must carry the new key identifier.");
-    }
-
-
-    [TestMethod]
-    public async Task ContextBagReachesJwksDelegateOnEveryCallForPerCallDecisions()
-    {
-        //Verifies that each JWKS request carries its own context bag to the delegate.
-        //In production the context bag changes per request — different callers have
-        //different regions, tiers, and trust levels. The delegate uses these to decide
-        //which cache partition to consult, whether to serve stale, and which keys to include.
-        var capturedRegions = new List<string>();
-
-        await using TestHostShell app = new(TimeProvider);
-
-        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
-        {
-            if(ctx.TryGetValue("app.region", out object? region) && region is string r)
-            {
-                capturedRegions.Add(r);
-            }
-
-            return ValueTask.FromResult(new JwksDocument { Keys = [] });
-        };
-
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-        string segment = keys.Registration.TenantId;
-
-        //Three requests from different regions — each carries its own context bag.
-        //A production delegate would consult the EU cache for EU callers, the NA cache
-        //for NA callers, etc. The time-of-day, approval state, and maintenance window
-        //checks also come from the context bag.
-        string[] regions = ["eu-west-1", "us-east-1", "ap-southeast-1"];
-
-        foreach(string region in regions)
-        {
-            ExchangeContext context = new();
-            context.SetTenantId(segment);
-            context.SetIssuer(VerifierBaseUri);
-            context["app.region"] = region;
-            await app.DispatchAtEndpointAsync(
-            segment,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-        }
-
-        Assert.HasCount(3, capturedRegions,
-            "The delegate must be called once per request with each request's context bag.");
-        Assert.AreEqual("eu-west-1", capturedRegions[0],
-            "First request's region must reach the delegate.");
-        Assert.AreEqual("us-east-1", capturedRegions[1],
-            "Second request's region must reach the delegate.");
-        Assert.AreEqual("ap-southeast-1", capturedRegions[2],
-            "Third request's region must reach the delegate.");
-    }
-
-
-    [TestMethod]
-    public async Task DelegateCanServePrecomputedDocumentFromApplicationCache()
-    {
-        //Demonstrates precomputation: the application builds the JwksDocument at
-        //registration time (before any request arrives), stores it in its cache,
-        //and the delegate serves the precomputed document on every request.
-        //The ClientRegistered event triggers precomputation; ClientUpdated triggers
-        //cache eviction and re-precomputation.
-        JwksDocument? precomputedDocument = null;
-        int computeCount = 0;
-
-        await using TestHostShell app = new(TimeProvider);
-
-        //Subscribe to precompute on registration.
-        List<ClientRegistrationEvent> events = [];
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(events));
-
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-        string segment = keys.Registration.TenantId;
-
-        //Simulate: application's ClientRegistered subscriber precomputes the document.
-        ClientRegistered? registeredEvent = events
-            .OfType<ClientRegistered>()
-            .FirstOrDefault(e => string.Equals(
-                e.TenantId, segment, StringComparison.Ordinal));
-
-        Assert.IsNotNull(registeredEvent,
-            "ClientRegistered must fire so the application can precompute at registration time.");
-
-        //Precompute now (in production this happens in the subscriber, possibly async).
-        computeCount++;
-        precomputedDocument = new JwksDocument
-        {
-            Keys =
-            [
-                new JsonWebKey
-                {
-                    Kty = WellKnownKeyTypeValues.Ec,
-                    Use = WellKnownJwkValues.UseSig,
-                    Kid = registeredEvent.Registration.GetDefaultSigningKeyId(KeyUsageContext.JarSigning).Value
-                }
-            ]
-        };
-
-        //Wire the delegate to serve the precomputed document.
-        app.Server.OAuth().Cryptography.BuildJwksDocumentAsync = (registration, ctx, ct) =>
-            ValueTask.FromResult(precomputedDocument!);
-
-        //Ten requests — delegate always serves the precomputed document.
-        //The application's compute count stays at 1 because caching is its concern.
-        string segment2 = segment;
-        ExchangeContext context = new();
-        context.SetTenantId(segment2);
-        context.SetIssuer(VerifierBaseUri);
-
-        for(int i = 0; i < 10; i++)
-        {
-            ServerHttpResponse response = await app.DispatchAtEndpointAsync(
-            segment2,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-            Assert.AreEqual(200, response.StatusCode,
-                $"Request {i + 1} must succeed against precomputed document.");
-        }
-
-        Assert.AreEqual(1, computeCount,
-            "The application computed the document exactly once at registration time. " +
-            "The library called the delegate 10 times but the delegate served from cache — " +
-            "no recomputation was needed.");
-
-        using JsonDocument doc = JsonDocument.Parse(
-            (await app.DispatchAtEndpointAsync(
-            segment2,
-            WellKnownEndpointNames.MetadataJwks,
-            "GET",
-            new RequestFields(),
-            context,
-            TestContext.CancellationToken).ConfigureAwait(false)).Body);
-
-        JsonElement[] finalKeys = doc.RootElement
-            .GetProperty(WellKnownJwkMemberNames.Keys)
-            .EnumerateArray()
-            .ToArray();
-
-        string expectedKid = keys.SigningKeyId.Value;
-        JsonElement? matchingKey = finalKeys
-            .Cast<JsonElement?>()
-            .FirstOrDefault(jwk =>
-                jwk!.Value.TryGetProperty(WellKnownJwkMemberNames.Kid, out JsonElement kid)
-                && string.Equals(kid.GetString(), expectedKid, StringComparison.Ordinal));
-
-        Assert.IsNotNull(matchingKey,
-            "Precomputed document must carry the registration's signing key identifier.");
-    }
-
-
-    [TestMethod]
-    public async Task EventTimestampsReflectFakeTimeProviderAndAreOrdered()
-    {
-        //Verifies that AuthorizationServer timestamps come from the injected
-        //TimeProvider — not from DateTimeOffset.UtcNow or any other clock.
-        //This matters for rotation grace-period logic: an application that schedules
-        //cache eviction as "evict 5 minutes after ClientUpdated.OccurredAt" must get
-        //a timestamp consistent with the same clock the rest of the system uses.
-        //
-        //No Task.Delay or real waits — FakeTimeProvider.Advance is synchronous and
-        //deterministic. The observable fires synchronously via Subject<T>.OnNext so
-        //timestamps are captured before RegisterClient or RotateSigningKey return.
-
-        List<ClientRegistrationEvent> received = [];
-
-
-        await using TestHostShell app = new(TimeProvider);
-
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(received));
-
-        DateTimeOffset t0 = TimeProvider.GetUtcNow();
-
-        //Advance before registration so ClientRegistered.OccurredAt is ahead of t0.
-        TimeSpan registrationAdvance = TimeSpan.FromMinutes(5);
-        TimeProvider.Advance(registrationAdvance);
-
-        using VerifierKeyMaterial keys = app.RegisterClient(VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-        string segment = keys.Registration.TenantId;
-
-        DateTimeOffset expectedRegistrationTime = t0 + registrationAdvance;
-
-        //Advance again before rotation so ClientUpdated.OccurredAt is further ahead.
-        TimeSpan rotationAdvance = TimeSpan.FromMinutes(10);
-        TimeProvider.Advance(rotationAdvance);
-
-        using VerifierKeyMaterial rotatedKeys = app.RotateSigningKey(segment);
-
-        DateTimeOffset expectedRotationTime = expectedRegistrationTime + rotationAdvance;
-
-        ClientRegistrationEvent[] forSegment = received
-            .Where(e => string.Equals(
-                e.TenantId, segment, StringComparison.Ordinal))
-            .ToArray();
-
-        ClientRegistered? registeredEvent =
-            forSegment.OfType<ClientRegistered>().FirstOrDefault();
-        ClientUpdated? updatedEvent =
-            forSegment.OfType<ClientUpdated>().FirstOrDefault();
-
-        Assert.IsNotNull(registeredEvent,
-            "ClientRegistered must be emitted on registration.");
-        Assert.IsNotNull(updatedEvent,
-            "ClientUpdated must be emitted on key rotation.");
-
-        Assert.AreEqual(expectedRegistrationTime, registeredEvent.OccurredAt,
-            "ClientRegistered.OccurredAt must reflect the FakeTimeProvider value at " +
-            "the moment of registration — not wall time.");
-        Assert.AreEqual(expectedRotationTime, updatedEvent.OccurredAt,
-            "ClientUpdated.OccurredAt must reflect the FakeTimeProvider value at " +
-            "the moment of rotation — not wall time.");
-
-        Assert.IsLessThan(updatedEvent.OccurredAt, registeredEvent.OccurredAt,
-            "ClientRegistered must precede ClientUpdated in time.");
-        Assert.AreEqual(rotationAdvance, updatedEvent.OccurredAt - registeredEvent.OccurredAt,
-            "The gap between ClientRegistered and ClientUpdated must equal exactly " +
-            "the time advanced between the two operations.");
-    }
-
-    [TestMethod]
-    public async Task EndpointBuildersAreInvokedOncePerRequestNotCachedPerRegistration()
-    {
-        int builderInvocations = 0;
-
-        EndpointBuilderDelegate countingMetadataBuilder = (registration, context, server) =>
-        {
-            Interlocked.Increment(ref builderInvocations);
-            return MetadataEndpoints.Builder(registration, context, server);
-        };
-
-        await using TestHostShell app = new(TimeProvider);
-
-        Verifiable.Server.ServerConfiguration configWithCounting = app.Server.Configuration
-            .WithEndpointBuilders(new EndpointBuilderSet([
-                AuthCodeEndpoints.Builder,
-            Oid4VpEndpoints.Builder,
-            countingMetadataBuilder
-            ]));
-        app.Server.ApplyConfiguration(configWithCounting);
-
-        using VerifierKeyMaterial keys = app.RegisterClient(
-            VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
-
-        string segment = keys.Registration.TenantId.Value;
-
-        ServerHttpResponse first = await app.DispatchAtEndpointAsync(
-            segment, WellKnownEndpointNames.MetadataJwks, "GET",
-            new RequestFields(), new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        ServerHttpResponse second = await app.DispatchAtEndpointAsync(
-            segment, WellKnownEndpointNames.MetadataJwks, "GET",
-            new RequestFields(), new ExchangeContext(),
-            TestContext.CancellationToken).ConfigureAwait(false);
-
-        Assert.AreEqual(200, first.StatusCode);
-        Assert.AreEqual(200, second.StatusCode);
-        Assert.AreEqual(2, builderInvocations,
-            "The metadata builder must be invoked once per dispatch — the chain is not cached per registration.");
-    }
-
-
-    [TestMethod]
     public async Task CapabilityAttenuationByResolveCapabilitiesAsyncRemovesEndpointFromChain()
     {
         await using TestHostShell app = new(TimeProvider);
@@ -2072,7 +1560,7 @@ internal sealed class AuthorizationServerFeatureTests
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataJwks, "GET",
-            new RequestFields(), new ExchangeContext(),
+            new RequestFields(), [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode);
@@ -2092,7 +1580,7 @@ internal sealed class AuthorizationServerFeatureTests
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataJwks, "GET",
-            new RequestFields(), new ExchangeContext(),
+            new RequestFields(), [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode);
@@ -2114,15 +1602,15 @@ internal sealed class AuthorizationServerFeatureTests
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        (FlowState State, int _) entry = app.GetFlowState(parHandle);
-        Assert.IsNotNull(entry.State);
+        (FlowState State, int _) = app.GetFlowState(parHandle);
+        Assert.IsNotNull(State);
 
         // Advance past the flow's ExpiresAt by one second so the dispatcher's TTL
         // check fails on the resume attempt.
-        TimeSpan beyondExpiry = entry.State.ExpiresAt - TimeProvider.GetUtcNow() + TimeSpan.FromSeconds(1);
+        TimeSpan beyondExpiry = State.ExpiresAt - TimeProvider.GetUtcNow() + TimeSpan.FromSeconds(1);
         TimeProvider.Advance(beyondExpiry);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCorrelationKey(parHandle);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -2143,7 +1631,7 @@ internal sealed class AuthorizationServerFeatureTests
         using VerifierKeyMaterial keys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
@@ -2178,7 +1666,7 @@ internal sealed class AuthorizationServerFeatureTests
             return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCorrelationKey(parHandle);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -2222,7 +1710,7 @@ internal sealed class AuthorizationServerFeatureTests
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataJwks, "GET",
-            new RequestFields(), new ExchangeContext(),
+            new RequestFields(), [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode);
@@ -2254,7 +1742,7 @@ internal sealed class AuthorizationServerFeatureTests
             return originalInspect(stage, ctx, ct);
         };
 
-        ExchangeContext outerContext = new();
+        ExchangeContext outerContext = [];
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             keys.Registration.TenantId.Value,
@@ -2287,7 +1775,7 @@ internal sealed class AuthorizationServerFeatureTests
             await originalSave(tenantId, key, state, stepCount, ctx, ct).ConfigureAwait(false);
         };
 
-        await app.HandleParAsync(
+        _ = await app.HandleParAsync(
             keys,
             new TransactionNonce("nonce-save-tenant-01"),
             CreatePreparedQuery(),
@@ -2320,7 +1808,7 @@ internal sealed class AuthorizationServerFeatureTests
             return await originalLoad(tenantId, flowId, ctx, ct).ConfigureAwait(false);
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCorrelationKey(parHandle);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -2339,7 +1827,7 @@ internal sealed class AuthorizationServerFeatureTests
         ClientRecord registration,
         CancellationToken cancellationToken)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(registration.TenantId);
         context.SetIssuer(VerifierBaseUri);
 
@@ -2489,9 +1977,9 @@ internal sealed class AuthorizationServerFeatureTests
             issuedAt: now, expiresAt: now.AddHours(1),
             issuer: "https://issuer", audience: SingleAudience, clientId: "c1");
         Assert.IsTrue(single.TryGetValue(WellKnownJwtClaimNames.Aud, out object? singleAud));
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(singleAud);
-        Assert.HasCount(1, (IReadOnlyList<string>)singleAud!);
-        Assert.AreEqual("https://api1", ((IReadOnlyList<string>)singleAud!)[0]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(singleAud);
+        Assert.HasCount(1, (IReadOnlyList<string>)singleAud);
+        Assert.AreEqual("https://api1", ((IReadOnlyList<string>)singleAud)[0]);
 
         JwtPayload multi = JwtPayload.ForAccessToken(
             subject: "alice", jti: "j2", scope: "read",
@@ -2499,7 +1987,7 @@ internal sealed class AuthorizationServerFeatureTests
             issuer: "https://issuer",
             audience: MultiAudience, clientId: "c1");
         Assert.IsTrue(multi.TryGetValue(WellKnownJwtClaimNames.Aud, out object? multiAud));
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(multiAud);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(multiAud);
 
         JwtPayload absent = JwtPayload.ForAccessToken(
             subject: "alice", jti: "j3", scope: "read",
@@ -2536,7 +2024,7 @@ internal sealed class AuthorizationServerFeatureTests
         using CancellationTokenSource cts = new();
         await cts.CancelAsync();
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await Rfc9068AccessTokenProducer.DefaultResolveAccessTokenAudienceAsync(
                 registration, context, cts.Token));
     }
@@ -2598,7 +2086,7 @@ internal sealed class AuthorizationServerFeatureTests
         new()
         {
             Registration = registration,
-            Context = new ExchangeContext(),
+            Context = [],
             IssuerUri = new Uri("https://issuer.example.com"),
             Subject = "alice",
             Scope = scope,

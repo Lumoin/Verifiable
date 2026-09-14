@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
-using Verifiable.Tpm.Spec;
 
 namespace Verifiable.Tpm.Spec.Structures;
 
@@ -135,7 +132,7 @@ public sealed class Tpm2bEccParameter: SensitiveMemory, ITpmWireType
 
         IMemoryOwner<byte> storage = pool.Rent(size, allocationKind);
         ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(storage.Memory.Span.Slice(0, size));
+        source.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bEccParameter(storage);
     }

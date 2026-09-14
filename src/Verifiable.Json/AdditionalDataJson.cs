@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Verifiable.Json;
@@ -62,7 +60,7 @@ internal static class AdditionalDataJson
     /// </summary>
     internal static void AddFromElement(ref Dictionary<string, object>? bucket, string name, JsonElement value)
     {
-        bucket ??= new Dictionary<string, object>(StringComparer.Ordinal);
+        bucket ??= new(StringComparer.Ordinal);
         bucket[name] = JsonElementConversion.Convert(value)!;
     }
 
@@ -76,7 +74,7 @@ internal static class AdditionalDataJson
     /// </summary>
     internal static void AddFromReader(ref Dictionary<string, object>? bucket, string name, ref Utf8JsonReader reader)
     {
-        bucket ??= new Dictionary<string, object>(StringComparer.Ordinal);
+        bucket ??= new(StringComparer.Ordinal);
         bucket[name] = ManualJsonReader.ReadValue(ref reader)!;
     }
 }

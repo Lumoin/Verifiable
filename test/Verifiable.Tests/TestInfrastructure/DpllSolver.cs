@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>
@@ -98,7 +95,7 @@ internal static class DpllSolver
             //Assign unset variables to false (minimum disclosure preference).
             for(int i = 0; i < variableCount; i++)
             {
-                assignment.TryAdd(i, false);
+                _ = assignment.TryAdd(i, false);
             }
 
             return new SatResult(true, assignment);
@@ -177,7 +174,7 @@ internal static class DpllSolver
                 return true;
             }
 
-            assignment.Remove(unitVariable.Value);
+            _ = assignment.Remove(unitVariable.Value);
             return false;
         }
 
@@ -235,7 +232,7 @@ internal static class DpllSolver
             return true;
         }
 
-        assignment.Remove(chosenVariable);
+        _ = assignment.Remove(chosenVariable);
         return false;
     }
 }

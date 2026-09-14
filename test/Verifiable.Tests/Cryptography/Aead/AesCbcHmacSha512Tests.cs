@@ -78,7 +78,7 @@ internal sealed class AesCbcHmacSha512Tests
         tamperedTag[0] ^= 0x01;
         using AuthenticationTag tag = TagFromBytes(tamperedTag);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using DecryptedContent _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync(
                 ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -100,7 +100,7 @@ internal sealed class AesCbcHmacSha512Tests
         tamperedCiphertext.CopyTo(owner.Memory.Span);
         using Ciphertext ciphertext = new(owner, CryptoTags.AesCbcHmacCiphertext);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using DecryptedContent _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync(
                 ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -120,7 +120,7 @@ internal sealed class AesCbcHmacSha512Tests
         tamperedAad[0] ^= 0x01;
         using AdditionalData aad = AadFromBytes(tamperedAad);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
         {
             using DecryptedContent _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha512DecryptAsync(
                 ciphertext, key, iv, tag, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -165,7 +165,7 @@ internal sealed class AesCbcHmacSha512Tests
         using SymmetricKeyMemory tooShortKey = KeyFromHex(VectorKey[..64]);
         using AdditionalData aad = AadFromHex(VectorAad);
 
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
         {
             using AeadEncryptResult _ = await MicrosoftKeyAgreementFunctions.AesCbcHmacSha512EncryptAsync(
                 new byte[16], tooShortKey, aad, Pool, TestContext.CancellationToken).ConfigureAwait(false);

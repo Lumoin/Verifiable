@@ -83,7 +83,7 @@ namespace Verifiable.Cryptography
         /// </summary>
         /// <remarks>Status: draft.</remarks>
         public static ReadOnlySpan<byte> P256PrivateKey => [0x86, 0x26];
-        
+
         /// <summary>
         /// P384-pub (0x1201). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L146">P-384 public Key (compressed) (GitHub)</see>.
         /// </summary>
@@ -95,7 +95,7 @@ namespace Verifiable.Cryptography
         /// </summary>
         /// <remarks>Status: draft.</remarks>
         public static ReadOnlySpan<byte> P384PrivateKey => [0x87, 0x26];
-        
+
         /// <summary>
         /// P521-pub (0x1202). See more at <see href="https://github.com/multiformats/multicodec/blob/master/table.csv#L147">P-512 public Key (compressed) (GitHub)</see>.
         /// </summary>

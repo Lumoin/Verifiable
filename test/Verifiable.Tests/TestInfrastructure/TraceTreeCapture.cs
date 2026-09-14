@@ -94,9 +94,9 @@ internal sealed class TraceTreeCapture: IDisposable
         Listener = new ActivityListener
         {
             ShouldListenTo = source => subscribedSourceNames.Contains(source.Name),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+            Sample = static (ref _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
-            SampleUsingParentId = static (ref ActivityCreationOptions<string> _) =>
+            SampleUsingParentId = static (ref _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = StoppedActivityLog.Enqueue
         };

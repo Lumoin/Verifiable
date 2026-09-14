@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 using Verifiable.Json;
 
@@ -259,10 +258,10 @@ internal static class WebPlusWorkedExamples
         {
             if(i > 0)
             {
-                builder.Append('\n');
+                _ = builder.Append('\n');
             }
 
-            builder.Append(Encoding.UTF8.GetString(Jcs.CanonicalizeToUtf8Bytes(documents[i])));
+            _ = builder.Append(Encoding.UTF8.GetString(Jcs.CanonicalizeToUtf8Bytes(documents[i])));
         }
 
         return builder.ToString();

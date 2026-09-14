@@ -1,9 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -11,17 +10,13 @@ using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.Tpm;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -237,7 +232,7 @@ internal sealed class TpmBackedTerminalAuthenticationTests
         return new ChipAuthenticationKey(owner, keyId: null);
     }
 
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

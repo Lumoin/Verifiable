@@ -308,8 +308,8 @@ public static class GeneralJweEncryptionExtensions
 
         int aadByteCount = Encoding.ASCII.GetByteCount(headerEncoded);
         IMemoryOwner<byte> aadRawOwner = pool.Rent(aadByteCount);
-        Encoding.ASCII.GetBytes(headerEncoded, aadRawOwner.Memory.Span);
-        using AdditionalData aad = new AdditionalData(aadRawOwner, CryptoTags.AesCbcHmacAad);
+        _ = Encoding.ASCII.GetBytes(headerEncoded, aadRawOwner.Memory.Span);
+        using AdditionalData aad = new(aadRawOwner, CryptoTags.AesCbcHmacAad);
 
         //apu/apv are the integrity-protected agreement info already on the wire as base64url
         //strings; the KDF needs their decoded bytes. Decode once here for every recipient.
@@ -348,7 +348,7 @@ public static class GeneralJweEncryptionExtensions
             cekEntropy.Dispose();
         }
 
-        using SymmetricKeyMemory cek = new SymmetricKeyMemory(cekOwner, cekTag);
+        using SymmetricKeyMemory cek = new(cekOwner, cekTag);
 
         try
         {
@@ -411,7 +411,7 @@ public static class GeneralJweEncryptionExtensions
             //private half remains the caller's to dispose.
             PublicKeyMemory epkForMessage = CopyPublicKey(ephemeralPublic, pool);
 
-            GeneralJweMessage message = new GeneralJweMessage(
+            GeneralJweMessage message = new(
                 completeHeader, headerEncoded, epkForMessage, encryptResult, recipientEntries, contentEncryptionAlgorithm);
 
             encryptResult = null;

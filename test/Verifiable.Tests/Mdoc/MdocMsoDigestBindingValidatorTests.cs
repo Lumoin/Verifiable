@@ -1,12 +1,12 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
-using Verifiable.Tests.TestInfrastructure;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Mdoc;
 
@@ -172,7 +172,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
             //Construct the tampered IssuerSigned but never dispose it — its
             //items share Salt ownership with the original signed document.
             MdocIssuerSigned tampered = new(tamperedNameSpaces, signed.IssuerSigned.IssuerAuth);
-            MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(tampered,BaseMemoryPool.Shared);
+            MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(tampered, BaseMemoryPool.Shared);
 
             Assert.IsFalse(result.IsValid);
             Assert.AreEqual(MdocDigestBindingFailureReason.ItemBindingFailed, result.FailureReason);
@@ -230,7 +230,7 @@ internal sealed class MdocMsoDigestBindingValidatorTests
             mso, EncodedCoseSign1.FromBytes(new byte[1], BaseMemoryPool.Shared));
         using MdocIssuerSigned issuerSigned = new(nameSpaces, issuerAuth);
 
-        MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(issuerSigned,BaseMemoryPool.Shared);
+        MdocDigestBindingResult result = MdocMsoDigestBindingValidator.Validate(issuerSigned, BaseMemoryPool.Shared);
 
         Assert.IsFalse(result.IsValid);
         Assert.AreEqual(MdocDigestBindingFailureReason.UnsupportedDigestAlgorithm, result.FailureReason);

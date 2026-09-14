@@ -3,9 +3,9 @@ using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Json;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.Tests.TestDataProviders;
@@ -62,7 +62,7 @@ internal sealed class KbJwtIssuanceTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Span<byte> expectedDigest = stackalloc byte[32];
-        SHA256.HashData(sdJwtInput, expectedDigest);
+        _ = SHA256.HashData(sdJwtInput, expectedDigest);
         string expectedSdHash = TestSetup.Base64UrlEncoder(expectedDigest);
 
         string actualSdHash = ReadPayloadStringClaim(compactKbJwt, SdConstants.SdHashClaim);
@@ -167,7 +167,7 @@ internal sealed class KbJwtIssuanceTests
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             _ = await KbJwtIssuance.IssueAsync(
                 Encoding.UTF8.GetBytes("eyJhbGciOiJFUzI1NiJ9.eyJ4IjoieSJ9.sig~"),

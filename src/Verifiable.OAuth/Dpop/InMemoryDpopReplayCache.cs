@@ -73,7 +73,7 @@ public sealed class InMemoryDpopReplayCache
             }
 
             //Past its freshness window: not a replay, and there is no reason to keep the entry.
-            Entries.TryRemove(jti, out _);
+            _ = Entries.TryRemove(jti, out _);
         }
 
         return ValueTask.FromResult(false);
@@ -111,7 +111,7 @@ public sealed class InMemoryDpopReplayCache
         {
             if(entry.Value <= now)
             {
-                Entries.TryRemove(entry.Key, out _);
+                _ = Entries.TryRemove(entry.Key, out _);
             }
         }
     }

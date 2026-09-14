@@ -1,11 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -40,7 +37,7 @@ internal sealed class PdfDssRoundTripTests
     /// ETSI EN 319 142-1 V1.2.1</see> PA-5.4.2.1-T1, PA-5.4.2.2-03, PA-6.3-T26, PA-6.3-u.
     /// </remarks>
     [TestMethod]
-    public async Task WritesAndReadsBackDssCertificatesCrlsAndOcspResponses()
+    public void WritesAndReadsBackDssCertificatesCrlsAndOcspResponses()
     {
         (byte[] document, PdfIncrementalUpdateAnchor anchor) = BuildUnsignedBasePdf();
         Assert.IsTrue(PdfByteSurfaceReader.TryLocateCatalog(document, out PdfCatalogLocation? catalog, out string? locateError), locateError);
@@ -97,7 +94,7 @@ internal sealed class PdfDssRoundTripTests
         {
             PriorDocument = document,
             Anchor = anchor,
-            Catalog = catalog!,
+            Catalog = catalog,
             Certificates = [cert]
         });
 
@@ -248,14 +245,14 @@ internal sealed class PdfDssRoundTripTests
         {
             PriorDocument = document,
             Anchor = anchor,
-            Catalog = catalog!,
+            Catalog = catalog,
             VriEntries = new Dictionary<string, PdfVriEntryRequest>(StringComparer.Ordinal)
             {
                 [new string('A', 40)] = new PdfVriEntryRequest { TimeUpdated = TestClock.CanonicalEpoch, TimeStampToken = token }
             }
         };
 
-        Assert.ThrowsExactly<ArgumentException>(() => PdfIncrementalUpdateWriter.AppendValidationData(request));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PdfIncrementalUpdateWriter.AppendValidationData(request));
     }
 
 
@@ -273,7 +270,7 @@ internal sealed class PdfDssRoundTripTests
 
         byte[] tokenDer = [0x30, 0x05, 0x02, 0x01, 0x2A, 0x01, 0x00];
         using PkiCertificateMemory token = ToCarrier(tokenDer, PkiCertificateTags.TimestampToken);
-        string vriKey = new string('B', 40);
+        string vriKey = new('B', 40);
         PdfDssPlacementResult placed = PdfIncrementalUpdateWriter.AppendValidationData(new PdfDssPlacementRequest
         {
             PriorDocument = document,
@@ -307,7 +304,7 @@ internal sealed class PdfDssRoundTripTests
         {
             PriorDocument = document,
             Anchor = anchor,
-            Catalog = catalog!,
+            Catalog = catalog,
             Certificates = [cert]
         });
 
@@ -315,11 +312,11 @@ internal sealed class PdfDssRoundTripTests
         var secondRequest = new PdfDssPlacementRequest
         {
             PriorDocument = first.Bytes,
-            Anchor = first.NextAnchor(secondCatalog!.ObjectNumber, secondCatalog.Generation),
+            Anchor = first.NextAnchor(secondCatalog.ObjectNumber, secondCatalog.Generation),
             Catalog = secondCatalog
         };
 
-        Assert.ThrowsExactly<ArgumentException>(() => PdfIncrementalUpdateWriter.AppendValidationData(secondRequest));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PdfIncrementalUpdateWriter.AppendValidationData(secondRequest));
     }
 
 
@@ -379,7 +376,7 @@ internal sealed class PdfDssRoundTripTests
         {
             PriorDocument = document,
             Anchor = anchor,
-            Catalog = catalog!,
+            Catalog = catalog,
             Certificates = [cert]
         });
 

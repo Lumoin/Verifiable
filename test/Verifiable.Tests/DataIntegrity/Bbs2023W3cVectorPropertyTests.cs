@@ -3,7 +3,6 @@ using Verifiable.Cbor;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.DataIntegrity.Bbs2023W3cVectorTests;

@@ -1,4 +1,3 @@
-using Lumoin.Veritas.JsonPointer;
 using Ptr = Lumoin.Veritas.JsonPointer.JsonPointer;
 using Seg = Lumoin.Veritas.JsonPointer.JsonPointerSegment;
 
@@ -69,13 +68,13 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void ParseThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => Ptr.Parse(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => Ptr.Parse(null!));
     }
 
     [TestMethod]
     public void ParseThrowsOnMissingLeadingSlash()
     {
-        Assert.Throws<FormatException>(() => Ptr.Parse("foo"));
+        _ = Assert.Throws<FormatException>(() => Ptr.Parse("foo"));
     }
 
     [TestMethod]
@@ -91,13 +90,13 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void ParseInvalidEscapeThrows()
     {
-        Assert.Throws<FormatException>(() => Ptr.Parse("/a~2b"));
+        _ = Assert.Throws<FormatException>(() => Ptr.Parse("/a~2b"));
     }
 
     [TestMethod]
     public void ParseTrailingTildeThrows()
     {
-        Assert.Throws<FormatException>(() => Ptr.Parse("/a~"));
+        _ = Assert.Throws<FormatException>(() => Ptr.Parse("/a~"));
     }
 
     [TestMethod]
@@ -179,7 +178,7 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void FromPropertyThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => Ptr.FromProperty(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => Ptr.FromProperty(null!));
     }
 
     [TestMethod]
@@ -195,7 +194,7 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void FromIndexThrowsOnNegative()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => Ptr.FromIndex(-1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Ptr.FromIndex(-1));
     }
 
     [TestMethod]
@@ -289,7 +288,7 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void AppendIndexThrowsOnNegative()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => Ptr.Root.Append(-1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => Ptr.Root.Append(-1));
     }
 
     [TestMethod]
@@ -417,7 +416,7 @@ internal sealed class JsonPointerTests
         var a = Ptr.Parse("/foo");
         var b = Ptr.Parse("/bar");
 
-        Assert.Throws<ArgumentException>(() => a.RelativeTo(b));
+        _ = Assert.Throws<ArgumentException>(() => a.RelativeTo(b));
     }
 
     [TestMethod]
@@ -455,13 +454,13 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void ParseUriFragmentThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => Ptr.ParseUriFragment(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => Ptr.ParseUriFragment(null!));
     }
 
     [TestMethod]
     public void ParseUriFragmentThrowsWithoutHash()
     {
-        Assert.Throws<FormatException>(() => Ptr.ParseUriFragment("/foo"));
+        _ = Assert.Throws<FormatException>(() => Ptr.ParseUriFragment("/foo"));
     }
 
     [TestMethod]
@@ -503,7 +502,7 @@ internal sealed class JsonPointerTests
     [TestMethod]
     public void EscapeThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => Ptr.Escape(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => Ptr.Escape(null!));
     }
 
     [TestMethod]

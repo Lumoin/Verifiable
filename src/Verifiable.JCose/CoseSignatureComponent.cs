@@ -129,7 +129,7 @@ public sealed class CoseSignatureComponent: IEquatable<CoseSignatureComponent>, 
         }
 
         ReadOnlySpan<byte> signatureSpan = Signature.AsReadOnlySpan();
-        foreach(byte b in signatureSpan.Slice(0, Math.Min(16, signatureSpan.Length)))
+        foreach(byte b in signatureSpan[..Math.Min(16, signatureSpan.Length)])
         {
             hash.Add(b);
         }

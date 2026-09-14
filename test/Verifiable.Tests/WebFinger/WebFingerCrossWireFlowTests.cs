@@ -227,7 +227,7 @@ internal sealed class WebFingerCrossWireFlowTests
     /// </summary>
     private static ExchangeContext NewLoopbackContext()
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with { BlockPrivateAndLoopback = false });
 
         return context;

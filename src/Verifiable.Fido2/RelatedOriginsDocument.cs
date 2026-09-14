@@ -114,7 +114,7 @@ public static class RelatedOrigins
         HashSet<string> distinctRpIds = new(StringComparer.Ordinal);
         foreach(string rpId in rpIds)
         {
-            distinctRpIds.Add(rpId);
+            _ = distinctRpIds.Add(rpId);
             if(distinctRpIds.Count > 1)
             {
                 return false;

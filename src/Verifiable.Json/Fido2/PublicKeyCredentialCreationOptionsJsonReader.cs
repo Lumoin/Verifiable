@@ -1,7 +1,4 @@
-using System;
-using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Fido2;
 
@@ -888,7 +885,7 @@ public static class PublicKeyCredentialCreationOptionsJsonReader
 
     private static bool ReadRequiredBoolean(ref Utf8JsonReader reader, string memberName)
     {
-        if(reader.TokenType != JsonTokenType.True && reader.TokenType != JsonTokenType.False)
+        if(reader.TokenType is not JsonTokenType.True and not JsonTokenType.False)
         {
             throw new Fido2FormatException($"The member '{memberName}' MUST be a boolean.");
         }

@@ -1,13 +1,8 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.OAuth;
+using System.Collections.Immutable;
+using Verifiable.Core.Dcql;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
-using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
-using Verifiable.JCose;
-using Verifiable.Cryptography;
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;

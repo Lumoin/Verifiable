@@ -5,8 +5,7 @@ using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.JsonPointer.Jsonata;
-using Verifiable.Server;
+using Verifiable.Foundation;
 
 namespace Verifiable.Vcalm.Exchange;
 
@@ -200,19 +199,40 @@ public static class VcalmWorkflowStepEngine
             }
 
             //Evaluate the template against the exchange variables (the §3.6.6 results plus the issue
-            //request's own variables) through the bounded template-evaluation seam.
-            JsonataValue variables = ComposeTemplateVariables(vcalm, results, issueRequest);
-            JsonataValue rendered = vcalm.VcalmTemplateEvaluators.Evaluate(template, variables);
+            //request's own variables) through the bounded, byte-typed template-evaluation seam.
+            using PooledMemory? composedVariables = ComposeTemplateVariables(issuance.MemoryPool, results, issueRequest);
+            if(composedVariables is null)
+            {
+                return VcalmIssuanceStepResult.Failure(
+                    "The workflow step's issueRequest variables redefine the reserved 'results' member.");
+            }
 
-            //§3.6.2: the template renders to an object with a "credential" field (and optionally an
-            //"options" field — the POST /credentials/issue body shape). The credential is the part the
-            //engine signs.
-            JsonataValue credentialValue = rendered.Kind == JsonataValueKind.Object
-                ? rendered.GetMemberOrNull(VcalmParameterNames.Credential)
-                : JsonataValue.Null;
-            JsonataValue toSign = credentialValue.IsNull ? rendered : credentialValue;
+            VcalmTemplateEvaluationResult evaluation = vcalm.VcalmTemplateEvaluators.Evaluate(
+                template, composedVariables.AsReadOnlyMemory(), issuance.MemoryPool, cancellationToken);
+            if(!evaluation.IsSuccess)
+            {
+                return VcalmIssuanceStepResult.Failure(evaluation.FailureDetail!);
+            }
 
-            string credentialJson = JsonataJsonWriter.Write(toSign);
+            using PooledMemory? rendered = evaluation.Rendered;
+            if(rendered is null || !VcalmJsonShape.IsObject(rendered.AsReadOnlySpan()))
+            {
+                return VcalmIssuanceStepResult.Failure(
+                    "The workflow template did not render a credential object.");
+            }
+
+            //VCALM 1.0 Example 13 ("A Basic Workflow"): a jsonata template following the POST
+            //credentials-issue body shape renders { "credential": { ... } } rather than the bare
+            //credential — unwrap it so the engine signs the credential, never the wrapper. A template
+            //that rendered the bare credential directly (Appendix D.1 Example 29) has no such member
+            //and signs as-is.
+            ReadOnlySpan<byte> renderedSpan = rendered.AsReadOnlySpan();
+            ReadOnlySpan<byte> credentialSpan = VcalmJsonShape.TryGetTopLevelMemberValue(
+                renderedSpan, VcalmParameterNames.CredentialUtf8, out Range credentialRange)
+                ? renderedSpan[credentialRange]
+                : renderedSpan;
+
+            string credentialJson = Encoding.UTF8.GetString(credentialSpan);
             VerifiableCredential credential;
             try
             {
@@ -277,51 +297,128 @@ public static class VcalmWorkflowStepEngine
     }
 
 
-    //Composes the JSONata input for a template evaluation: an object carrying the exchange's
-    //variables.results (so a template can reference results.<step>.verifiablePresentation.holder) and
-    //the issue request's own variables flattened on top. The verbatim JSON fragments cross the
-    //serialization firewall to the JsonataValue model through the integration's ParseVcalmTemplateInput
-    //seam; when that seam is unwired the engine evaluates against an empty context (a constant credential
-    //body still renders). The minimal in-repo engine navigates these by field reference; the full
-    //Lumoin.Veritas engine a deployment registers consumes the same model.
-    private static JsonataValue ComposeTemplateVariables(
-        VcalmIntegration vcalm, ImmutableDictionary<string, string> results, VcalmIssueRequest issueRequest)
+    /// <summary>
+    /// Composes the UTF-8 JSON input for a template evaluation: an object carrying the exchange's
+    /// §3.6.1 <c>variables.results</c> (so a template can reference
+    /// <c>results.&lt;step&gt;.verifiablePresentation.holder</c>) and the issue request's own
+    /// variables spliced on top. Every fragment here is ALREADY valid JSON text (the accumulated
+    /// results are prior steps' recorded presentations; the issue request's variables are the
+    /// wire-verbatim §3.6.1 variables value), so composing the outer object is byte/text
+    /// concatenation, never a parse: <c>Verifiable.Vcalm</c> carries no JSON parser.
+    /// <see cref="VcalmJsonShape.IsObject(ReadOnlySpan{char})"/> decides whether the variables
+    /// fragment's members splice directly into the outer object (an object-shaped variables value) or
+    /// the fragment rides under a <c>"variables"</c> member (§3.6.1's bare top-level variable NAME
+    /// case). §3.6.1 reserves <c>results</c> for the accumulated-results object; a per-request
+    /// variables object that redefines it would produce a document with two <c>results</c> members
+    /// (RFC 8259 §4 makes object member names SHOULD-unique), so that shape is refused rather than
+    /// composed.
+    /// </summary>
+    /// <param name="pool">The pool the composed document is allocated from.</param>
+    /// <param name="results">The §3.6.6 accumulated <c>variables.results</c>.</param>
+    /// <param name="issueRequest">The issue request whose own variables splice on top of <paramref name="results"/>.</param>
+    /// <returns>
+    /// The composed UTF-8 JSON document, or <see langword="null"/> when the issue request's
+    /// variables redefine the reserved <c>results</c> member.
+    /// </returns>
+    private static PooledMemory? ComposeTemplateVariables(
+        BaseMemoryPool pool, ImmutableDictionary<string, string> results, VcalmIssueRequest issueRequest)
     {
-        ParseVcalmTemplateInputDelegate? parse = vcalm.ParseVcalmTemplateInputAsync;
-        var members = new Dictionary<string, JsonataValue>(StringComparer.Ordinal);
-
-        if(parse is not null && !results.IsEmpty)
+        StringBuilder sb = JsonAppender.Rent();
+        try
         {
-            var resultMembers = new Dictionary<string, JsonataValue>(StringComparer.Ordinal);
-            foreach(KeyValuePair<string, string> entry in results)
+            _ = sb.Append('{');
+            bool isFirstMember = true;
+
+            if(!results.IsEmpty)
             {
-                resultMembers[entry.Key] = parse(entry.Value);
+                string resultsJson = ComposeResultsObject(results);
+                JsonAppender.AppendRawField(sb, VcalmParameterNames.Results, resultsJson, ref isFirstMember);
             }
 
-            members[VcalmParameterNames.Results] = JsonataValue.FromObject(resultMembers);
-        }
-
-        if(parse is not null && issueRequest.VariablesJson is { } variablesJson)
-        {
-            JsonataValue parsed = parse(variablesJson);
-            if(parsed.Kind == JsonataValueKind.Object)
+            if(issueRequest.VariablesJson is { Length: > 0 } variablesJson)
             {
-                foreach(KeyValuePair<string, JsonataValue> member in parsed.AsObject())
+                if(VcalmJsonShape.IsObject(variablesJson.AsSpan()))
                 {
-                    members[member.Key] = member.Value;
+                    //§3.6.1 per-request variables object: splice its members as siblings by dropping
+                    //the outer braces — the fragment is already valid JSON, so the inner text is a
+                    //valid member list on its own.
+                    string trimmed = variablesJson.Trim();
+                    string inner = trimmed[1..^1].Trim();
+                    if(inner.Length > 0)
+                    {
+                        byte[] innerMembersUtf8 = Encoding.UTF8.GetBytes("{" + inner + "}");
+                        if(VcalmJsonShape.TryGetTopLevelMemberValue(innerMembersUtf8, VcalmParameterNames.ResultsUtf8, out _))
+                        {
+                            return null;
+                        }
+
+                        if(!isFirstMember)
+                        {
+                            _ = sb.Append(',');
+                        }
+
+                        _ = sb.Append(inner);
+                        isFirstMember = false;
+                    }
+                }
+                else
+                {
+                    //§3.6.1: variables MAY be a bare top-level variable NAME (a string) — the per-request
+                    //variables object is then expected to already live under the exchange variables. The
+                    //name is exposed as a "variables" member the registered evaluator resolves natively.
+                    JsonAppender.AppendRawField(sb, VcalmParameterNames.Variables, variablesJson, ref isFirstMember);
                 }
             }
-            else if(!parsed.IsNull)
-            {
-                //§3.6.1: variables MAY be a bare top-level variable NAME (a string) — the per-request
-                //variables object is then expected to already live under the exchange variables. The
-                //minimal engine has no exchange-variable store of its own, so the name is exposed as a
-                //"variables" member the template can reference; the full engine resolves it natively.
-                members[VcalmParameterNames.Variables] = parsed;
-            }
-        }
 
-        return JsonataValue.FromObject(members);
+            _ = sb.Append('}');
+
+            byte[] utf8 = JsonAppender.ToUtf8Bytes(sb);
+
+            return PooledMemory.FromBytes(utf8, pool, BufferTags.Json);
+        }
+        finally
+        {
+            JsonAppender.Return(sb);
+        }
+    }
+
+
+    /// <summary>
+    /// Builds the §3.6.6 <c>results</c> object's own JSON text (without the wrapping member name)
+    /// from the accumulated per-step values, each of which is already valid JSON text recorded by a
+    /// prior issuing step.
+    /// </summary>
+    /// <param name="results">The accumulated per-step results to render as object members.</param>
+    /// <returns>The <c>results</c> object's UTF-16 JSON text.</returns>
+    private static string ComposeResultsObject(ImmutableDictionary<string, string> results)
+    {
+        StringBuilder sb = JsonAppender.Rent();
+        try
+        {
+            _ = sb.Append('{');
+            bool isFirstResult = true;
+            foreach(KeyValuePair<string, string> entry in results)
+            {
+                if(!isFirstResult)
+                {
+                    _ = sb.Append(',');
+                }
+
+                isFirstResult = false;
+                _ = sb.Append('"');
+                JsonAppender.AppendEscapedString(sb, entry.Key);
+                _ = sb.Append("\":");
+                _ = sb.Append(entry.Value);
+            }
+
+            _ = sb.Append('}');
+
+            return sb.ToString();
+        }
+        finally
+        {
+            JsonAppender.Return(sb);
+        }
     }
 
 
@@ -333,27 +430,27 @@ public static class VcalmWorkflowStepEngine
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append("{\"");
+            _ = sb.Append("{\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Context);
-            sb.Append("\":[\"");
+            _ = sb.Append("\":[\"");
             JsonAppender.AppendEscapedString(sb, Context.Credentials20);
-            sb.Append("\"],\"");
+            _ = sb.Append("\"],\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Type);
-            sb.Append("\":[\"VerifiablePresentation\"],\"");
+            _ = sb.Append("\":[\"VerifiablePresentation\"],\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.VerifiableCredential);
-            sb.Append("\":[");
+            _ = sb.Append("\":[");
 
             for(int i = 0; i < credentialJsons.Count; ++i)
             {
                 if(i > 0)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
-                sb.Append(credentialJsons[i]);
+                _ = sb.Append(credentialJsons[i]);
             }
 
-            sb.Append("]}");
+            _ = sb.Append("]}");
 
             return sb.ToString();
         }

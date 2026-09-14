@@ -1,17 +1,17 @@
-using System.Buffers;
-using System.Formats.Asn1;
-using System.Text;
+using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
+using System.Buffers;
+using System.Formats.Asn1;
+using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.JCose;
@@ -185,10 +185,10 @@ internal sealed class CoseKeyRsaTests
     [TestMethod]
     public async Task NonDefaultExponentSurvivesKeyBuild()
     {
-        var minted = MintRsaKeyPairWithExponent(BigInteger.ValueOf(3));
-        using IMemoryOwner<byte> privateKeyDer = minted.PrivateKeyDer;
+        var (Modulus, Exponent, PrivateKeyDer) = MintRsaKeyPairWithExponent(BigInteger.ValueOf(3));
+        using IMemoryOwner<byte> privateKeyDer = PrivateKeyDer;
 
-        CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: minted.Modulus, e: minted.Exponent);
+        CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: Modulus, e: Exponent);
         PublicKeyMemory reconstructed = coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared);
 
         Assert.AreEqual(CryptoTags.Rsa2048PublicKey, reconstructed.Tag);
@@ -268,7 +268,7 @@ internal sealed class CoseKeyRsaTests
         modulus[0] = 0x80;
         CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, n: modulus);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
     }
 
@@ -281,7 +281,7 @@ internal sealed class CoseKeyRsaTests
     {
         CoseKey coseKey = new(kty: CoseKeyTypes.Rsa, e: DefaultPublicExponent);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
     }
 

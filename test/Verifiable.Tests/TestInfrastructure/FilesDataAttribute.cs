@@ -31,12 +31,12 @@ namespace Verifiable.Tests.TestInfrastructure
         /// </summary>
         public string Directory { get; }
 
-       
+
         /// <summary>
         /// Loads files from a given directory with a given search pattern.
         /// </summary>
         /// <param name="directory">The absolute or relative path to the JSON file to load</param>
-        public FilesDataAttribute(string directory, string searchPattern): this(directory, searchPattern, SearchOption.AllDirectories) { }
+        public FilesDataAttribute(string directory, string searchPattern) : this(directory, searchPattern, SearchOption.AllDirectories) { }
 
 
         /// <summary>
@@ -61,7 +61,7 @@ namespace Verifiable.Tests.TestInfrastructure
             DirectoryPath = directory;
             SearchPattern = searchPattern;
             SearchOption = searchOption;
-            Directory = directory;            
+            Directory = directory;
         }
 
 
@@ -89,13 +89,13 @@ namespace Verifiable.Tests.TestInfrastructure
 
             var enumeration = new FileSystemEnumerable<string>(
                directory: DirectoryPath,
-               transform: (ref FileSystemEntry entry) => entry.ToFullPath(),
+               transform: (ref entry) => entry.ToFullPath(),
                options: new EnumerationOptions()
                {
                    RecurseSubdirectories = true
                })
             {
-                ShouldIncludePredicate = (ref FileSystemEntry entry) =>
+                ShouldIncludePredicate = (ref entry) =>
                 {
                     if(entry.IsDirectory)
                     {
@@ -119,6 +119,6 @@ namespace Verifiable.Tests.TestInfrastructure
             {
                 throw new ArgumentException($"Could not find files using paramters directory '{Path.GetFullPath(DirectoryPath)}', '{SearchPattern}', '{SearchOption}'.");
             }
-        }        
+        }
     }
 }

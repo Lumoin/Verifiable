@@ -1,7 +1,6 @@
 using System.Diagnostics;
-using Verifiable.Cryptography;
-
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Cryptography;
 
 namespace Verifiable.OAuth.Oid4Vp.Server.States;
 

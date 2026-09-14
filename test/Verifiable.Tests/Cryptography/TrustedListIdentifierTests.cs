@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -61,7 +60,7 @@ internal sealed class TrustedListIdentifierTests
         bool created = TrustedListIdentifier.TryCreate("some/relative/path", out _);
 
         Assert.IsFalse(created, "§6.1.1.2: a relative path is not an absolute Trusted List identifier and TryCreate fails closed.");
-        Assert.ThrowsExactly<ArgumentException>(static () => new TrustedListIdentifier("some/relative/path"), "§6.1.1.2: constructing an identifier from a relative path throws.");
+        _ = Assert.ThrowsExactly<ArgumentException>(static () => new TrustedListIdentifier("some/relative/path"), "§6.1.1.2: constructing an identifier from a relative path throws.");
     }
 
 
@@ -82,7 +81,7 @@ internal sealed class TrustedListIdentifierTests
         bool created = TrustedListIdentifier.TryCreate(value, out _);
 
         Assert.IsFalse(created, "§6.1.1.2: a non-http(s) scheme is not a Trusted List identifier and TryCreate fails closed.");
-        Assert.ThrowsExactly<ArgumentException>(() => new TrustedListIdentifier(value), "§6.1.1.2: constructing an identifier from a non-http(s) value throws.");
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new TrustedListIdentifier(value), "§6.1.1.2: constructing an identifier from a non-http(s) value throws.");
     }
 
 

@@ -1,18 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography.Xml;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography.Pki.Xml;
 
@@ -204,7 +195,7 @@ public static class TrustedListXmlSignatureVerifier
     private static async ValueTask<(TrustedListSignatureStatus Status, string? Reason, DateTimeOffset? SigningTime)> VerifySigningCertificateBindingAsync(
         XmlElement signatureElement, X509Certificate2 signerCertificate, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
-        XmlNamespaceManager namespaceManager = new(signatureElement.OwnerDocument!.NameTable);
+        XmlNamespaceManager namespaceManager = new(signatureElement.OwnerDocument.NameTable);
         namespaceManager.AddNamespace("xades", XadesNamespace);
         namespaceManager.AddNamespace("ds", DsNamespace);
 

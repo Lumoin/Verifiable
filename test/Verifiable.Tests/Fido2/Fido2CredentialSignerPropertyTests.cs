@@ -1,9 +1,8 @@
-using System.Diagnostics.CodeAnalysis;
 using CsCheck;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
-
 using static Verifiable.Tests.Fido2.Fido2CredentialSignerTests;
 
 namespace Verifiable.Tests.Fido2;

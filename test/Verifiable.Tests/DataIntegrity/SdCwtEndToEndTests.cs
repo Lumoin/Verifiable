@@ -1,9 +1,8 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
-using Verifiable.Cryptography;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -111,7 +110,7 @@ internal class SdCwtEndToEndTests
 
         //Assert - Verify nested structure preserved.
         Assert.AreEqual("credentialSubject", parsed.ClaimName);
-        Assert.IsInstanceOfType<Dictionary<object, object?>>(parsed.ClaimValue);
+        _ = Assert.IsInstanceOfType<Dictionary<object, object?>>(parsed.ClaimValue);
 
         TestContext.WriteLine($"CBOR: {Convert.ToHexString(cborBytes)}");
     }
@@ -230,7 +229,7 @@ internal class SdCwtEndToEndTests
 
             //Parse back by reading the structure manually.
             var reader = new CborReader(encoded, CborOptions.Lax);
-            reader.ReadStartMap();
+            _ = reader.ReadStartMap();
             int headerKey = reader.ReadInt32();
 
             //Read the array of disclosures.

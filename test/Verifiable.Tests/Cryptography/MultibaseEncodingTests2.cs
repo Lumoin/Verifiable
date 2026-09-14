@@ -28,7 +28,7 @@ namespace Verifiable.Tests.Cryptography
                 BaseMemoryPool.Shared);
 
             //Extract just the key data by skipping the 2-byte codec header.
-            byte[] keyDataOnly = decodedWithHeader.Memory.Span.Slice(2).ToArray();
+            byte[] keyDataOnly = decodedWithHeader.Memory.Span[2..].ToArray();
 
             //Re-encode the key data with the appropriate codec header.
             string reencodedKey = MultibaseSerializer.Encode(

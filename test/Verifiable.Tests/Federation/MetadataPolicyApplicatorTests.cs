@@ -184,7 +184,7 @@ internal sealed class MetadataPolicyApplicatorTests
     {
         IReadOnlyDictionary<string, object> declared = new Dictionary<string, object>();
         EntityTypeMetadataPolicy policy = MakePolicy(
-            ("scope", (WellKnownMetadataPolicyOperators.Essential, (object)true)));
+            ("scope", (WellKnownMetadataPolicyOperators.Essential, true)));
 
         MetadataPolicyApplyResult result = MetadataPolicyApplicator.Apply(declared, policy);
 

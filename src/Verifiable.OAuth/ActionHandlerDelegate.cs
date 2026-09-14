@@ -33,4 +33,4 @@ namespace Verifiable.OAuth;
 public delegate ValueTask<FlowInput> ActionHandlerDelegate<in TAction>(
     TAction action,
     ExchangeContext context,
-    CancellationToken cancellationToken) where TAction: OAuthAction;
+    CancellationToken cancellationToken) where TAction : OAuthAction;

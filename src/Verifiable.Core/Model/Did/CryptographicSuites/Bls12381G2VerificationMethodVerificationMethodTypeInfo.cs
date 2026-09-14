@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class Bls12381G2VerificationMethodVerificationMethodTypeInfo: VerificationMethodTypeInfo

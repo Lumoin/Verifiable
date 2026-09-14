@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Spec.Handles;
@@ -89,11 +88,11 @@ public readonly record struct TpmiDhEntity
             or (uint)TpmRh.TPM_RH_ENDORSEMENT
             or (uint)TpmRh.TPM_RH_PLATFORM
             or (uint)TpmRh.TPM_RH_LOCKOUT
-            or >= TpmHandleRanges.TRANSIENT_FIRST and <= TpmHandleRanges.TRANSIENT_LAST
-            or >= TpmHandleRanges.PERSISTENT_FIRST and <= TpmHandleRanges.PERSISTENT_LAST
-            or >= TpmHandleRanges.NV_INDEX_FIRST and <= TpmHandleRanges.NV_INDEX_LAST
+            or (>= TpmHandleRanges.TRANSIENT_FIRST and <= TpmHandleRanges.TRANSIENT_LAST)
+            or (>= TpmHandleRanges.PERSISTENT_FIRST and <= TpmHandleRanges.PERSISTENT_LAST)
+            or (>= TpmHandleRanges.NV_INDEX_FIRST and <= TpmHandleRanges.NV_INDEX_LAST)
             or <= TpmHandleRanges.PCR_LAST
-            or >= (uint)TpmRh.TPM_RH_AUTH_00 and <= (uint)TpmRh.TPM_RH_AUTH_FF;
+            or (>= (uint)TpmRh.TPM_RH_AUTH_00 and <= (uint)TpmRh.TPM_RH_AUTH_FF);
     }
 
     /// <summary>

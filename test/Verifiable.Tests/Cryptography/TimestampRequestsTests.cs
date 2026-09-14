@@ -1,12 +1,9 @@
-using System;
 using System.Buffers;
 using System.Formats.Asn1;
 using System.Numerics;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -158,13 +155,13 @@ internal sealed class TimestampRequestsTests
         using DigestValue digest = await ComputeMessageImprintAsync(
             "timestamp requests bounds fixture", TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await TimestampRequests.CreateAsync(digest, BaseMemoryPool.Shared, nonceByteLength: 0, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "A zero-length nonce is below this builder's lower bound.").ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await TimestampRequests.CreateAsync(digest, BaseMemoryPool.Shared, nonceByteLength: 129, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "A 129-byte nonce is above this builder's upper bound.").ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await TimestampRequests.CreateAsync(digest, BaseMemoryPool.Shared, nonceByteLength: 0, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "The nonce length is validated unconditionally, even when includeNonce is false.").ConfigureAwait(false);
     }
@@ -181,7 +178,7 @@ internal sealed class TimestampRequestsTests
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(16);
         using var shortDigest = new DigestValue(owner, CryptoTags.Sha256Digest);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
             async () => await TimestampRequests.CreateAsync(shortDigest, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "A 16-byte digest cannot be a SHA-256 (32-byte) message imprint.").ConfigureAwait(false);
     }

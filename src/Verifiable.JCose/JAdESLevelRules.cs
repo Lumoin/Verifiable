@@ -1080,7 +1080,7 @@ public static class JAdESLevelRules
                 using DigestValue candidateDigest = await CryptographicKeyEvents.ComputeDigestAsync(
                     candidates[i], outputLength, tag, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                digests.Add(Convert.ToHexStringLower(candidateDigest.AsReadOnlySpan()));
+                _ = digests.Add(Convert.ToHexStringLower(candidateDigest.AsReadOnlySpan()));
             }
 
             return digests;

@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Extensions.Seal;
 

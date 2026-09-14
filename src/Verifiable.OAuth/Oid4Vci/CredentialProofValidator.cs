@@ -5,10 +5,8 @@ using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
-using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Validation;
 
 namespace Verifiable.OAuth.Oid4Vci;
@@ -376,6 +374,17 @@ public static class CredentialProofValidator
             VerificationFailureReason.VerificationMethodNotFound => DiVpProofValidationFailureReason.VerificationMethodNotFound,
             VerificationFailureReason.MissingVerificationMethod => DiVpProofValidationFailureReason.VerificationMethodNotFound,
             VerificationFailureReason.ControllerMismatch => DiVpProofValidationFailureReason.HolderControllerMismatch,
+
+            //None, MissingCryptosuite, SignatureInvalid, BrokenProofChain, ProofChainCycle, and
+            //UnexpectedPresentationBinding are every other Data Integrity failure this validator
+            //does not distinguish — an invalid_proof condition.
+            VerificationFailureReason.None => DiVpProofValidationFailureReason.SignatureInvalid,
+            VerificationFailureReason.MissingCryptosuite => DiVpProofValidationFailureReason.SignatureInvalid,
+            VerificationFailureReason.SignatureInvalid => DiVpProofValidationFailureReason.SignatureInvalid,
+            VerificationFailureReason.BrokenProofChain => DiVpProofValidationFailureReason.SignatureInvalid,
+            VerificationFailureReason.ProofChainCycle => DiVpProofValidationFailureReason.SignatureInvalid,
+            VerificationFailureReason.UnexpectedPresentationBinding => DiVpProofValidationFailureReason.SignatureInvalid,
+
             _ => DiVpProofValidationFailureReason.SignatureInvalid
         };
 
@@ -583,6 +592,8 @@ public static class CredentialProofValidator
         {
             HeaderKeyResolutionStatus.JwkContainsPrivateKey => CredentialProofValidationFailureReason.JwkContainsPrivateKey,
             HeaderKeyResolutionStatus.KeyReferenceUnresolved => CredentialProofValidationFailureReason.KeyReferenceUnresolved,
+            HeaderKeyResolutionStatus.InvalidKeyReference => CredentialProofValidationFailureReason.InvalidKeyReference,
+
             _ => CredentialProofValidationFailureReason.InvalidKeyReference
         };
 

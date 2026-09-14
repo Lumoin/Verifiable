@@ -1,11 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
-using Verifiable.JCose;
 
 namespace Verifiable.Tests.JCose;
 
@@ -49,7 +45,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParseObjectIdentifier(expected, out AdESObjectIdentifier? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertObjectIdentifierMatches(id, expectedDesc: null, expectedDocRefs: null, result!);
+        AssertObjectIdentifierMatches(id, expectedDesc: null, expectedDocRefs: null, result);
     }
 
 
@@ -73,7 +69,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParseObjectIdentifier(expected, out AdESObjectIdentifier? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertObjectIdentifierMatches(id, desc, expectedDocRefs: null, result!);
+        AssertObjectIdentifierMatches(id, desc, expectedDocRefs: null, result);
     }
 
 
@@ -97,7 +93,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParseObjectIdentifier(expected, out AdESObjectIdentifier? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertObjectIdentifierMatches(id, expectedDesc: null, docRefs, result!);
+        AssertObjectIdentifierMatches(id, expectedDesc: null, docRefs, result);
     }
 
 
@@ -122,7 +118,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParseObjectIdentifier(expected, out AdESObjectIdentifier? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertObjectIdentifierMatches(id, desc, docRefs, result!);
+        AssertObjectIdentifierMatches(id, desc, docRefs, result);
     }
 
 
@@ -133,7 +129,7 @@ internal sealed class CBAdESSharedSyntaxTests
     [TestMethod]
     public void ConstructingObjectIdentifierWithEmptyDocRefsArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESObjectIdentifier("https://example.org/cbades/oid/1", docRefs: []));
     }
 
@@ -335,7 +331,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParsePkiObject(expected, out AdESPkiObject? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertPkiObjectMatches(val, expectedEncoding: null, expectedSpecRef: null, result!);
+        AssertPkiObjectMatches(val, expectedEncoding: null, expectedSpecRef: null, result);
     }
 
 
@@ -359,7 +355,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParsePkiObject(expected, out AdESPkiObject? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertPkiObjectMatches(val, encoding, expectedSpecRef: null, result!);
+        AssertPkiObjectMatches(val, encoding, expectedSpecRef: null, result);
     }
 
 
@@ -383,7 +379,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParsePkiObject(expected, out AdESPkiObject? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertPkiObjectMatches(val, expectedEncoding: null, specRef, result!);
+        AssertPkiObjectMatches(val, expectedEncoding: null, specRef, result);
     }
 
 
@@ -404,7 +400,7 @@ internal sealed class CBAdESSharedSyntaxTests
         bool parsed = CBAdESSerialization.TryParsePkiObject(expected, out AdESPkiObject? result);
         Assert.IsTrue(parsed);
         Assert.IsNotNull(result);
-        AssertPkiObjectMatches(val, encoding, specRef, result!);
+        AssertPkiObjectMatches(val, encoding, specRef, result);
     }
 
 
@@ -555,7 +551,7 @@ internal sealed class CBAdESSharedSyntaxTests
         Assert.IsNotNull(result);
         using(result)
         {
-            AssertTimestampContainerMatches(tokens, result!);
+            AssertTimestampContainerMatches(tokens, result);
         }
     }
 
@@ -581,7 +577,7 @@ internal sealed class CBAdESSharedSyntaxTests
         Assert.IsNotNull(result);
         using(result)
         {
-            AssertTimestampContainerMatches(tokens, result!);
+            AssertTimestampContainerMatches(tokens, result);
         }
     }
 
@@ -614,7 +610,7 @@ internal sealed class CBAdESSharedSyntaxTests
         Assert.IsNotNull(result);
         using(result)
         {
-            AssertTimestampContainerMatches(tokens, result!);
+            AssertTimestampContainerMatches(tokens, result);
         }
     }
 
@@ -643,7 +639,7 @@ internal sealed class CBAdESSharedSyntaxTests
         Assert.IsNotNull(result);
         using(result)
         {
-            AssertTimestampContainerMatches(tokens, result!);
+            AssertTimestampContainerMatches(tokens, result);
         }
     }
 
@@ -677,7 +673,7 @@ internal sealed class CBAdESSharedSyntaxTests
         Assert.IsNotNull(result);
         using(result)
         {
-            AssertTimestampContainerMatches(tokens, result!);
+            AssertTimestampContainerMatches(tokens, result);
         }
     }
 
@@ -931,10 +927,10 @@ internal sealed class CBAdESSharedSyntaxTests
         else
         {
             Assert.IsNotNull(actual.DocRefs);
-            Assert.HasCount(expectedDocRefs.Length, actual.DocRefs!);
+            Assert.HasCount(expectedDocRefs.Length, actual.DocRefs);
             for(int i = 0; i < expectedDocRefs.Length; i++)
             {
-                Assert.AreEqual(expectedDocRefs[i], actual.DocRefs![i], $"docRefs[{i}] must round-trip.");
+                Assert.AreEqual(expectedDocRefs[i], actual.DocRefs[i], $"docRefs[{i}] must round-trip.");
             }
         }
     }

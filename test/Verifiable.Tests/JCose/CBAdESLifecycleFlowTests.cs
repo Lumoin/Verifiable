@@ -1,10 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -108,7 +104,7 @@ internal sealed class CBAdESLifecycleFlowTests
     public async Task LifecycleFlowCreatesBBAugmentsToBTThenBLTAndValidatesAtEachStage()
     {
         byte[] payloadBytes = "CB-AdES flow 7 -- full lifecycle B-B to B-T to B-LT payload"u8.ToArray();
-        (AdESCertificateThumbprint thumbprint, byte[] _) =
+        (AdESCertificateThumbprint thumbprint, _) =
             await CreateSigningCertificateThumbprintAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -158,7 +154,7 @@ internal sealed class CBAdESLifecycleFlowTests
         {
             Assert.IsTrue(btResult.IsValid, "The intermediate B-T signature must validate at level B-T: its sigTst imprint binds the signature value.");
             Assert.HasCount(1, btResult.Verified!.Value.Value.UnsignedHeaders!, "Only the sigTst element has been added at this point.");
-            Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementSignatureTimestamp>(btResult.Verified.Value.Value.UnsignedHeaders![0]);
+            _ = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementSignatureTimestamp>(btResult.Verified.Value.Value.UnsignedHeaders![0]);
         }
 
         byte[] bltWireCopy;

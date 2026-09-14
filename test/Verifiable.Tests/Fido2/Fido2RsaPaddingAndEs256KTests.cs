@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
 using Verifiable.JCose;
@@ -181,7 +180,7 @@ internal sealed class Fido2RsaPaddingAndEs256KTests
         CryptoAlgorithm? resolved = CryptoFormatConversions.CoseAlgorithmToCryptoAlgorithm(coseAlgorithm);
 
         Assert.IsTrue(resolved.HasValue);
-        Assert.AreEqual(expected, resolved!.Value);
+        Assert.AreEqual(expected, resolved.Value);
     }
 
 

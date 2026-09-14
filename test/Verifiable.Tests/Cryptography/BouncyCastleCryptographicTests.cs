@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
@@ -373,7 +373,7 @@ namespace Verifiable.Tests.Cryptography
 
             byte[] tamperedBytes = signature.AsReadOnlyMemory().ToArray();
             tamperedBytes[0] ^= 0xFF;
-            tamperedBytes[tamperedBytes.Length - 1] ^= 0xFF;
+            tamperedBytes[^1] ^= 0xFF;
 
             (bool isValid, CryptoEvent? _) = await verify(data, tamperedBytes, publicKey.AsReadOnlyMemory(),
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

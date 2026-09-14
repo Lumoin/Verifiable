@@ -1,17 +1,11 @@
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -48,7 +42,7 @@ internal sealed class DpopEndToEndTests
         //the JWT) now run against bytes that actually traversed HTTP framing.
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
@@ -85,7 +79,7 @@ internal sealed class DpopEndToEndTests
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(TestSubject);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -100,7 +94,7 @@ internal sealed class DpopEndToEndTests
             $"Expected redirect from authorize. Body: {authorizeResponse.Body}");
         Assert.IsNotNull(authorizeResponse.Location);
 
-        (string code, string? iss) = ParseAuthorizeRedirect(authorizeResponse.Location!);
+        (string code, string? iss) = ParseAuthorizeRedirect(authorizeResponse.Location);
         Assert.IsNotNull(iss, "HAIP-aligned policy must emit iss on redirect.");
 
         //Step 3 — Callback. Client-side: validates iss, persists the
@@ -109,7 +103,7 @@ internal sealed class DpopEndToEndTests
         {
             [OAuthRequestParameterNames.Code] = code,
             [OAuthRequestParameterNames.State] = flowId,
-            [OAuthRequestParameterNames.Iss] = iss!
+            [OAuthRequestParameterNames.Iss] = iss
         };
 
         AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
@@ -133,8 +127,8 @@ internal sealed class DpopEndToEndTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
             $"Expected token issuance success. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
         Assert.IsNotNull(tokenResult.Body);
-        Assert.IsTrue(tokenResult.Body!.TryGetValue(OAuthRequestParameterNames.AccessToken, out object? accessTokenObj));
-        string accessToken = (string)accessTokenObj!;
+        Assert.IsTrue(tokenResult.Body.TryGetValue(OAuthRequestParameterNames.AccessToken, out object? accessTokenObj));
+        string accessToken = (string)accessTokenObj;
         Assert.IsFalse(string.IsNullOrEmpty(accessToken));
 
         //Wire-level assertion: the response body's token_type field carries
@@ -143,7 +137,7 @@ internal sealed class DpopEndToEndTests
         //reading the wire because OAuthResponseParsers passes the JSON
         //field through unchanged.
         Assert.IsTrue(tokenResult.Body.TryGetValue(OAuthRequestParameterNames.TokenType, out object? tokenTypeObj));
-        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenTypeObj!,
+        Assert.AreEqual(WellKnownAuthenticationSchemes.DPoP, (string)tokenTypeObj,
             "DPoP-bound issuance must emit token_type=DPoP per RFC 9449 §5.");
 
         //Wire-level assertion: the access-token JWT itself carries cnf.jkt
@@ -258,7 +252,7 @@ internal sealed class DpopEndToEndTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(TestSubject);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -326,7 +320,7 @@ internal sealed class DpopEndToEndTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration,
@@ -348,7 +342,7 @@ internal sealed class DpopEndToEndTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = parCompleted.Par.RequestUri.ToString()
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(TestSubject);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -426,8 +420,8 @@ internal sealed class DpopEndToEndTests
         Assert.IsTrue(parsed.TryGetValue(OAuthRequestParameterNames.Code, out string? code),
             $"Authorize redirect must carry code. Got: {location}");
 
-        parsed.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
+        _ = parsed.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
 
-        return (code!, iss);
+        return (code, iss);
     }
 }

@@ -1,12 +1,12 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor.Mdoc;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
-using Verifiable.JCose;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.JCose;
 
 namespace Verifiable.Cbor.Sd;
 
@@ -475,7 +475,7 @@ public static class SdCwtVpParsing
 
         if(state == CborReaderState.TextString)
         {
-            reader.ReadTextString();
+            _ = reader.ReadTextString();
         }
         else
         {

@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
@@ -188,7 +187,7 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
         writer.WriteTextString("not-an-integer");
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 
 
@@ -204,7 +203,7 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
         writer.WriteInt32(1);
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 
 
@@ -218,6 +217,6 @@ internal sealed class CtapBioEnrollmentRequestCborReaderTests
         //composes it.
         byte[] duplicateKeyMap = [0xA2, 0x01, 0x01, 0x01, 0x01];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(duplicateKeyMap));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentRequestCborReader.Read(duplicateKeyMap));
     }
 }

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
@@ -77,7 +76,7 @@ internal sealed class PackedCertifiedAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
         var certified = (CertifiedAttestationResult)result;
         Assert.AreEqual(AttestationType.Unknown, certified.Type);
         Assert.HasCount(2, certified.TrustPath);
@@ -363,7 +362,7 @@ internal sealed class PackedCertifiedAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -400,7 +399,7 @@ internal sealed class PackedCertifiedAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -438,7 +437,7 @@ internal sealed class PackedCertifiedAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 

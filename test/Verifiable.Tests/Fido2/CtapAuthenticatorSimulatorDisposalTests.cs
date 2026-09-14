@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
@@ -26,7 +22,7 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     [TestMethod]
     public void DisposeIsIdempotent()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-idempotent",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-idempotent", BaseMemoryPool.Shared);
 
         simulator.Dispose();
         simulator.Dispose();
@@ -37,11 +33,11 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     [TestMethod]
     public async Task TransceiveAsyncAfterDisposeThrowsObjectDisposedException()
     {
-        CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-then-transceive",BaseMemoryPool.Shared);
+        CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-then-transceive", BaseMemoryPool.Shared);
         simulator.Dispose();
 
         byte[] request = [WellKnownCtapCommands.GetInfo];
-        await Assert.ThrowsExactlyAsync<ObjectDisposedException>(
+        _ = await Assert.ThrowsExactlyAsync<ObjectDisposedException>(
             () => simulator.TransceiveAsync(request, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
 
@@ -54,7 +50,7 @@ internal sealed class CtapAuthenticatorSimulatorDisposalTests
     [TestMethod]
     public async Task DisposeReleasesEveryCredentialInTheStore()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-releases-store",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("dispose-releases-store", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x21), TestContext.CancellationToken, resident: true);

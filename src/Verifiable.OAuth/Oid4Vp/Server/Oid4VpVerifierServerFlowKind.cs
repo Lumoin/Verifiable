@@ -1,5 +1,3 @@
-using Verifiable.OAuth.Server;
-
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
 /// <summary>
@@ -57,7 +55,7 @@ public sealed class Oid4VpVerifierServerFlowKind: StatefulFlowKind
 
         var pda = Oid4VpVerifierFlowAutomaton.CreateFromSnapshot(state, stepCount, timeProvider);
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
         return (pda.CurrentState, pda.StepCount);
     }

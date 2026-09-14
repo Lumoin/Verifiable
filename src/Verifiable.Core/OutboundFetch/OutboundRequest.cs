@@ -1,6 +1,4 @@
-using System;
 using Verifiable.Core.Transport;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Core.OutboundFetch;
 

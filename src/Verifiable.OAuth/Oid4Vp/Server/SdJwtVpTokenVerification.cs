@@ -1,14 +1,14 @@
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
-using Verifiable.Cryptography.Pki;
-using Verifiable.JCose;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
+using Verifiable.Cryptography;
+using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.Pki;
+using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 
@@ -283,7 +283,7 @@ public static class SdJwtVpTokenVerification
                 int inputByteCount = Encoding.ASCII.GetByteCount(hashInput);
                 using IMemoryOwner<byte> inputOwner = pool.Rent(inputByteCount);
                 Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
-                Encoding.ASCII.GetBytes(hashInput, inputBytes);
+                _ = Encoding.ASCII.GetBytes(hashInput, inputBytes);
 
                 (DigestValue digest, _) = await computeDigest(
                     new ReadOnlySequence<byte>(inputOwner.Memory[..inputByteCount]),

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using CsCheck;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -533,6 +531,7 @@ internal sealed class PreservationAugmentationDecisionTests
         PreservationAugmentationDecisionKind.Sound => 0,
         PreservationAugmentationDecisionKind.Undecidable => 1,
         PreservationAugmentationDecisionKind.AugmentNow => 2,
+        PreservationAugmentationDecisionKind.NotEvaluated => 3,
         _ => 3
     };
 }

@@ -1,9 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -144,7 +139,7 @@ public static class BlankNodeRelabeling
             int messageByteCount = System.Text.Encoding.UTF8.GetByteCount(blankNodeId);
             using(IMemoryOwner<byte> messageOwner = pool.Rent(messageByteCount))
             {
-                System.Text.Encoding.UTF8.GetBytes(blankNodeId, messageOwner.Memory.Span);
+                _ = System.Text.Encoding.UTF8.GetBytes(blankNodeId, messageOwner.Memory.Span);
                 ReadOnlyMemory<byte> messageMemory = messageOwner.Memory[..messageByteCount];
 
                 (HmacValue hmac, _) = await hmacCompute(
@@ -165,7 +160,7 @@ public static class BlankNodeRelabeling
             string hmacFullId = "_:" + hmacId;
 
             //Record the mapping if requested. Keys stored in bare format per VC DI ECDSA §3.5.5.
-            labelMap?.TryAdd(canonicalId, hmacId);
+            _ = (labelMap?.TryAdd(canonicalId, hmacId));
 
             //Replace in result.
             result = string.Concat(result.AsSpan(0, index), hmacFullId, result.AsSpan(endIndex));
@@ -239,8 +234,8 @@ public static class BlankNodeRelabeling
     {
         ArgumentNullException.ThrowIfNull(nquads);
 
-        List<string> statements = new();
-        Dictionary<string, string> labelMap = new();
+        List<string> statements = [];
+        Dictionary<string, string> labelMap = [];
 
         foreach(string nquad in nquads)
         {

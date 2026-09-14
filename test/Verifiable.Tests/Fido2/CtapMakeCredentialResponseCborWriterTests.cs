@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -138,7 +137,7 @@ internal sealed class CtapMakeCredentialResponseCborWriterTests
     [TestMethod]
     public void ThrowsArgumentNullExceptionForNullResponse()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CtapMakeCredentialResponseCborWriter.Write(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CtapMakeCredentialResponseCborWriter.Write(null!));
     }
 
 
@@ -148,6 +147,6 @@ internal sealed class CtapMakeCredentialResponseCborWriterTests
     {
         var response = new CtapMakeCredentialResponse(null!, AuthDataBytes);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => CtapMakeCredentialResponseCborWriter.Write(response));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CtapMakeCredentialResponseCborWriter.Write(response));
     }
 }

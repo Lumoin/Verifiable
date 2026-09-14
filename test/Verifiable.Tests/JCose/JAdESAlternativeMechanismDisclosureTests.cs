@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 
@@ -56,7 +52,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullUniqueIdentifierThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure(null!, "ref", "protection", "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure(null!, "ref", "protection", "coexistence"));
     }
 
 
@@ -64,7 +60,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithWhiteSpaceUniqueIdentifierThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => _ = new JAdESAlternativeMechanismDisclosure("   ", "ref", "protection", "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => _ = new JAdESAlternativeMechanismDisclosure("   ", "ref", "protection", "coexistence"));
     }
 
 
@@ -72,7 +68,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullSemanticsAndSyntaxReferenceThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure("id", null!, "protection", "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure("id", null!, "protection", "coexistence"));
     }
 
 
@@ -80,7 +76,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullProtectionStrategyThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure("id", "ref", null!, "coexistence"));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure("id", "ref", null!, "coexistence"));
     }
 
 
@@ -88,7 +84,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
     [TestMethod]
     public void ConstructingAlternativeMechanismDisclosureWithNullCoexistenceStrategyThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure("id", "ref", "protection", null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new JAdESAlternativeMechanismDisclosure("id", "ref", "protection", null!));
     }
 
 
@@ -99,8 +95,8 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
         var registry = new JAdESAlternativeMechanismDisclosureRegistry();
         JAdESAlternativeMechanismDisclosure disclosure = MakeDisclosure();
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register(null!, disclosure));
-        Assert.ThrowsExactly<ArgumentException>(() => registry.Register(string.Empty, disclosure));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register(null!, disclosure));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => registry.Register(string.Empty, disclosure));
     }
 
 
@@ -110,7 +106,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
     {
         var registry = new JAdESAlternativeMechanismDisclosureRegistry();
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register("customMechanism", null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => registry.Register("customMechanism", null!));
     }
 
 
@@ -142,7 +138,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
         var registry = new JAdESAlternativeMechanismDisclosureRegistry();
         JAdESAlternativeMechanismDisclosure disclosure = MakeDisclosure();
 
-        Assert.ThrowsExactly<ArgumentException>(() => registry.Register(profiledKind, disclosure));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => registry.Register(profiledKind, disclosure));
     }
 
 
@@ -153,7 +149,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
         var registry = new JAdESAlternativeMechanismDisclosureRegistry();
         registry.Register("customMechanism", MakeDisclosure());
 
-        Assert.ThrowsExactly<ArgumentException>(() => registry.Register("customMechanism", MakeDisclosure()));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => registry.Register("customMechanism", MakeDisclosure()));
     }
 
 
@@ -193,7 +189,7 @@ internal sealed class JAdESAlternativeMechanismDisclosureTests
         Assert.IsNotNull(result);
         using(result)
         {
-            JAdESUnsignedHeaders unsignedHeaders = result!;
+            JAdESUnsignedHeaders unsignedHeaders = result;
             Assert.HasCount(1, unsignedHeaders);
             Assert.IsTrue(unsignedHeaders[0] is JAdESUnsignedHeaderElementUnknown, "The catch-all arm must round-trip the unrecognized kind, not drop it.");
 

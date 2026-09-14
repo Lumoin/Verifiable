@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;

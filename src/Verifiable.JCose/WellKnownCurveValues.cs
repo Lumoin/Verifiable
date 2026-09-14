@@ -246,20 +246,20 @@ namespace Verifiable.JCose
         /// <returns>The equivalent static instance of <paramref name="property"/>, or the original instance if none match.</returns>
         public static string GetCanonicalizedValue(string crv) => crv switch
         {
-            string _ when IsEd25519(crv) => Ed25519,
-            string _ when IsEd448(crv) => Ed448,
-            string _ when IsP256(crv) => P256,
-            string _ when IsP384(crv) => P384,
-            string _ when IsP521(crv) => P521,
-            string _ when IsSecp256k1(crv) => Secp256k1,
-            string _ when IsX25519(crv) => X25519,
-            string _ when IsX448(crv) => X448,
-            string _ when IsBrainpoolP224r1(crv) => BrainpoolP224r1,
-            string _ when IsBrainpoolP256r1(crv) => BrainpoolP256r1,
-            string _ when IsBrainpoolP320r1(crv) => BrainpoolP320r1,
-            string _ when IsBrainpoolP384r1(crv) => BrainpoolP384r1,
-            string _ when IsBrainpoolP512r1(crv) => BrainpoolP512r1,
-            string _ => crv
+            string when IsEd25519(crv) => Ed25519,
+            string when IsEd448(crv) => Ed448,
+            string when IsP256(crv) => P256,
+            string when IsP384(crv) => P384,
+            string when IsP521(crv) => P521,
+            string when IsSecp256k1(crv) => Secp256k1,
+            string when IsX25519(crv) => X25519,
+            string when IsX448(crv) => X448,
+            string when IsBrainpoolP224r1(crv) => BrainpoolP224r1,
+            string when IsBrainpoolP256r1(crv) => BrainpoolP256r1,
+            string when IsBrainpoolP320r1(crv) => BrainpoolP320r1,
+            string when IsBrainpoolP384r1(crv) => BrainpoolP384r1,
+            string when IsBrainpoolP512r1(crv) => BrainpoolP512r1,
+            string => crv
         };
 
 

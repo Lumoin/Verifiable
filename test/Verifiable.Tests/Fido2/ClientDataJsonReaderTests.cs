@@ -117,7 +117,7 @@ internal sealed class ClientDataJsonReaderTests
     {
         const string json = """{"type":42,"challenge":"c","origin":"o"}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -127,7 +127,7 @@ internal sealed class ClientDataJsonReaderTests
     {
         const string json = """{"type":"webauthn.get","challenge":"c","origin":"o","crossOrigin":"true"}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -137,7 +137,7 @@ internal sealed class ClientDataJsonReaderTests
     {
         const string json = """{"type":"webauthn.get","type":"webauthn.create","challenge":"c","origin":"o"}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -147,7 +147,7 @@ internal sealed class ClientDataJsonReaderTests
     {
         const string json = """[1,2,3]""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -157,7 +157,7 @@ internal sealed class ClientDataJsonReaderTests
     {
         const string json = "{not json";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -167,6 +167,6 @@ internal sealed class ClientDataJsonReaderTests
     {
         const string json = """{"type":"webauthn.get","challenge":"c","origin":"o"} garbage""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 }

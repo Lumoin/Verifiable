@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
-using Verifiable.Foundation;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -228,7 +223,7 @@ internal sealed class WebPlusDidResolverResolvingTests
             static jsonUtf8 => null,
             additionalMethods: [(WellKnownDidMethodPrefixes.WebPlusDidMethodPrefix, webPlus)]);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         DidResolutionResult result = await composed.ResolveAsync(WebPlusWorkedExamples.Example1Did, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

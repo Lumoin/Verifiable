@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
@@ -290,7 +289,7 @@ internal static class CardVerifiableCertificateMinter
             IMemoryOwner<byte> rsaOwner = pool.Rent(rsa.KeySize / 8);
             try
             {
-                rsa.TrySignData(body, rsaOwner.Memory.Span, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, out length);
+                _ = rsa.TrySignData(body, rsaOwner.Memory.Span, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1, out length);
 
                 return rsaOwner;
             }
@@ -424,8 +423,8 @@ internal static class CardVerifiableCertificateMinter
             writer.WriteObjectIdentifier(IdTaRsaPkcs1Sha256Oid);
 
             RSAParameters parameters = subjectKey.ExportParameters(includePrivateParameters: false);
-            writer.WriteOctetString(parameters.Modulus!, new Asn1Tag(TagClass.ContextSpecific, 1));   // modulus
-            writer.WriteOctetString(parameters.Exponent!, new Asn1Tag(TagClass.ContextSpecific, 2));  // public exponent
+            writer.WriteOctetString(parameters.Modulus, new Asn1Tag(TagClass.ContextSpecific, 1));   // modulus
+            writer.WriteOctetString(parameters.Exponent, new Asn1Tag(TagClass.ContextSpecific, 2));  // public exponent
         }
     }
 
@@ -438,8 +437,8 @@ internal static class CardVerifiableCertificateMinter
         ECParameters parameters = key.ExportParameters(includePrivateParameters: false);
         Span<byte> point = stackalloc byte[1 + (2 * CoordinateLength)];
         point[0] = 0x04;
-        parameters.Q.X!.CopyTo(point.Slice(1, CoordinateLength));
-        parameters.Q.Y!.CopyTo(point.Slice(1 + CoordinateLength, CoordinateLength));
+        parameters.Q.X.CopyTo(point.Slice(1, CoordinateLength));
+        parameters.Q.Y.CopyTo(point.Slice(1 + CoordinateLength, CoordinateLength));
 
         writer.WriteOctetString(point, PublicPointTag);
     }
@@ -461,6 +460,8 @@ internal static class CardVerifiableCertificateMinter
                     writer.WriteObjectIdentifier(IdInspectionSystemOid);
                     writer.WriteOctetString([authorizationOctet], DiscretionaryDataTag);
                     break;
+                case TerminalType.AuthenticationTerminal:
+                case TerminalType.SignatureTerminal:
                 default:
                     writer.WriteObjectIdentifier(IdAuthenticationTerminalOid);
                     writer.WriteOctetString([authorizationOctet, 0x00, 0x00, 0x00, 0x00], DiscretionaryDataTag);
@@ -493,7 +494,7 @@ internal static class CardVerifiableCertificateMinter
     private static void WriteAscii(AsnWriter writer, string value, Asn1Tag tag)
     {
         Span<byte> bytes = stackalloc byte[Encoding.ASCII.GetByteCount(value)];
-        Encoding.ASCII.GetBytes(value, bytes);
+        _ = Encoding.ASCII.GetBytes(value, bytes);
 
         writer.WriteOctetString(bytes, tag);
     }

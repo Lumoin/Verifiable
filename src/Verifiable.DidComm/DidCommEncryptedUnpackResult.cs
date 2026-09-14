@@ -1,4 +1,3 @@
-using Verifiable.Core;
 using Verifiable.Cryptography;
 
 namespace Verifiable.DidComm;

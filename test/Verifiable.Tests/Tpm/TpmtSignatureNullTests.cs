@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;

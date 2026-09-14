@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography.Pki.Xml;
@@ -40,7 +39,7 @@ public sealed class TrustedListXmlParseException: Exception
     /// Initializes a new instance with a message describing what the parser could not find or make sense of.
     /// </summary>
     /// <param name="message">A message describing the parse failure.</param>
-    public TrustedListXmlParseException(string message): base(message)
+    public TrustedListXmlParseException(string message) : base(message)
     {
     }
 
@@ -50,7 +49,7 @@ public sealed class TrustedListXmlParseException: Exception
     /// </summary>
     /// <param name="message">A message describing the parse failure.</param>
     /// <param name="status">The status this failure maps to.</param>
-    public TrustedListXmlParseException(string message, TrustedListParseStatus status): base(message)
+    public TrustedListXmlParseException(string message, TrustedListParseStatus status) : base(message)
     {
         Status = status;
     }
@@ -61,7 +60,7 @@ public sealed class TrustedListXmlParseException: Exception
     /// </summary>
     /// <param name="message">A message describing the parse failure.</param>
     /// <param name="innerException">The underlying XML or format failure, if any.</param>
-    public TrustedListXmlParseException(string message, Exception innerException): base(message, innerException)
+    public TrustedListXmlParseException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

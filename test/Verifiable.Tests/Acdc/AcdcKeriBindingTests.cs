@@ -1,12 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -377,7 +372,7 @@ internal sealed class AcdcKeriBindingTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return new MintedEvent(owner, length, said);
     }
@@ -418,7 +413,7 @@ internal sealed class AcdcKeriBindingTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return await CesrSaid.ComputeAsync(owner.Memory[..length], Code, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, CancellationToken.None).ConfigureAwait(false);
     }

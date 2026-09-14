@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Ctap;
@@ -121,10 +116,10 @@ internal sealed class CtapAuthenticatorGetInfoFlowTests
         Assert.AreEqual(expectedAaguid, response.Aaguid);
         Assert.AreSequenceEqual(new[] { WellKnownCtapVersions.Fido23 }, new List<string>(response.Versions));
         Assert.IsNotNull(response.Extensions);
-        Assert.HasCount(supportedExtensions.Count, response.Extensions!);
-        Assert.AreSequenceEqual(supportedExtensions, new List<string>(response.Extensions!));
+        Assert.HasCount(supportedExtensions.Count, response.Extensions);
+        Assert.AreSequenceEqual(supportedExtensions, new List<string>(response.Extensions));
         Assert.IsNotNull(response.Options);
-        Assert.IsTrue(response.Options!.ResidentKey);
+        Assert.IsTrue(response.Options.ResidentKey);
 
         //Over the real wire: maxCredentialCountInList (0x07) is always present and matches
         //the same fixed capacity mc/ga's own excludeList/allowList bound check enforces; algorithms

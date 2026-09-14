@@ -1,33 +1,28 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.OAuth;
-using Verifiable.OAuth.Server;
-using Verifiable.Vcalm;
 using Verifiable.Tests.DataIntegrity;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
-using Verifiable.Server;
+using Verifiable.Vcalm;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -96,7 +91,7 @@ internal sealed class VcalmVerifierEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     //Registered key material lives for the test's lifetime and is disposed at cleanup; the host
     //keeps the registration, so the material cannot be disposed at the end of RegisterVerifier.
@@ -234,7 +229,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             new RequestFields(),
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //An uncaught exception during verification would surface as a 500 — that is the §3.8
@@ -273,16 +268,16 @@ internal sealed class VcalmVerifierEndpointTests
 
         switch(mutation)
         {
-            case "delete:@context": credential.Remove("@context"); break;
-            case "delete:type": credential.Remove("type"); break;
-            case "delete:issuer": credential.Remove("issuer"); break;
-            case "delete:credentialSubject": credential.Remove("credentialSubject"); break;
-            case "delete:proof": credential.Remove("proof"); break;
-            case "delete:proof.type": FirstProof(credential).Remove("type"); break;
-            case "delete:proof.created": FirstProof(credential).Remove("created"); break;
-            case "delete:proof.verificationMethod": FirstProof(credential).Remove("verificationMethod"); break;
-            case "delete:proof.proofValue": FirstProof(credential).Remove("proofValue"); break;
-            case "delete:proof.proofPurpose": FirstProof(credential).Remove("proofPurpose"); break;
+            case "delete:@context": _ = credential.Remove("@context"); break;
+            case "delete:type": _ = credential.Remove("type"); break;
+            case "delete:issuer": _ = credential.Remove("issuer"); break;
+            case "delete:credentialSubject": _ = credential.Remove("credentialSubject"); break;
+            case "delete:proof": _ = credential.Remove("proof"); break;
+            case "delete:proof.type": _ = FirstProof(credential).Remove("type"); break;
+            case "delete:proof.created": _ = FirstProof(credential).Remove("created"); break;
+            case "delete:proof.verificationMethod": _ = FirstProof(credential).Remove("verificationMethod"); break;
+            case "delete:proof.proofValue": _ = FirstProof(credential).Remove("proofValue"); break;
+            case "delete:proof.proofPurpose": _ = FirstProof(credential).Remove("proofPurpose"); break;
             case "set:@context=4": credential["@context"] = 4; break;
             case "setArray:@context=4": credential["@context"] = new System.Text.Json.Nodes.JsonArray(4); break;
             case "set:type=\"VerifiableCredential\"": credential["type"] = "VerifiableCredential"; break;
@@ -345,7 +340,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             new RequestFields(),
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(response.StatusCode is 200 or 400,
@@ -377,13 +372,13 @@ internal sealed class VcalmVerifierEndpointTests
 
         switch(mutation)
         {
-            case "delete:@context": presentation.Remove("@context"); break;
+            case "delete:@context": _ = presentation.Remove("@context"); break;
             case "set:@context=4": presentation["@context"] = 4; break;
             case "setArray:@context=4": presentation["@context"] = new System.Text.Json.Nodes.JsonArray(4); break;
-            case "delete:type": presentation.Remove("type"); break;
+            case "delete:type": _ = presentation.Remove("type"); break;
             case "set:type=\"VerifiablePresentation\"": presentation["type"] = "VerifiablePresentation"; break;
-            case "delete:proof": presentation.Remove("proof"); break;
-            case "delete:proof.proofValue": FirstProof(presentation).Remove("proofValue"); break;
+            case "delete:proof": _ = presentation.Remove("proof"); break;
+            case "delete:proof.proofValue": _ = FirstProof(presentation).Remove("proofValue"); break;
             case "set:proof.created=4": FirstProof(presentation)["created"] = 4; break;
             case "set:proof=\"not-an-object\"": presentation["proof"] = "not-an-object"; break;
             case "set:holder=4": presentation["holder"] = 4; break;
@@ -599,7 +594,7 @@ internal sealed class VcalmVerifierEndpointTests
         JsonElement proofResults = results.GetProperty(VcalmParameterNames.Proof);
         Assert.AreEqual(1, proofResults.GetArrayLength(), "One proof → one proof result.");
         Assert.IsTrue(proofResults[0].GetProperty(VcalmParameterNames.Verified).GetBoolean());
-        Assert.StartsWith("did:key:", proofResults[0].GetProperty(VcalmParameterNames.Input).GetString()!,
+        Assert.StartsWith("did:key:", proofResults[0].GetProperty(VcalmParameterNames.Input).GetString(),
             "The proof result input is the verificationMethod.");
 
         JsonElement validFrom = results.GetProperty(VcalmParameterNames.ValidFrom);
@@ -836,7 +831,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             bytes,
             "text/plain",
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
@@ -861,7 +856,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             bytes,
             WellKnownMediaTypes.Application.Json,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(413, response.StatusCode,
@@ -887,7 +882,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             bytes,
             WellKnownMediaTypes.Application.Json,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(413, response.StatusCode,
@@ -1063,7 +1058,7 @@ internal sealed class VcalmVerifierEndpointTests
             canonicalizer: JcsCanonicalizer,
             persistChallenge: (challenge, _, _) =>
             {
-                issuedChallenges.Add(challenge);
+                _ = issuedChallenges.Add(challenge);
 
                 return ValueTask.CompletedTask;
             },
@@ -1077,7 +1072,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             ReadOnlyMemory<byte>.Empty,
             contentType: string.Empty,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, challengeResponse.StatusCode, challengeResponse.Body);
@@ -1227,7 +1222,7 @@ internal sealed class VcalmVerifierEndpointTests
         VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, VerifierCapabilities);
         RegisteredMaterials.Add(material);
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
         app.Server.Vcalm().VcalmCredentialVerification = new VcalmCredentialVerification
         {
             Resolver = KeyDidResolverSeam,
@@ -1659,18 +1654,18 @@ internal sealed class VcalmVerifierEndpointTests
         bool first = true;
         if(returnProblemDetails)
         {
-            options.Append("\"returnProblemDetails\":true");
+            _ = options.Append("\"returnProblemDetails\":true");
             first = false;
         }
 
         if(returnResults)
         {
-            if(!first) { options.Append(','); }
+            if(!first) { _ = options.Append(','); }
 
-            options.Append("\"returnResults\":true");
+            _ = options.Append("\"returnResults\":true");
         }
 
-        options.Append('}');
+        _ = options.Append('}');
 
         return "{\"verifiableCredential\":" + credentialJson + ",\"options\":" + options + "}";
     }
@@ -1695,7 +1690,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             new RequestFields(),
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);
@@ -1713,7 +1708,7 @@ internal sealed class VcalmVerifierEndpointTests
             "POST",
             new RequestFields(),
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);

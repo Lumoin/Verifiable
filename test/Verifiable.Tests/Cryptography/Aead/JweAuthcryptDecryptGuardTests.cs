@@ -4,7 +4,6 @@ using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -200,7 +199,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
         using PrivateKeyMemory bobPrivate = X25519PrivateKey(AppendixBBobD);
         using PublicKeyMemory aliceStaticPublic = X25519PublicKey(AppendixBAliceStaticX);
 
-        await Assert.ThrowsExactlyAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(async () =>
             await message.DecryptAuthcryptAsync(
                 "bob-key-2",
                 bobPrivate,
@@ -233,7 +232,7 @@ internal sealed class JweAuthcryptDecryptGuardTests
             }
         };
 
-        ReadOnlySpan<byte> headerJson = JwtHeaderSerializer(new JwtHeader(protectedHeader));
+        ReadOnlySpan<byte> headerJson = JwtHeaderSerializer(new(protectedHeader));
         string protectedEncoded = TestSetup.Base64UrlEncoder(headerJson);
 
         return /*lang=json,strict*/ "{\"protected\":\"" + protectedEncoded + "\","

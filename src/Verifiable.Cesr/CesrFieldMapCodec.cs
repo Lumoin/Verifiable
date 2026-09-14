@@ -1,7 +1,6 @@
 using Lumoin.Base;
 using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Verifiable.Cesr.Text;
@@ -229,7 +228,7 @@ public static class CesrFieldMapCodec
             FieldMapFrame frame = stack.Peek();
             if(offset >= frame.End)
             {
-                stack.Pop();
+                _ = stack.Pop();
                 if(stack.Count == 0)
                 {
                     break;
@@ -375,7 +374,7 @@ public static class CesrFieldMapCodec
             {
                 if(label is not null)
                 {
-                    frame.Body.Append(EncodeLabel(label));
+                    _ = frame.Body.Append(EncodeLabel(label));
                 }
 
                 EncodeFrame? child = value switch
@@ -393,7 +392,7 @@ public static class CesrFieldMapCodec
                 continue;
             }
 
-            stack.Pop();
+            _ = stack.Pop();
             string wrapped = WrapGroup(frame);
             if(stack.Count == 0)
             {
@@ -401,7 +400,7 @@ public static class CesrFieldMapCodec
             }
             else
             {
-                stack.Peek().Body.Append(wrapped);
+                _ = stack.Peek().Body.Append(wrapped);
             }
         }
 
@@ -412,7 +411,7 @@ public static class CesrFieldMapCodec
     //Appends a scalar value's encoding to a group body and yields no child frame (scalars do not open a group).
     private static EncodeFrame? AppendScalar(StringBuilder body, object? value, BaseMemoryPool pool)
     {
-        body.Append(EncodeScalarValue(value, pool));
+        _ = body.Append(EncodeScalarValue(value, pool));
 
         return null;
     }
@@ -483,7 +482,7 @@ public static class CesrFieldMapCodec
         translated.CopyTo(padded[pad..]);
 
         Span<byte> decoded = stackalloc byte[Base64Url.GetMaxDecodedLength(padded.Length)];
-        Base64Url.DecodeFromChars(padded, decoded, out _, out int decodedLength);
+        _ = Base64Url.DecodeFromChars(padded, decoded, out _, out int decodedLength);
         ReadOnlySpan<byte> raw = decoded[leadSize..decodedLength];
 
         return CesrPrimitiveCodec.EncodeText(DecimalCodeForLead(leadSize), raw);
@@ -636,7 +635,7 @@ public static class CesrFieldMapCodec
         //int addition would overflow to a value that slips past the length guard below (silently accepting a group
         //that claims a multi-gigabyte body while supplying none). The guard then bounds it to the input, so the
         //narrowing to int is safe.
-        long declaredEnd = (long)bodyStart + frame.TextCharCount;
+        long declaredEnd = bodyStart + frame.TextCharCount;
         if(qb64.Length < declaredEnd)
         {
             throw new CesrFormatException($"The CESR-native map group declares {frame.TextCharCount} body characters but fewer are present.");
@@ -644,7 +643,7 @@ public static class CesrFieldMapCodec
 
         end = (int)declaredEnd;
 
-        return new MessageFieldMap(StringComparer.Ordinal);
+        return new(StringComparer.Ordinal);
     }
 
 
@@ -713,7 +712,7 @@ public static class CesrFieldMapCodec
     private static string DecodeEscapedValue(ReadOnlySpan<char> qb64, BaseMemoryPool pool, ref int consumedChars)
     {
         using CesrParsedPrimitive escaped = CesrPrimitiveCodec.DecodeText(qb64[consumedChars..], pool, out int escapedChars);
-        string verbatim = new string(qb64.Slice(consumedChars, escapedChars));
+        string verbatim = new(qb64.Slice(consumedChars, escapedChars));
         consumedChars += escapedChars;
 
         return verbatim;

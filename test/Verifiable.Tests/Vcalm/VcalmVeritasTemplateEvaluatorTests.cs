@@ -1,6 +1,6 @@
 using Lumoin.Veritas.Jsonata;
-using System.Collections.Generic;
-using Verifiable.JsonPointer.Jsonata;
+using System.Text;
+using System.Text.Json;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Vcalm;
 
@@ -8,201 +8,213 @@ namespace Verifiable.Tests.Vcalm;
 
 /// <summary>
 /// The Lumoin.Veritas JSONata engine registered on the W3C VCALM 1.0 §3.6.1 credential-template
-/// seam: parity with the built-in evaluator on the Appendix D template shape, the <c>$name</c>
-/// variable convention carried by the engine's caller bindings, the JSONata reference semantics
-/// for null and undefined, the integer round-trip through the one JSONata number type, and the
-/// engine's bounds.
+/// seam, evaluating through the byte-typed <see cref="VcalmTemplateEvaluator"/>: the Appendix D
+/// template shape, the <c>$name</c> variable convention carried by the engine's caller bindings, the
+/// JSONata reference semantics for null and undefined, the integer round-trip through the one
+/// JSONata number type, and the engine's own bounds.
+/// See <see href="https://www.w3.org/TR/vcalm-1.0/">VCALM 1.0 §3.6.1</see>.
 /// </summary>
 [TestClass]
 internal sealed class VcalmVeritasTemplateEvaluatorTests
 {
-    //Builds an input object value from a set of members, preserving order.
-    private static JsonataValue Variables(params (string Key, JsonataValue Value)[] members)
-    {
-        var map = new Dictionary<string, JsonataValue>(StringComparer.Ordinal);
-        foreach((string key, JsonataValue value) in members)
-        {
-            map[key] = value;
-        }
-
-        return JsonataValue.FromObject(map);
-    }
+    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
 
+    /// <summary>Builds a §3.6.1 <c>jsonata</c> credential template carrying <paramref name="template"/> as its source.</summary>
+    /// <param name="template">The template's JSONata source text.</param>
+    /// <returns>The <c>jsonata</c>-typed credential template.</returns>
     private static VcalmCredentialTemplate JsonataTemplate(string template) => new()
     {
         TemplateType = VcalmTemplateEvaluatorRegistry.JsonataTemplateType,
         Template = template
     };
 
-    //Structural equality over the neutral value model (its own equality is by instance for
-    //containers): same kind, and for containers the same members with deep-equal values.
-    private static bool DeepEquals(JsonataValue left, JsonataValue right)
-    {
-        if(left.Kind != right.Kind)
-        {
-            return false;
-        }
 
-        return left.Kind switch
-        {
-            JsonataValueKind.Object => left.AsObject().Count == right.AsObject().Count
-                && left.AsObject().All(member => right.AsObject().TryGetValue(member.Key, out JsonataValue other) && DeepEquals(member.Value, other)),
-            JsonataValueKind.Array => left.AsArray().Count == right.AsArray().Count
-                && left.AsArray().Zip(right.AsArray()).All(pair => DeepEquals(pair.First, pair.Second)),
-            _ => left.Equals(right)
-        };
+    /// <summary>
+    /// Renders a template through the Veritas-wired registry and hands back the rendered credential
+    /// body as a parsed document; the pooled result buffer is decoded to a string (and disposed)
+    /// before parsing, so the document owns independent memory.
+    /// </summary>
+    /// <param name="registry">The Veritas-wired registry to evaluate through.</param>
+    /// <param name="template">The credential template to evaluate.</param>
+    /// <param name="variablesJson">The exchange variables, as UTF-8 JSON text.</param>
+    /// <returns>The rendered credential body, parsed for assertion.</returns>
+    private static JsonDocument Render(
+        VcalmTemplateEvaluatorRegistry registry, VcalmCredentialTemplate template, string variablesJson)
+    {
+        VcalmTemplateEvaluationResult result = registry.Evaluate(
+            template, Encoding.UTF8.GetBytes(variablesJson), Pool, CancellationToken.None);
+        Assert.IsTrue(result.IsSuccess, result.FailureDetail);
+        using PooledMemory? rendered = result.Rendered;
+        Assert.IsNotNull(rendered);
+
+        return JsonDocument.Parse(Encoding.UTF8.GetString(rendered.AsReadOnlySpan()));
     }
 
 
-
     /// <summary>
-    /// The VCALM Appendix D Example 27 template shape evaluates to the same credential body through
-    /// the Veritas engine as through the built-in evaluator, so registering the engine supersedes
-    /// the built-in one without changing the seam's output.
-    /// See <see href="https://www.w3.org/TR/vcalm-1.0/">VCALM 1.0 §3.6.1</see>.
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#example-minimal-credential-template">VCALM 1.0
+    /// Appendix D.1 Example 29 (Minimal Credential Template)</see> shape: the §3.6.1 <c>template</c>
+    /// body maps the <c>name</c> variable into the credential body.
     /// </summary>
     [TestMethod]
-    public void VeritasEngineMatchesBuiltInOnAppendixDTemplate()
+    public void VeritasEngineRendersAppendixDTemplate()
     {
         var template = JsonataTemplate(
             "{\"@context\": [\"https://www.w3.org/ns/credentials/v2\"]," +
             "\"type\": [\"VerifiableCredential\",\"ExampleNameCredential\"]," +
             "\"credentialSubject\": {\"name\": name}}");
-        JsonataValue variables = Variables(("name", JsonataValue.FromString("Example Name")));
 
-        JsonataValue builtIn = new VcalmTemplateEvaluatorRegistry().Evaluate(template, variables);
-        JsonataValue veritas = JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables);
+        using JsonDocument body = Render(
+            JsonataTestUtilities.CreateVeritasTemplateRegistry(), template, "{\"name\":\"Example Name\"}");
 
-        Assert.IsTrue(DeepEquals(builtIn, veritas), "The two engines must produce the same credential body.");
-        Assert.AreEqual("Example Name", veritas.AsObject()["credentialSubject"].AsObject()["name"].AsString());
+        JsonElement root = body.RootElement;
+        Assert.AreEqual("https://www.w3.org/ns/credentials/v2", root.GetProperty("@context")[0].GetString());
+        Assert.AreEqual("VerifiableCredential", root.GetProperty("type")[0].GetString());
+        Assert.AreEqual("Example Name", root.GetProperty("credentialSubject").GetProperty("name").GetString());
     }
 
 
     /// <summary>
-    /// The VCALM <c>$name</c> variable convention resolves through the engine's caller bindings
-    /// (each top-level exchange variable bound under its bare name), and the bare-path form
-    /// resolves through the input document — both spellings reach the same variable.
+    /// The <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see>
+    /// <c>$name</c> variable convention resolves through the engine's caller bindings (each top-level
+    /// exchange variable bound under its bare name), and the bare-path form resolves through the
+    /// input document — both spellings reach the same variable.
     /// </summary>
     [TestMethod]
     public void VariablesResolveAsBindingsAndAsInputPaths()
     {
-        var registry = JsonataTestUtilities.CreateVeritasTemplateRegistry();
-        JsonataValue variables = Variables(("name", JsonataValue.FromString("Example Name")));
+        VcalmTemplateEvaluatorRegistry registry = JsonataTestUtilities.CreateVeritasTemplateRegistry();
+        const string variables = "{\"name\":\"Example Name\"}";
 
-        JsonataValue bound = registry.Evaluate(JsonataTemplate("{ \"name\": $name }"), variables);
-        JsonataValue pathed = registry.Evaluate(JsonataTemplate("{ \"name\": name }"), variables);
+        using JsonDocument bound = Render(registry, JsonataTemplate("{ \"name\": $name }"), variables);
+        using JsonDocument pathed = Render(registry, JsonataTemplate("{ \"name\": name }"), variables);
 
-        Assert.AreEqual("Example Name", bound.AsObject()["name"].AsString(), "$name resolves through the bindings.");
-        Assert.AreEqual("Example Name", pathed.AsObject()["name"].AsString(), "The bare path resolves through the input.");
+        Assert.AreEqual("Example Name", bound.RootElement.GetProperty("name").GetString(), "$name resolves through the bindings.");
+        Assert.AreEqual("Example Name", pathed.RootElement.GetProperty("name").GetString(), "The bare path resolves through the input.");
     }
 
 
     /// <summary>
-    /// The Veritas engine evaluates the JSONata surface beyond the built-in evaluator's subset —
-    /// a function call — which is the point of superseding it.
+    /// The Veritas engine evaluates the full JSONata surface, including function calls, over a
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see> credential
+    /// template — the point of wiring a real engine behind the seam instead of a minimal substitute.
     /// </summary>
     [TestMethod]
-    public void VeritasEngineEvaluatesFunctionCallsTheBuiltInCannot()
+    public void VeritasEngineEvaluatesFunctionCalls()
     {
-        var template = JsonataTemplate("{ \"shout\": $uppercase($name) }");
-        JsonataValue variables = Variables(("name", JsonataValue.FromString("example")));
+        using JsonDocument body = Render(
+            JsonataTestUtilities.CreateVeritasTemplateRegistry(),
+            JsonataTemplate("{ \"shout\": $uppercase($name) }"),
+            "{\"name\":\"example\"}");
 
-        JsonataValue body = JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables);
-
-        Assert.AreEqual("EXAMPLE", body.AsObject()["shout"].AsString());
-        Assert.Throws<Verifiable.JsonPointer.Jsonata.JsonataUnsupportedFeatureException>(() => new VcalmTemplateEvaluatorRegistry().Evaluate(template, variables),
-            "The built-in evaluator declares function calls unsupported.");
+        Assert.AreEqual("EXAMPLE", body.RootElement.GetProperty("shout").GetString());
     }
 
 
     /// <summary>
     /// JSON <c>null</c> is a value: an explicitly null exchange variable survives into the
-    /// constructed credential body as a null member, per the JSONata reference semantics the
-    /// engine implements. See <see href="https://docs.jsonata.org/processing">JSONata processing</see>.
+    /// constructed credential body as a null member, per the JSONata reference semantics the engine
+    /// implements. See <see href="https://docs.jsonata.org/processing">JSONata processing</see>.
     /// </summary>
     [TestMethod]
     public void ExplicitNullVariableSurvivesAsNullMember()
     {
-        var template = JsonataTemplate("{ \"middleName\": $middleName, \"name\": $name }");
-        JsonataValue variables = Variables(("middleName", JsonataValue.Null), ("name", JsonataValue.FromString("Example")));
+        using JsonDocument body = Render(
+            JsonataTestUtilities.CreateVeritasTemplateRegistry(),
+            JsonataTemplate("{ \"middleName\": $middleName, \"name\": $name }"),
+            "{\"middleName\":null,\"name\":\"Example\"}");
 
-        JsonataValue body = JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables);
-
-        IReadOnlyDictionary<string, JsonataValue> members = body.AsObject();
-        Assert.IsTrue(members.ContainsKey("middleName"), "An explicit null is a value and its member is constructed.");
-        Assert.IsTrue(members["middleName"].IsNull);
-        Assert.AreEqual("Example", members["name"].AsString());
+        JsonElement root = body.RootElement;
+        Assert.IsTrue(root.TryGetProperty("middleName", out JsonElement middleName), "An explicit null is a value and its member is constructed.");
+        Assert.AreEqual(JsonValueKind.Null, middleName.ValueKind);
+        Assert.AreEqual("Example", root.GetProperty("name").GetString());
     }
 
 
     /// <summary>
-    /// An undefined result is absence: a template member whose value refers to a variable that
-    /// does not exist is omitted from the constructed body.
+    /// An undefined result is absence: a template member whose value refers to a variable that does
+    /// not exist is omitted from the constructed body.
     /// See <see href="https://docs.jsonata.org/processing">JSONata processing</see>.
     /// </summary>
     [TestMethod]
     public void UndefinedVariableOmitsTheMember()
     {
-        var template = JsonataTemplate("{ \"absent\": $missing, \"name\": $name }");
-        JsonataValue variables = Variables(("name", JsonataValue.FromString("Example")));
+        using JsonDocument body = Render(
+            JsonataTestUtilities.CreateVeritasTemplateRegistry(),
+            JsonataTemplate("{ \"absent\": $missing, \"name\": $name }"),
+            "{\"name\":\"Example\"}");
 
-        JsonataValue body = JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables);
-
-        IReadOnlyDictionary<string, JsonataValue> members = body.AsObject();
-        Assert.IsFalse(members.ContainsKey("absent"), "An undefined member is omitted.");
-        Assert.AreEqual("Example", members["name"].AsString());
+        JsonElement root = body.RootElement;
+        Assert.IsFalse(root.TryGetProperty("absent", out _), "An undefined member is omitted.");
+        Assert.AreEqual("Example", root.GetProperty("name").GetString());
     }
 
 
     /// <summary>
-    /// JSONata has one number type; a whole-valued result adapts back to the neutral integer kind
-    /// so integer variables round-trip through arithmetic without becoming floating-point noise.
+    /// JSONata has one number type; a whole-valued arithmetic result over a
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see> credential
+    /// template round-trips as an integer while a fractional one keeps its decimal form, matching the
+    /// JSONata reference semantics.
     /// </summary>
     [TestMethod]
     public void IntegerVariablesRoundTripThroughArithmetic()
     {
-        var template = JsonataTemplate("{ \"twice\": $count * 2, \"half\": $count / 2 }");
-        JsonataValue variables = Variables(("count", JsonataValue.FromInteger(21)));
+        using JsonDocument body = Render(
+            JsonataTestUtilities.CreateVeritasTemplateRegistry(),
+            JsonataTemplate("{ \"twice\": $count * 2, \"half\": $count / 2 }"),
+            "{\"count\":21}");
 
-        JsonataValue body = JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables);
-
-        IReadOnlyDictionary<string, JsonataValue> members = body.AsObject();
-        Assert.AreEqual(JsonataValueKind.Integer, members["twice"].Kind);
-        Assert.AreEqual(42L, members["twice"].AsInteger());
-        Assert.AreEqual(JsonataValueKind.Number, members["half"].Kind);
-        Assert.AreEqual(10.5d, members["half"].AsNumber());
+        JsonElement root = body.RootElement;
+        Assert.AreEqual(42L, root.GetProperty("twice").GetInt64());
+        Assert.AreEqual(10.5d, root.GetProperty("half").GetDouble());
     }
 
 
     /// <summary>
-    /// A template longer than the engine's expression bound (64 KiB) is refused with the bound
-    /// named, on every lexer route.
+    /// A template longer than the engine's expression bound is refused by the engine itself — the
+    /// wirer's own limit, distinct from the seam's <see cref="VcalmTemplateLimits.MaxTemplateBytes"/>.
+    /// The engine's <see cref="JsonataLimitExceededException"/> is caught at the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see> seam and
+    /// surfaces as a typed <see cref="VcalmTemplateEvaluationResult.IsSuccess"/> refusal, never as a
+    /// thrown exception escaping the library.
     /// </summary>
     [TestMethod]
     public void OversizedTemplateIsRefusedByTheExpressionBound()
     {
-        string padding = new string(' ', Lumoin.Veritas.Jsonata.JsonataLimits.MaxExpressionLength);
+        string padding = new(' ', JsonataLimits.MaxExpressionLength);
         var template = JsonataTemplate("{ \"name\": $name }" + padding);
-        JsonataValue variables = Variables(("name", JsonataValue.FromString("Example")));
+        var registry = JsonataTestUtilities.CreateVeritasTemplateRegistry();
+        registry.Limits = new VcalmTemplateLimits { MaxTemplateBytes = int.MaxValue };
 
-        Assert.Throws<JsonataLimitExceededException>(() =>
-            JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables));
+        VcalmTemplateEvaluationResult result = registry.Evaluate(
+            template, Encoding.UTF8.GetBytes("{\"name\":\"Example\"}"), Pool, CancellationToken.None);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsNull(result.Rendered);
+        Assert.IsNotNull(result.FailureDetail);
     }
 
 
     /// <summary>
-    /// A caller binding whose name is not a bare JSONata name (a <c>$</c>-prefixed key) is refused
-    /// by the engine rather than silently shadowing or misbinding — the measured contract of the
-    /// bindings parameter.
+    /// A caller binding whose name is not a bare JSONata name (a <c>$</c>-prefixed key) is refused by
+    /// the engine rather than silently shadowing or misbinding — the measured contract of the
+    /// bindings parameter. The engine's <see cref="ArgumentException"/> is caught at the
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see> seam and
+    /// surfaces as a typed <see cref="VcalmTemplateEvaluationResult.IsSuccess"/> refusal, never as a
+    /// thrown exception escaping the library.
     /// </summary>
     [TestMethod]
     public void DollarPrefixedVariableNameIsRefused()
     {
         var template = JsonataTemplate("{ \"name\": $name }");
-        JsonataValue variables = Variables(("$name", JsonataValue.FromString("Example")));
+        var registry = JsonataTestUtilities.CreateVeritasTemplateRegistry();
 
-        Assert.Throws<ArgumentException>(() =>
-            JsonataTestUtilities.CreateVeritasTemplateRegistry().Evaluate(template, variables));
+        VcalmTemplateEvaluationResult result = registry.Evaluate(
+            template, Encoding.UTF8.GetBytes("{\"$name\":\"Example\"}"), Pool, CancellationToken.None);
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsNull(result.Rendered);
+        Assert.IsNotNull(result.FailureDetail);
     }
 }

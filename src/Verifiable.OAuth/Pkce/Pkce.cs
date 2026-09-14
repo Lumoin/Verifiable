@@ -1,5 +1,3 @@
-using System.Buffers;
-using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -61,7 +59,7 @@ public static class Pkce
         //S256 is not configurable — always SHA-256.
         int inputByteCount = Encoding.ASCII.GetByteCount(encodedVerifier);
         byte[] inputBytes = new byte[inputByteCount];
-        Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
+        _ = Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
 
         //The PKCE S256 challenge is a SHA-256 of the local code verifier — sync by nature, no hardware-async
         //backend — so it hashes through the registered synchronous HashFunctionDelegate seam.

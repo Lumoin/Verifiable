@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Dcql;
 
 namespace Verifiable.Json.Converters.Dcql;
@@ -65,7 +62,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
             }
 
             string propertyName = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
 
             switch(propertyName)
             {
@@ -81,7 +78,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
                 }
                 case var name when DcqlParameterNames.IsMeta(name):
                 {
-                    var typeInfo = (JsonTypeInfo<CredentialQueryMeta>)options.GetTypeInfo(typeof(CredentialQueryMeta));
+                    var typeInfo = options.GetTypeInfo<CredentialQueryMeta>();
                     meta = JsonSerializer.Deserialize(ref reader, typeInfo);
                     break;
                 }
@@ -179,7 +176,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
         if(value.Meta is not null)
         {
             writer.WritePropertyName(DcqlParameterNames.Meta);
-            var typeInfo = (JsonTypeInfo<CredentialQueryMeta>)options.GetTypeInfo(typeof(CredentialQueryMeta));
+            var typeInfo = options.GetTypeInfo<CredentialQueryMeta>();
             JsonSerializer.Serialize(writer, value.Meta, typeInfo);
         }
 
@@ -228,7 +225,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
             throw new JsonException($"Expected StartArray but got {reader.TokenType}.");
         }
 
-        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        var typeInfo = options.GetTypeInfo<T>();
         var list = new List<T>();
 
         while(reader.Read())
@@ -255,7 +252,7 @@ public sealed class CredentialQueryConverter: JsonConverter<CredentialQuery>
     /// </summary>
     private static void WriteArray<T>(Utf8JsonWriter writer, IReadOnlyList<T> items, JsonSerializerOptions options)
     {
-        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        var typeInfo = options.GetTypeInfo<T>();
 
         writer.WriteStartArray();
         foreach(var item in items)

@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.OAuth;
 
 namespace Verifiable.OAuth.Oid4Vp;
 

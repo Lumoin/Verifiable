@@ -1,8 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -180,11 +176,11 @@ public static class WebVhWitnessVerification
 
                 if(!validated.TryGetValue(witnessId, out HashSet<int>? approvedVersions))
                 {
-                    approvedVersions = new HashSet<int>();
+                    approvedVersions = [];
                     validated[witnessId] = approvedVersions;
                 }
 
-                approvedVersions.Add(versionNumber);
+                _ = approvedVersions.Add(versionNumber);
             }
         }
 

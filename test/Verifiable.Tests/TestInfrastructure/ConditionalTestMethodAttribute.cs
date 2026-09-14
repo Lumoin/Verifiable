@@ -37,7 +37,7 @@ internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
     /// Gets the file path of the source file that contains the method that called this property.
     /// </summary>
     public string CallerFilePath { get; }
-    
+
     /// <summary>
     /// Gets the line number in the source file at which the method that called this property is invoked.
     /// </summary>
@@ -54,7 +54,7 @@ internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
     /// <param name="callerLineNumber">The line number of the caller. Automatically populated.</param>
     public ConditionalTestMethodAttribute(
         [CallerFilePath] string callerFilePath = "",
-        [CallerLineNumber] int callerLineNumber = -1): base(callerFilePath, callerLineNumber)
+        [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
     {
         CallerFilePath = callerFilePath;
         CallerLineNumber = callerLineNumber;
@@ -111,5 +111,5 @@ internal sealed class ConditionalTestMethodAttribute: TestMethodAttribute
         }
 
         return skipAttributes;
-    }    
+    }
 }

@@ -217,7 +217,7 @@ internal sealed class FederationChainPropertyTests
         //fallback), so the mark references the kid the anchor actually published in its Entity Configuration —
         //read here from the wire-fetched, verified chain, exactly as a deployment's resolver would match it.
         DateTimeOffset now = TestClock.CanonicalEpoch;
-        string anchorPublishedKid = ReadFirstPublishedKid(outcome.Chain!.Statements[^1]);
+        string anchorPublishedKid = ReadFirstPublishedKid(outcome.Chain.Statements[^1]);
         MintedTrustMark minted = await FederationTestRing.MintTrustMarkAsync(
             Fixture.AnchorNode, Fixture.VerifierNode, FederationTopologyFixture.TrustMarkId, now, now.AddHours(1),
             kidOverride: anchorPublishedKid, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -226,11 +226,11 @@ internal sealed class FederationChainPropertyTests
 
         //Production verification: the resolver hands the key it resolved FROM THE VERIFIED CHAIN to this delegate,
         //which runs the library's real Jws.VerifyAsync against it (the same overload the chain validator uses).
-        VerifyCompactJwsDelegate verify = (compactJws, key, cancellationToken) =>
+        static ValueTask<bool> verify(string compactJws, PublicKeyMemory key, CancellationToken cancellationToken) =>
             Jws.VerifyAsync(compactJws, TestSetup.Base64UrlDecoder, Pool, key, cancellationToken);
 
         IReadOnlyList<TrustMarkVerdict> verdicts = await FederationTrustMarkResolver.ResolveVerifiedAsync(
-            outcome.Chain!, [candidate], verify, TestSetup.Base64UrlDecoder, Pool,
+            outcome.Chain, [candidate], verify, TestSetup.Base64UrlDecoder, Pool,
             timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch), TimeSpan.FromMinutes(5), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(verdicts[0].SignatureVerified,
@@ -251,7 +251,7 @@ internal sealed class FederationChainPropertyTests
     {
         Assert.IsTrue(statement.Payload.TryGetValue(WellKnownFederationClaimNames.Jwks, out object? jwksObj),
             "The anchor's Entity Configuration must publish a jwks.");
-        IReadOnlyDictionary<string, object> jwks = (IReadOnlyDictionary<string, object>)jwksObj!;
+        IReadOnlyDictionary<string, object> jwks = (IReadOnlyDictionary<string, object>)jwksObj;
         IEnumerable<object> keys = (IEnumerable<object>)jwks[WellKnownJwkMemberNames.Keys];
         IReadOnlyDictionary<string, object> firstKey = (IReadOnlyDictionary<string, object>)keys.First();
         return (string)firstKey[WellKnownJwkMemberNames.Kid];
@@ -271,13 +271,9 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     private TestHostShell Host { get; }
     private Uri VerifierEntityId { get; }
     private Uri IntermediateEntityId { get; }
-    private Uri AnchorEntityId { get; }
     private string VerifierSegment { get; }
     private string IntermediateSegment { get; }
     private string AnchorSegment { get; }
-    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> VerifierFederationKeys { get; }
-    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> IntermediateFederationKeys { get; }
-    private PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> AnchorFederationKeys { get; }
     private VerifierKeyMaterial VerifierKeys { get; }
     private VerifierKeyMaterial IntermediateKeys { get; }
     private VerifierKeyMaterial AnchorKeys { get; }
@@ -306,11 +302,8 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
 
     private FederationTopologyFixture(
         TestHostShell host,
-        Uri verifierEntityId, Uri intermediateEntityId, Uri anchorEntityId,
+        Uri verifierEntityId, Uri intermediateEntityId,
         string verifierSegment, string intermediateSegment, string anchorSegment,
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> verifierFederationKeys,
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> intermediateFederationKeys,
-        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> anchorFederationKeys,
         VerifierKeyMaterial verifierKeys, VerifierKeyMaterial intermediateKeys, VerifierKeyMaterial anchorKeys,
         FederationTestRingNode anchorNode,
         FederationTestRingNode verifierNode)
@@ -318,13 +311,9 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
         this.Host = host;
         this.VerifierEntityId = verifierEntityId;
         this.IntermediateEntityId = intermediateEntityId;
-        this.AnchorEntityId = anchorEntityId;
         this.VerifierSegment = verifierSegment;
         this.IntermediateSegment = intermediateSegment;
         this.AnchorSegment = anchorSegment;
-        this.VerifierFederationKeys = verifierFederationKeys;
-        this.IntermediateFederationKeys = intermediateFederationKeys;
-        this.AnchorFederationKeys = anchorFederationKeys;
         this.VerifierKeys = verifierKeys;
         this.IntermediateKeys = intermediateKeys;
         this.AnchorKeys = anchorKeys;
@@ -337,8 +326,8 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     {
         FakeTimeProvider timeProvider = new();
         TestHostShell host = new(timeProvider);
-        host.AddHost("intermediate");
-        host.AddHost("anchor");
+        _ = host.AddHost("intermediate");
+        _ = host.AddHost("anchor");
 
         await host.StartHttpHostAsync("default", default).ConfigureAwait(false);
         await host.StartHttpHostAsync("intermediate", default).ConfigureAwait(false);
@@ -484,9 +473,8 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
 
         return new FederationTopologyFixture(
             host,
-            verifierEntityId, intermediateEntityId, anchorEntityId,
+            verifierEntityId, intermediateEntityId,
             verifierSegment, intermediateSegment, anchorSegment,
-            verifierFederationKeys, intermediateFederationKeys, anchorFederationKeys,
             verifierKeys, intermediateKeys, anchorKeys,
             anchorNode,
             verifierNode);
@@ -560,7 +548,7 @@ internal sealed class FederationTopologyFixture: IAsyncDisposable
     {
         using System.Net.Http.HttpResponseMessage response =
             await client.GetAsync(url, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        _ = response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }

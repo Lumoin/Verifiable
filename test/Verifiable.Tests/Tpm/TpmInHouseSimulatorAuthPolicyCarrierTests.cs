@@ -1,18 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -377,7 +371,7 @@ internal sealed class TpmInHouseSimulatorAuthPolicyCarrierTests
         offset += sizeof(ushort);
         BinaryPrimitives.WriteUInt32BigEndian(span[offset..], (uint)(TpmaObject.USER_WITH_AUTH | TpmaObject.NO_DA));
         offset += sizeof(uint);
-        BinaryPrimitives.WriteUInt16BigEndian(span[offset..], (ushort)OversizeAuthPolicySize);
+        BinaryPrimitives.WriteUInt16BigEndian(span[offset..], OversizeAuthPolicySize);
         offset += sizeof(ushort);
         span.Slice(offset, OversizeAuthPolicySize).Fill(0x5A);
 

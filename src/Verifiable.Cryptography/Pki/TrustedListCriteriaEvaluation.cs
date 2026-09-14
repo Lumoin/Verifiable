@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -102,6 +100,10 @@ public static class TrustedListCriteriaEvaluation
 
                     case CriteriaMatchResult.NotMatched:
                         anyNotMatched = true;
+                        break;
+
+                    case CriteriaMatchResult.Indeterminate:
+                        anyIndeterminate = true;
                         break;
 
                     default:

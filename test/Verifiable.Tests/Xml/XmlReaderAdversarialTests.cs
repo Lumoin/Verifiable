@@ -41,7 +41,7 @@ internal static class XmlAdversarialParsing
     {
         XmlReadError error = ParseRefusedWithBalancedPool(documentOctets);
         Assert.AreEqual(XmlReadFailure.UnexpectedEndOfDocument, error.Failure);
-        Assert.AreEqual((long)documentOctets.Length, error.ByteOffset, "A truncation refusal is determined at the end of the octets.");
+        Assert.AreEqual(documentOctets.Length, error.ByteOffset, "A truncation refusal is determined at the end of the octets.");
     }
 }
 
@@ -73,7 +73,7 @@ internal sealed class XmlReaderAdversarialTests
         const string AfterDeclaration = "<?xml version=\"1.0\"?><!DOCTYPE a><a/>";
         XmlReadError afterDeclaration = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(AfterDeclaration));
         Assert.AreEqual(XmlReadFailure.DoctypeProhibited, afterDeclaration.Failure);
-        Assert.AreEqual((long)AfterDeclaration.IndexOf("<!DOCTYPE", StringComparison.Ordinal), afterDeclaration.ByteOffset);
+        Assert.AreEqual(AfterDeclaration.IndexOf("<!DOCTYPE", StringComparison.Ordinal), afterDeclaration.ByteOffset);
     }
 
 
@@ -91,7 +91,7 @@ internal sealed class XmlReaderAdversarialTests
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(Document));
 
         Assert.AreEqual(XmlReadFailure.DoctypeProhibited, error.Failure);
-        Assert.AreEqual((long)Document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset);
+        Assert.AreEqual(Document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset);
     }
 
 
@@ -109,7 +109,7 @@ internal sealed class XmlReaderAdversarialTests
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(Document));
 
         Assert.AreEqual(XmlReadFailure.DoctypeProhibited, error.Failure);
-        Assert.AreEqual((long)Document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset);
+        Assert.AreEqual(Document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset);
     }
 
 
@@ -125,21 +125,21 @@ internal sealed class XmlReaderAdversarialTests
         var payload = new StringBuilder("<?xml version=\"1.0\"?><!DOCTYPE lolz [<!ENTITY lol \"lol\">");
         for(int i = 2; i <= 9; ++i)
         {
-            payload.Append(CultureInfo.InvariantCulture, $"<!ENTITY lol{i} \"");
+            _ = payload.Append(CultureInfo.InvariantCulture, $"<!ENTITY lol{i} \"");
             for(int j = 0; j < 10; ++j)
             {
-                payload.Append(CultureInfo.InvariantCulture, $"&lol{i - 1};");
+                _ = payload.Append(CultureInfo.InvariantCulture, $"&lol{i - 1};");
             }
 
-            payload.Append("\">");
+            _ = payload.Append("\">");
         }
 
-        payload.Append("]><lolz>&lol9;</lolz>");
+        _ = payload.Append("]><lolz>&lol9;</lolz>");
         string document = payload.ToString();
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(document));
 
         Assert.AreEqual(XmlReadFailure.DoctypeProhibited, error.Failure);
-        Assert.AreEqual((long)document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset, "The refusal must precede every entity declaration.");
+        Assert.AreEqual(document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset, "The refusal must precede every entity declaration.");
     }
 
 
@@ -158,7 +158,7 @@ internal sealed class XmlReaderAdversarialTests
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(Document));
 
         Assert.AreEqual(XmlReadFailure.DoctypeProhibited, error.Failure);
-        Assert.AreEqual((long)Document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset);
+        Assert.AreEqual(Document.IndexOf("<!DOCTYPE", StringComparison.Ordinal), error.ByteOffset);
     }
 
 
@@ -584,6 +584,6 @@ internal sealed class XmlReaderAdversarialTests
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(Document));
 
         Assert.AreEqual(XmlReadFailure.DuplicateAttribute, error.Failure);
-        Assert.AreEqual((long)Document.IndexOf("q:a", StringComparison.Ordinal), error.ByteOffset);
+        Assert.AreEqual(Document.IndexOf("q:a", StringComparison.Ordinal), error.ByteOffset);
     }
 }

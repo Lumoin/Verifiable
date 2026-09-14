@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -389,7 +385,7 @@ internal sealed class CAdESParallelSignatureTests
         //The SignerInfo SEQUENCE opens with version INTEGER 02 01 01; its value octet sits two past the
         //INTEGER's own tag. Patching it to 3 states the subjectKeyIdentifier version without the identifier.
         byte[] patchedOctets = (byte[])signerOctets.Clone();
-        int versionValueOffset = (signerBounds.ContentStart - signerBounds.Start) + 2;
+        int versionValueOffset = signerBounds.ContentStart - signerBounds.Start + 2;
         Assert.AreEqual(1, patchedOctets[versionValueOffset], "The patch lands on the version value octet.");
         patchedOctets[versionValueOffset] = 3;
         using(PooledMemory patched = PooledMemory.FromBytes(patchedOctets, BaseMemoryPool.Shared, CryptoTags.CmsEncodedSignerInfo))

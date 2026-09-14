@@ -1,7 +1,4 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -37,7 +34,7 @@ internal sealed class CAdESVerificationTests
         Assert.AreEqual(CAdESVerificationStatus.Valid, result.Status, "A CAdES-B-B signature whose signing-certificate-v2 binds the signer verifies.");
         Assert.AreEqual(Convert.ToHexString("the cades content"u8), Convert.ToHexString(result.Content.Span), "The verified content must be the signed payload.");
         Assert.IsNotNull(result.SignerCertificate, "The signer certificate must surface on success.");
-        Assert.IsTrue(result.SignerCertificate!.AsReadOnlyMemory().Span.SequenceEqual(signerCertificate.RawData), "The surfaced signer certificate must equal the one that signed.");
+        Assert.IsTrue(result.SignerCertificate.AsReadOnlyMemory().Span.SequenceEqual(signerCertificate.RawData), "The surfaced signer certificate must equal the one that signed.");
         Assert.AreEqual(SigningTime, result.SigningTime, "The signing-time attribute must surface.");
     }
 

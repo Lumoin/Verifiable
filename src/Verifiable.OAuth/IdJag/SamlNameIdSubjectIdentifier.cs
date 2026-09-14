@@ -156,10 +156,10 @@ public sealed record SamlNameIdSubjectIdentifier
         }
 
         //§3.2.1: each optional member is surfaced exactly when present (a null member is simply absent).
-        TryReadMember(claimValue, SamlNameIdMemberNames.NameIdFormat, out string? nameIdFormat);
-        TryReadMember(claimValue, SamlNameIdMemberNames.NameQualifier, out string? nameQualifier);
-        TryReadMember(claimValue, SamlNameIdMemberNames.SpNameQualifier, out string? spNameQualifier);
-        TryReadMember(claimValue, SamlNameIdMemberNames.SpProvidedId, out string? spProvidedId);
+        _ = TryReadMember(claimValue, SamlNameIdMemberNames.NameIdFormat, out string? nameIdFormat);
+        _ = TryReadMember(claimValue, SamlNameIdMemberNames.NameQualifier, out string? nameQualifier);
+        _ = TryReadMember(claimValue, SamlNameIdMemberNames.SpNameQualifier, out string? spNameQualifier);
+        _ = TryReadMember(claimValue, SamlNameIdMemberNames.SpProvidedId, out string? spProvidedId);
 
         identifier = new SamlNameIdSubjectIdentifier
         {

@@ -1,8 +1,6 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -73,7 +71,7 @@ internal sealed class CredentialProofEnforcementFlowTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
         WireProofExpectationSeam(host);
-        WireIssuance(host);
+        _ = WireIssuance(host);
 
         string issuerAudience = material.Registration.IssuerUri!.OriginalString;
         string proof = await MintProofAsync(issuerAudience, CredentialNonce).ConfigureAwait(false);
@@ -145,8 +143,8 @@ internal sealed class CredentialProofEnforcementFlowTests
         string issuerAudience = material.Registration.IssuerUri!.OriginalString;
         string proof = await MintProofAsync(issuerAudience, CredentialNonce).ConfigureAwait(false);
 
-        int signatureStart = proof.LastIndexOf('.') + 1;
-        int tamperIndex = signatureStart + (proof.Length - signatureStart) / 2;
+        int signatureStart = proof.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((proof.Length - signatureStart) / 2);
         char tampered = proof[tamperIndex] == 'A' ? 'B' : 'A';
         string tamperedProof = string.Concat(
             proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));
@@ -162,7 +160,7 @@ internal sealed class CredentialProofEnforcementFlowTests
     //Wires the opt-in §F.4 expectation seam: a fixed c_nonce, ES256-only, a 5-minute iat window.
     private static void WireProofExpectationSeam(TestHostShell host)
     {
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().ResolveCredentialProofExpectationAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult<CredentialProofExpectation?>(new CredentialProofExpectation
@@ -236,7 +234,7 @@ internal sealed class CredentialProofEnforcementFlowTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
@@ -258,7 +256,7 @@ internal sealed class CredentialProofEnforcementFlowTests
             new RequestFields(),
             headers,
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Ocsp;
@@ -77,7 +75,7 @@ internal sealed class OcspRequestsTests
         CertificateID certId = oracleRequest.GetRequestList()[0].GetCertID();
 
         Assert.AreEqual(WellKnownOids.Sha1, certId.HashAlgOid, "The CertID hash algorithm OID must be SHA-1.");
-        Assert.IsInstanceOfType<Org.BouncyCastle.Asn1.DerNull>(certId.ToAsn1Object().HashAlgorithm.Parameters, "RFC 3279: SHA-1's AlgorithmIdentifier parameters must be an explicit NULL.");
+        _ = Assert.IsInstanceOfType<Org.BouncyCastle.Asn1.DerNull>(certId.ToAsn1Object().HashAlgorithm.Parameters, "RFC 3279: SHA-1's AlgorithmIdentifier parameters must be an explicit NULL.");
     }
 
 
@@ -117,13 +115,13 @@ internal sealed class OcspRequestsTests
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
         using PkiCertificateMemory issuer = OcspTestFixtures.ToCertificateCarrier(root.Certificate);
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 0, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "A zero-length nonce is below the RFC 9654 §2.1 SIZE(1..128) lower bound.").ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 129, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "A 129-byte nonce is above the RFC 9654 §2.1 SIZE(1..128) upper bound.").ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await OcspRequests.CreateAsync(certificate, issuer, OcspCertIdDigestAlgorithm.Sha256, BaseMemoryPool.Shared, nonceByteLength: 0, includeNonce: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false),
             "The nonce length is validated unconditionally, even when includeNonce is false.").ConfigureAwait(false);
     }

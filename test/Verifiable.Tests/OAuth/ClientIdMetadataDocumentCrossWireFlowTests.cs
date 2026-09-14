@@ -1,14 +1,8 @@
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Linq;
-using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
@@ -20,8 +14,6 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.WellKnown;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -226,7 +218,10 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
                 [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
                 [OAuthRequestParameterNames.Code] = codeState.Code,
-                [OAuthRequestParameterNames.RedirectUri] = codeState.RedirectUri.ToString(),
+                //RFC 6749 §4.1.3's identical-value check binds to Uri.OriginalString (the exact
+                //string the authorization step captured), never Uri.ToString() — which re-canonicalizes
+                //(default-port elision, host casing) and can diverge from the persisted value.
+                [OAuthRequestParameterNames.RedirectUri] = codeState.RedirectUri.OriginalString,
                 [OAuthRequestParameterNames.CodeVerifier] = codeState.Pkce.EncodedVerifier
             };
 
@@ -405,7 +400,10 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.AuthorizationCode,
                 [OAuthRequestParameterNames.ClientId] = registration.ClientId.Value,
                 [OAuthRequestParameterNames.Code] = codeState.Code,
-                [OAuthRequestParameterNames.RedirectUri] = codeState.RedirectUri.ToString(),
+                //RFC 6749 §4.1.3's identical-value check binds to Uri.OriginalString (the exact
+                //string the authorization step captured), never Uri.ToString() — which re-canonicalizes
+                //(default-port elision, host casing) and can diverge from the persisted value.
+                [OAuthRequestParameterNames.RedirectUri] = codeState.RedirectUri.OriginalString,
                 [OAuthRequestParameterNames.CodeVerifier] = codeState.Pkce.EncodedVerifier,
                 [OAuthRequestParameterNames.ClientAssertionType] = WellKnownClientAssertionTypes.JwtBearer,
                 [OAuthRequestParameterNames.ClientAssertion] = validAssertion
@@ -542,7 +540,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         HostedAuthorizationServer host = app.Host("default");
         host.Registrations[preRegistered.TenantId.Value] = preRegistered;
         host.Registrations[preRegistered.ClientId] = preRegistered;
-        host.Server.UpdateClient(stub, preRegistered, new ExchangeContext());
+        host.Server.UpdateClient(stub, preRegistered, []);
 
         (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> flowStore) =
             await app.CreateOAuthClientAndRegistrationAsync(
@@ -711,23 +709,22 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
         PublishCimdDocument(foreignHost, foreignPath, foreignClientIdentifierUrl, [crossOriginRedirect]);
 
         Uri serviceOrigin = cimdService.BaseAddress;
-        AdditionalClientIdMetadataDocumentValidationDelegate sameOriginUnlessServiceOrigin =
-            (document, clientMetadataUri, context, cancellationToken) =>
+        ValueTask<bool> sameOriginUnlessServiceOrigin(ClientMetadata document, Uri clientMetadataUri, ExchangeContext context, CancellationToken cancellationToken)
+        {
+            bool isServiceOrigin = string.Equals(
+                clientMetadataUri.Authority, serviceOrigin.Authority, StringComparison.OrdinalIgnoreCase);
+            if(isServiceOrigin)
             {
-                bool isServiceOrigin = string.Equals(
-                    clientMetadataUri.Authority, serviceOrigin.Authority, StringComparison.OrdinalIgnoreCase);
-                if(isServiceOrigin)
-                {
-                    //CIMD-063: at least one CIMD Service is exempt from the AS's redirect_uri origin
-                    //restriction, so developers are not blocked by it.
-                    return ValueTask.FromResult(true);
-                }
+                //CIMD-063: at least one CIMD Service is exempt from the AS's redirect_uri origin
+                //restriction, so developers are not blocked by it.
+                return ValueTask.FromResult(true);
+            }
 
-                bool allSameOrigin = document.RedirectUris.All(uri =>
-                    string.Equals(uri.Authority, clientMetadataUri.Authority, StringComparison.OrdinalIgnoreCase));
+            bool allSameOrigin = document.RedirectUris.All(uri =>
+                string.Equals(uri.Authority, clientMetadataUri.Authority, StringComparison.OrdinalIgnoreCase));
 
-                return ValueTask.FromResult(allSameOrigin);
-            };
+            return ValueTask.FromResult(allSameOrigin);
+        }
 
         using HttpClient pinnedHttpClient =
             LoopbackTls.CreatePinnedHttpClient([cimdService.Certificate, foreignHost.Certificate]);
@@ -897,13 +894,13 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
     private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)
     {
         StringBuilder sb = new();
-        sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
+        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
         foreach(KeyValuePair<string, string> member in jwk)
         {
-            sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
         }
 
-        sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
+        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
 
         return sb.ToString();
     }
@@ -917,7 +914,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
     //verifies against the client's key.
     private static string TamperSignature(string compactJws)
     {
-        int signatureStart = compactJws.LastIndexOf('.') + 1;
+        int signatureStart = compactJws.LastIndexOf('.', StringComparison.Ordinal) + 1;
         char first = compactJws[signatureStart];
         char replacement = first == 'A' ? 'B' : 'A';
 
@@ -932,7 +929,7 @@ internal sealed class ClientIdMetadataDocumentCrossWireFlowTests
     /// </summary>
     private static ExchangeContext NewLoopbackContext()
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
         return context;

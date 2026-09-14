@@ -1,9 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -13,7 +12,6 @@ using Verifiable.Apdu.Pace;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
@@ -207,7 +205,7 @@ internal sealed class CardSimulatorPaceTerminalAuthenticationTests
     }
 
 
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

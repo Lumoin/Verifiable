@@ -1,8 +1,6 @@
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
@@ -90,7 +88,7 @@ internal sealed class TokenIntrospectionServerTests
                 [OAuthRequestParameterNames.Token] = "access-token-to-inspect",
                 [OAuthRequestParameterNames.TokenTypeHint] = "access_token"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -171,7 +169,7 @@ internal sealed class TokenIntrospectionServerTests
             WellKnownEndpointNames.AuthCodeIntrospect,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "credential-access-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -231,7 +229,7 @@ internal sealed class TokenIntrospectionServerTests
             WellKnownEndpointNames.AuthCodeIntrospect,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "plain-access-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -267,7 +265,7 @@ internal sealed class TokenIntrospectionServerTests
             WellKnownEndpointNames.AuthCodeIntrospect,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "multi-aud-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -314,7 +312,7 @@ internal sealed class TokenIntrospectionServerTests
             WellKnownEndpointNames.AuthCodeIntrospect,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "revoked-or-unknown" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -362,7 +360,7 @@ internal sealed class TokenIntrospectionServerTests
             WellKnownEndpointNames.AuthCodeIntrospect,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "some-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
@@ -393,7 +391,7 @@ internal sealed class TokenIntrospectionServerTests
             WellKnownEndpointNames.AuthCodeIntrospect,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "some-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,
@@ -441,11 +439,11 @@ internal sealed class TokenIntrospectionServerTests
 
         ServerHttpResponse blocked = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeIntrospect, "POST",
-            fields, ForwardedFor(blockedIp), new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, ForwardedFor(blockedIp), [], TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse allowed = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeIntrospect, "POST",
-            fields, ForwardedFor("198.51.100.4"), new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, ForwardedFor("198.51.100.4"), [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, blocked.StatusCode,
             "A denylisted caller IP must see no introspection endpoint (attenuated out of the chain).");
@@ -488,10 +486,10 @@ internal sealed class TokenIntrospectionServerTests
 
         ServerHttpResponse full = await host.DispatchAtEndpointAsync(
             fullResource.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeIntrospect, "POST",
-            fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
         ServerHttpResponse limited = await host.DispatchAtEndpointAsync(
             limitedTenant, WellKnownEndpointNames.AuthCodeIntrospect, "POST",
-            fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, full.StatusCode, full.Body);
         Assert.AreEqual(200, limited.StatusCode, limited.Body);

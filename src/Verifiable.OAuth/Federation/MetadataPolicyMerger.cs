@@ -64,11 +64,11 @@ public static class MetadataPolicyMerger
         HashSet<string> allParameterNames = new(StringComparer.Ordinal);
         foreach(string name in upstream.ParameterPolicies.Keys)
         {
-            allParameterNames.Add(name);
+            _ = allParameterNames.Add(name);
         }
         foreach(string name in downstream.ParameterPolicies.Keys)
         {
-            allParameterNames.Add(name);
+            _ = allParameterNames.Add(name);
         }
 
         foreach(string parameterName in allParameterNames)
@@ -124,11 +124,11 @@ public static class MetadataPolicyMerger
         HashSet<EntityTypeIdentifier> allEntityTypes = [];
         foreach(EntityTypeIdentifier id in upstream.EntityTypes.Keys)
         {
-            allEntityTypes.Add(id);
+            _ = allEntityTypes.Add(id);
         }
         foreach(EntityTypeIdentifier id in downstream.EntityTypes.Keys)
         {
-            allEntityTypes.Add(id);
+            _ = allEntityTypes.Add(id);
         }
 
         foreach(EntityTypeIdentifier entityType in allEntityTypes)
@@ -173,11 +173,11 @@ public static class MetadataPolicyMerger
         HashSet<MetadataPolicyOperator> allOperators = [];
         foreach(MetadataPolicyOperator op in upstream.Operators.Keys)
         {
-            allOperators.Add(op);
+            _ = allOperators.Add(op);
         }
         foreach(MetadataPolicyOperator op in downstream.Operators.Keys)
         {
-            allOperators.Add(op);
+            _ = allOperators.Add(op);
         }
 
         foreach(MetadataPolicyOperator op in allOperators)

@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Common;
@@ -293,7 +287,7 @@ public sealed class DidRegistrationBuilders
             return null;
         }
 
-        int methodEnd = did.IndexOf(':', scheme.Length);
+        int methodEnd = did.IndexOf(':', scheme.Length, StringComparison.Ordinal);
 
         return methodEnd > scheme.Length ? did[scheme.Length..methodEnd] : null;
     }

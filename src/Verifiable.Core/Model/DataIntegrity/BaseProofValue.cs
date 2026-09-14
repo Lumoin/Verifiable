@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;

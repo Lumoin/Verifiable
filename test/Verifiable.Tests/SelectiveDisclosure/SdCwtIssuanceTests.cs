@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;

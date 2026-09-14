@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
@@ -42,7 +39,7 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> pda = CreateRegistrarAutomaton();
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("key", Document: null, Keys: StandardKeyInputs(signingPublic, exchangePublic)),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -73,7 +70,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             [WellKnownDidRegistrationValues.WebDomainOption] = "example.com"
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("web", Document: null, Keys: StandardKeyInputs(signingPublic, exchangePublic), Options: options),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -81,7 +78,7 @@ internal sealed class DidRegistrationBuilderJoinTests
         var completed = (RegistrationCompleted)pda.CurrentState;
         Assert.IsNotNull(completed.Document);
         Assert.AreEqual("did:web:example.com", completed.Did);
-        AssertStandardDocument(completed.Document!);
+        AssertStandardDocument(completed.Document);
     }
 
 
@@ -104,7 +101,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             [WellKnownDidRegistrationValues.WebRepresentationOption] = WellKnownDidRegistrationValues.RepresentationJsonWithoutContext
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("web", Document: null, Keys: StandardKeyInputs(signingPublic, exchangePublic), Options: options),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -135,7 +132,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             [WellKnownDidRegistrationValues.WebAdditionalContextsOption] = new[] { "https://example.com/custom" }
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("web", Document: null, Keys: StandardKeyInputs(signingPublic, exchangePublic), Options: options),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -160,11 +157,11 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> pda = CreateRegistrarAutomaton();
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("bogus", Document: null, Keys: StandardKeyInputs(signingPublic, exchangePublic)),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
     }
 
 
@@ -176,7 +173,7 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         var prebuilt = new DidDocument { Id = (GenericDidMethod)"did:key:zPrebuilt" };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("key", Document: prebuilt),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -199,7 +196,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             VerificationMethod = [new VerificationMethod { Id = "#key-2", Controller = "did:web:example.com" }]
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.SetDidDocument, replacement)]),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -227,7 +224,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             VerificationMethod = [new VerificationMethod { Id = "#key-2", Controller = "did:web:example.com" }]
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.AddToDidDocument, additions)], current),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -259,7 +256,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             VerificationMethod = [new VerificationMethod { Id = "#key-1", Controller = "did:web:example.com" }]
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.RemoveFromDidDocument, removals)], current),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -278,11 +275,11 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         var additions = new DidDocument { Id = (GenericDidMethod)"did:web:example.com" };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.AddToDidDocument, additions)]),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
     }
 
 
@@ -294,11 +291,11 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         var document = new DidDocument { Id = (GenericDidMethod)"did:web:example.com" };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.DeactivateOperation, document)]),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
     }
 
 
@@ -308,11 +305,11 @@ internal sealed class DidRegistrationBuilderJoinTests
     {
         PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> pda = CreateRegistrarAutomaton();
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", []),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
     }
 
 
@@ -343,7 +340,7 @@ internal sealed class DidRegistrationBuilderJoinTests
             VerificationMethod = [new VerificationMethod { Id = "#key-2", Controller = "did:web:example.com" }]
         };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate(
                 "did:web:example.com",
                 [
@@ -366,7 +363,7 @@ internal sealed class DidRegistrationBuilderJoinTests
     {
         PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> pda = CreateRegistrarAutomaton();
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginDeactivate("did:web:example.com"),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -385,13 +382,13 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         var document = new DidDocument { Id = (GenericDidMethod)"did:key:z6MkExample" };
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate(
                 "did:key:z6MkExample",
                 [new DidDocumentOperationStep(WellKnownDidRegistrationValues.SetDidDocument, document)]),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState, "A did:key DID is immutable; update must fail closed.");
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState, "A did:key DID is immutable; update must fail closed.");
     }
 
 
@@ -401,11 +398,11 @@ internal sealed class DidRegistrationBuilderJoinTests
     {
         PushdownAutomaton<RegistrationFlowState, RegistrationInput, string> pda = CreateRegistrarAutomaton();
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginDeactivate("did:key:z6MkExample"),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState, "A did:key DID is immutable; deactivate must fail closed.");
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState, "A did:key DID is immutable; deactivate must fail closed.");
     }
 
 
@@ -443,7 +440,7 @@ internal sealed class DidRegistrationBuilderJoinTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync(
+            _ = await pda.StepAsync(
                 new BeginUpdate(
                     "did:web:example.com",
                     [
@@ -515,7 +512,7 @@ internal sealed class DidRegistrationBuilderJoinTests
     /// <summary>Collects the registration PDA's emitted trace entries for assertion.</summary>
     /// <typeparam name="T">The trace entry type.</typeparam>
     /// <param name="entries">The list each emitted entry is appended to.</param>
-    private sealed class TraceObserver<T>(List<T> entries) : IObserver<T>
+    private sealed class TraceObserver<T>(List<T> entries): IObserver<T>
     {
         /// <summary>Records an emitted trace entry.</summary>
         /// <param name="value">The emitted trace entry.</param>

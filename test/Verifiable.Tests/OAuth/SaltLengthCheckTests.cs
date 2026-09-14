@@ -28,7 +28,7 @@ internal sealed class SaltLengthCheckTests
     public async Task ObservesUnderLengthSaltByDefault()
     {
         //Default policy (no key set) → observe, do not reject. The short salt is a passing signal.
-        ClaimOutcome outcome = await RunAsync(new ExchangeContext(), minimumSaltLength: Salt.RecommendedByteLength - 8);
+        ClaimOutcome outcome = await RunAsync([], minimumSaltLength: Salt.RecommendedByteLength - 8);
 
         Assert.AreEqual(ClaimOutcome.Success, outcome,
             "By default a below-recommended salt length is observed, not rejected.");
@@ -38,7 +38,7 @@ internal sealed class SaltLengthCheckTests
     [TestMethod]
     public async Task RejectsUnderLengthSaltWhenEnforced()
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetEnforceMinimumSaltLength(true);
 
         ClaimOutcome outcome = await RunAsync(context, minimumSaltLength: Salt.RecommendedByteLength - 8);
@@ -51,7 +51,7 @@ internal sealed class SaltLengthCheckTests
     [TestMethod]
     public async Task AcceptsRecommendedLengthSaltWhenEnforced()
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetEnforceMinimumSaltLength(true);
 
         ClaimOutcome outcome = await RunAsync(context, minimumSaltLength: Salt.RecommendedByteLength);
@@ -65,7 +65,7 @@ internal sealed class SaltLengthCheckTests
     public async Task AcceptsAbsentSaltLengthWhenEnforced()
     {
         //null = a format with no disclosure salts (mdoc) or no disclosures — nothing to fail on.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetEnforceMinimumSaltLength(true);
 
         ClaimOutcome outcome = await RunAsync(context, minimumSaltLength: null);

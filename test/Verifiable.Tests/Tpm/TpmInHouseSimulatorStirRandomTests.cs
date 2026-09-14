@@ -1,15 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -394,7 +389,7 @@ internal sealed class TpmInHouseSimulatorStirRandomTests
     public async Task AStirInFailureModeReturnsFailure()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using var simulator = new TpmSimulator("tpm-in-house-stir-failure",selfTest: TpmSelfTestBehavior.Fails, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var simulator = new TpmSimulator("tpm-in-house-stir-failure", selfTest: TpmSelfTestBehavior.Fails, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 

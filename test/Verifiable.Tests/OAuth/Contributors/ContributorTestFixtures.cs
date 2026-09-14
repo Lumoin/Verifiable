@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
@@ -53,7 +52,7 @@ internal static class ContributorTestFixtures
         return new IssuanceContext
         {
             Registration = BuildRegistration(),
-            Context = new ExchangeContext(),
+            Context = [],
             IssuerUri = new Uri("https://issuer.contributor-test/"),
             Subject = "subject-contributor-test",
             Scope = scope,
@@ -94,7 +93,7 @@ internal static class ContributorTestFixtures
             BuildRegistration(),
             "subject-contributor-test",
             scope,
-            new ExchangeContext())
+            [])
         {
             ResolvedOidcClaims = resolvedClaims
         };
@@ -111,7 +110,7 @@ internal static class ContributorTestFixtures
 
     public static IntrospectionTarget BuildIntrospectionTarget(string scope) =>
         new(BuildRegistration(), "jti-contributor-test", "subject-contributor-test",
-            scope, new ExchangeContext());
+            scope, []);
 
 
     /// <summary>

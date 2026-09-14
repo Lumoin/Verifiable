@@ -266,4 +266,17 @@ public static class PolicyContextKeys
     /// replay defense".
     /// </summary>
     public static string JtiReplayPolicy { get; } = Utf8Constants.ToInternedString(JtiReplayPolicyUtf8);
+
+    /// <summary>The UTF-8 source literal of <see cref="IsLocalhostNameAcceptedForLoopbackRedirects"/>.</summary>
+    public static ReadOnlySpan<byte> IsLocalhostNameAcceptedForLoopbackRedirectsUtf8 =>
+        "policy.isLocalhostNameAcceptedForLoopbackRedirects"u8;
+
+    /// <summary>
+    /// Whether the RFC 8252 §7.3 loopback redirect fallback recognizes the <c>localhost</c> host
+    /// literal alongside <c>127.0.0.1</c> and <c>[::1]</c>. Value type: <see cref="bool"/>. Absent
+    /// defaults to <see langword="false"/> — RFC 8252 §8.3's "the use of localhost is NOT
+    /// RECOMMENDED". Audit row: "RFC 8252 §7.3 loopback fallback — localhost allowance".
+    /// </summary>
+    public static string IsLocalhostNameAcceptedForLoopbackRedirects { get; } =
+        Utf8Constants.ToInternedString(IsLocalhostNameAcceptedForLoopbackRedirectsUtf8);
 }

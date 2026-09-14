@@ -3,7 +3,6 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Logout;
 
@@ -153,7 +152,7 @@ public static class EndSessionEndpoints
                             "post_logout_redirect_uri is not registered for this client."));
                     }
 
-                    fields.TryGetValue(OAuthRequestParameterNames.State, out string? state);
+                    _ = fields.TryGetValue(OAuthRequestParameterNames.State, out string? state);
                     redirectLocation = AppendState(postLogout, state);
                 }
 

@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -42,7 +38,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
             Transceive, CtapAuthenticatorConfigRequestCborWriter.Write, request, BaseMemoryPool.Shared, TestContext.CancellationToken);
 
         Assert.IsNotNull(capturedRequest);
-        Assert.AreEqual(WellKnownCtapCommands.AuthenticatorConfig, capturedRequest![0]);
+        Assert.AreEqual(WellKnownCtapCommands.AuthenticatorConfig, capturedRequest[0]);
     }
 
 
@@ -50,7 +46,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     [TestMethod]
     public async Task ThrowsCtapCommandExceptionOnNonSuccessStatus()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.InvalidSubcommand], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.SetMinPinLength);
@@ -66,11 +62,11 @@ internal sealed class CtapAuthenticatorConfigClientTests
     [TestMethod]
     public async Task ThrowsFido2FormatExceptionOnEmptyResponse()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
-        await Assert.ThrowsExactlyAsync<Fido2FormatException>(
+        _ = await Assert.ThrowsExactlyAsync<Fido2FormatException>(
             () => CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
                 Transceive, CtapAuthenticatorConfigRequestCborWriter.Write, request, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -81,7 +77,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     public async Task ThrowsArgumentNullExceptionForNullTransceive()
     {
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
             () => CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
                 null!, CtapAuthenticatorConfigRequestCborWriter.Write, request, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -91,11 +87,11 @@ internal sealed class CtapAuthenticatorConfigClientTests
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullEncodeRequest()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.Ok], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
             () => CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
                 Transceive, null!, request, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -105,10 +101,10 @@ internal sealed class CtapAuthenticatorConfigClientTests
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullRequest()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.Ok], pool, Fido2BufferTags.CtapResponseEnvelope));
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
             () => CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
                 Transceive, CtapAuthenticatorConfigRequestCborWriter.Write, null!, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -118,11 +114,11 @@ internal sealed class CtapAuthenticatorConfigClientTests
     [TestMethod]
     public async Task ThrowsArgumentNullExceptionForNullPool()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.Ok], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
             () => CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(
                 Transceive, CtapAuthenticatorConfigRequestCborWriter.Write, request, null!, TestContext.CancellationToken).AsTask());
     }
@@ -137,7 +133,7 @@ internal sealed class CtapAuthenticatorConfigClientTests
     public async Task ToggleAlwaysUvSucceedsOverTheSimulator()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-client-toggle-always-uv",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("config-client-toggle-always-uv", BaseMemoryPool.Shared);
 
         var request = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         await CtapAuthenticatorConfigClient.AuthenticatorConfigAsync(

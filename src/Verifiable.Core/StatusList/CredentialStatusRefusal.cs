@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
@@ -69,13 +67,13 @@ public sealed record CredentialStatusRefusal
         get
         {
             StringBuilder description = new(ReasonCode);
-            description.Append(':');
+            _ = description.Append(':');
 
             for(int i = 0; i < Credentials.Count; i++)
             {
                 RefusedCredentialStatus credential = Credentials[i];
-                description.Append(i == 0 ? " " : "; ");
-                description.Append("credential query '").Append(credential.CredentialQueryId.Value)
+                _ = description.Append(i == 0 ? " " : "; ");
+                _ = description.Append("credential query '").Append(credential.CredentialQueryId.Value)
                     .Append("' reads status 0x").Append(credential.Outcome.Status.ToString("X2", CultureInfo.InvariantCulture))
                     .Append(" (").Append(credential.DispositionName).Append(')');
             }

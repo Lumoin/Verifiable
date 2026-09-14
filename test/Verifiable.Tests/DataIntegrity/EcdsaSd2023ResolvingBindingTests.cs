@@ -34,7 +34,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static CanonicalizationDelegate RdfcCanonicalizer { get; } = CanonicalizationTestUtilities.CreateRdfcCanonicalizer();
 
@@ -89,10 +89,10 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
         Assert.IsTrue(result.IsValid, "The resolving overload must verify a genuinely issuer-signed base proof.");
         Assert.IsNotNull(result.Verified);
-        var verified = result.Verified!.Value;
+        var verified = result.Verified.Value;
         Assert.IsTrue(verified.IsIdentityBound, "The resolving overload must mint Bound, not Asserted.");
         Assert.IsTrue(verified.Provenance is BoundProvenance);
-        var bound = (BoundProvenance)verified.Provenance!;
+        var bound = (BoundProvenance)verified.Provenance;
         Assert.AreEqual(ResolutionSource.CallerControllerArtifact, bound.Source);
         Assert.AreEqual(VerificationRelationship.AssertionMethod, bound.Relationship);
         Assert.AreEqual(SignerKeyId, bound.Identity?.Value);
@@ -184,7 +184,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
         Assert.IsTrue(result.IsValid);
         Assert.IsNotNull(result.Verified);
-        Assert.IsFalse(result.Verified!.Value.IsIdentityBound, "The BYOK overload must mint Asserted, never Bound.");
+        Assert.IsFalse(result.Verified.Value.IsIdentityBound, "The BYOK overload must mint Asserted, never Bound.");
         Assert.IsTrue(result.Verified.Value.Provenance is AssertedProvenance);
     }
 
@@ -221,10 +221,10 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
         Assert.IsTrue(result.IsValid, "The resolving overload must verify a genuinely issuer-signed derived proof.");
         Assert.IsNotNull(result.Verified);
-        var verified = result.Verified!.Value;
+        var verified = result.Verified.Value;
         Assert.IsTrue(verified.IsIdentityBound, "The resolving overload must mint Bound, not Asserted.");
         Assert.IsTrue(verified.Provenance is BoundProvenance);
-        var bound = (BoundProvenance)verified.Provenance!;
+        var bound = (BoundProvenance)verified.Provenance;
         Assert.AreEqual(ResolutionSource.CallerControllerArtifact, bound.Source);
         Assert.AreEqual(VerificationRelationship.AssertionMethod, bound.Relationship);
         Assert.AreEqual(SignerKeyId, bound.Identity?.Value);
@@ -292,7 +292,7 @@ internal sealed class EcdsaSd2023ResolvingBindingTests
 
         Assert.IsTrue(result.IsValid);
         Assert.IsNotNull(result.Verified);
-        Assert.IsFalse(result.Verified!.Value.IsIdentityBound, "The BYOK overload must mint Asserted, never Bound.");
+        Assert.IsFalse(result.Verified.Value.IsIdentityBound, "The BYOK overload must mint Asserted, never Bound.");
         Assert.IsTrue(result.Verified.Value.Provenance is AssertedProvenance);
     }
 

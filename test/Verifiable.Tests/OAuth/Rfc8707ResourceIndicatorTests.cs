@@ -1,10 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -105,7 +102,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
@@ -262,7 +259,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Resource] = "not-a-uri"
         };
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(SubjectId);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -303,7 +300,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.RedirectUri] = "https://attacker.example.com/callback",
             [OAuthRequestParameterNames.Resource] = "not-a-uri"
         };
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(SubjectId);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -347,7 +344,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode);
         AssertErrorCode(response, OAuthErrors.InvalidTarget);
@@ -395,7 +392,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             //through the JSON converter would produce.
             [OAuthRequestParameterNames.Resource] = new[] { "", ResourceA }
         };
-        JarVerified verified = new(new UnverifiedJwtHeader(), claims, now, now, now.AddMinutes(5));
+        JarVerified verified = new([], claims, now, now, now.AddMinutes(5));
 
         AuthCodeRequestObject projected = verified.ProjectAuthCode();
 
@@ -437,7 +434,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.Request] = compactJar,
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(SubjectId);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -465,7 +462,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
     public async Task ApplicationDenialWithInvalidTargetReasonProducesInvalidTargetError()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
 
@@ -483,7 +480,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -509,7 +506,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
@@ -537,7 +534,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
@@ -562,7 +559,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
 
@@ -588,7 +585,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, resource: null).ConfigureAwait(false);
 
@@ -615,7 +612,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, resource: null, scope: WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -642,7 +639,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, ResourceA, scope: WellKnownScopes.OpenId).ConfigureAwait(false);
@@ -669,7 +666,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
@@ -699,7 +696,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, [ResourceA, ResourceB]).ConfigureAwait(false);
@@ -733,7 +730,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
         ServerHttpResponse tokenResponse = await TokenAsync(host, material, code, verifier).ConfigureAwait(false);
@@ -762,7 +759,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
         UpgradeToJarSigningCapable(host, material);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         DateTimeOffset now = TimeProvider.GetUtcNow();
@@ -781,7 +778,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            parFields, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = await ExtractRequestUriAsync(parResponse).ConfigureAwait(false);
 
@@ -790,7 +787,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -825,7 +822,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
         UpgradeToJarSigningCapable(host, material);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         PkceParameters directPkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields directFields = new()
@@ -836,7 +833,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString,
             [OAuthRequestParameterNames.Resource] = ResourceA
         };
-        ExchangeContext directContext = new();
+        ExchangeContext directContext = [];
         directContext.SetSubjectId(SubjectId);
         ServerHttpResponse directAuthorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -864,7 +861,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.Request] = compactJar,
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
-        ExchangeContext jarContext = new();
+        ExchangeContext jarContext = [];
         jarContext.SetSubjectId(SubjectId);
         ServerHttpResponse jarAuthorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -896,7 +893,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
         RequestFields fields = new()
@@ -908,7 +905,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         };
         fields.Add(OAuthRequestParameterNames.Resource, ResourceA);
         fields.Add(OAuthRequestParameterNames.Resource, ResourceB);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(SubjectId);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -940,7 +937,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         const string ResourceC = "https://files.example.com/";
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -968,7 +965,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         const string ResourceC = "https://files.example.com/";
         (string code, string verifier) = await PushAuthorizeAsync(
@@ -1044,7 +1041,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
 
@@ -1067,7 +1064,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(
             host, material, [ResourceA, ResourceA]).ConfigureAwait(false);
@@ -1111,7 +1108,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
-            fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         List<string> aud = DecodeAudienceFromTokenResponse(response.Body);
@@ -1150,7 +1147,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
-            fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode);
         AssertErrorCode(response, OAuthErrors.InvalidTarget);
@@ -1191,7 +1188,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.ClientCredentialsToken, WellKnownHttpMethods.Post,
-            fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            fields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         List<string> aud = DecodeAudienceFromTokenResponse(response.Body);
@@ -1249,7 +1246,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse exchangeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.TokenExchangeToken, WellKnownHttpMethods.Post,
-            exchangeFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            exchangeFields, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, exchangeResponse.StatusCode, exchangeResponse.Body);
 
         using JsonDocument exchangeBody = JsonDocument.Parse(exchangeResponse.Body);
@@ -1287,7 +1284,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: Capabilities);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         (string code, string verifier) = await PushAuthorizeAsync(host, material, ResourceA).ConfigureAwait(false);
 
@@ -1314,7 +1311,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, WellKnownHttpMethods.Post,
-            tokenFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            tokenFields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         using JsonDocument responseDoc = JsonDocument.Parse(tokenResponse.Body);
@@ -1348,7 +1345,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -1387,7 +1384,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = await ExtractRequestUriAsync(parResponse).ConfigureAwait(false);
@@ -1397,7 +1394,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -1444,7 +1441,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -1479,7 +1476,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            refreshFields, new ExchangeContext(),
+            refreshFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -1561,7 +1558,7 @@ internal sealed class Rfc8707ResourceIndicatorTests
         {
             SigningKeys = signingKeys
         };
-        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        host.Server.UpdateClient(previous, updated, []);
         material.Registration = updated;
     }
 

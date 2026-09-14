@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -74,7 +68,7 @@ internal sealed class AcdcGraduatedDisclosureFlowTests
 
             //Graduated disclosure: the compact variant blinds the attribute values behind the section SAID; the
             //expanded variant discloses them, yet both prove to the one SAID.
-            Assert.IsInstanceOfType<CompactAcdcSection>(compactMessage.Attribute, "The compact variant carries the attribute section as its SAID, disclosing no values.");
+            _ = Assert.IsInstanceOfType<CompactAcdcSection>(compactMessage.Attribute, "The compact variant carries the attribute section as its SAID, disclosing no values.");
             var disclosed = expandedMessage.Attribute as ExpandedAcdcSection;
             Assert.IsNotNull(disclosed, "The expanded variant discloses the attribute block.");
             Assert.IsTrue(disclosed.Detail.TryGetString(AcdcMessageFields.Issuer, out string? subject) && subject == AcdcFlowWellKnown.GraduatedSubjectAid, "The expanded variant reveals the attribute block's Issuee.");

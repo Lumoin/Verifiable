@@ -1,26 +1,20 @@
-using System;
-using System.Buffers;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Encodings;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
+using System.Buffers;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
-using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tpm.Spec.Algorithms;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -428,7 +422,7 @@ internal sealed class TpmInHouseSimulatorContextRoundTripTests
                     "The restored bound session must read back exactly what the password-authorized write stored.");
 
                 session.SessionAttributes = TpmaSession.CONTINUE_SESSION | TpmaSession.ENCRYPT;
-                var randomInput = new GetRandomInput((ushort)32);
+                var randomInput = new GetRandomInput(32);
                 TpmResult<GetRandomResponse> randomResult = await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
                     tpm, randomInput, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
                 Assert.IsTrue(

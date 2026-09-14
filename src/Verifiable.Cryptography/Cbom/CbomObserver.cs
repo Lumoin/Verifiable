@@ -1,9 +1,5 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Cryptography.Cbom;
 
@@ -40,7 +36,7 @@ public sealed class CbomObserver: IDisposable
         {
             ShouldListenTo = source =>
                 string.Equals(source.Name, CryptoActivitySource.Name, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+            Sample = static (ref _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => Captured.Enqueue(activity)
         };
@@ -73,7 +69,7 @@ public sealed class CbomObserver: IDisposable
         {
             ShouldListenTo = source =>
                 string.Equals(source.Name, runScope.Name, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+            Sample = static (ref _) =>
                 ActivitySamplingResult.AllDataAndRecorded
         };
         ActivitySource.AddActivityListener(rootListener);

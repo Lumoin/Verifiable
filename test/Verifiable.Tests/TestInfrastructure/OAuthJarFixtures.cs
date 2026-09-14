@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -132,7 +128,7 @@ internal static class OAuthJarFixtures
             [WellKnownJoseHeaderNames.Typ] = typValue
         };
 
-        JwtPayload payload = new();
+        JwtPayload payload = [];
         foreach(KeyValuePair<string, object> entry in claims)
         {
             payload[entry.Key] = entry.Value;

@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using Verifiable.Cryptography;
-
 namespace Verifiable.Fido2.Ctap;
 
 /// <summary>

@@ -85,8 +85,8 @@ public static class JsonAppender
     {
         if(Pool.TryDequeue(out StringBuilder? sb))
         {
-            Interlocked.Decrement(ref pooledCount);
-            sb.Clear();
+            _ = Interlocked.Decrement(ref pooledCount);
+            _ = sb.Clear();
 
             return sb;
         }
@@ -150,7 +150,7 @@ public static class JsonAppender
 
         if(Interlocked.Increment(ref pooledCount) > MaxPoolSize)
         {
-            Interlocked.Decrement(ref pooledCount);
+            _ = Interlocked.Decrement(ref pooledCount);
             return;
         }
 
@@ -170,23 +170,23 @@ public static class JsonAppender
         ArgumentNullException.ThrowIfNull(sb);
         ArgumentNullException.ThrowIfNull(dict);
 
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
         foreach(KeyValuePair<string, object> entry in dict)
         {
             if(!first)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
             first = false;
-            sb.Append('"');
+            _ = sb.Append('"');
             AppendEscapedString(sb, entry.Key);
-            sb.Append("\":");
+            _ = sb.Append("\":");
             AppendValue(sb, entry.Value);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -218,30 +218,30 @@ public static class JsonAppender
 
         static bool AppendNull(StringBuilder sb)
         {
-            sb.Append("null");
+            _ = sb.Append("null");
 
             return true;
         }
 
         static bool AppendQuoted(StringBuilder sb, string s)
         {
-            sb.Append('"');
+            _ = sb.Append('"');
             AppendEscapedString(sb, s);
-            sb.Append('"');
+            _ = sb.Append('"');
 
             return true;
         }
 
         static bool AppendBoolLiteral(StringBuilder sb, bool b)
         {
-            sb.Append(b ? "true" : "false");
+            _ = sb.Append(b ? "true" : "false");
 
             return true;
         }
 
         static bool AppendNumber(StringBuilder sb, IFormattable formattable, string? format)
         {
-            sb.Append(formattable.ToString(format, CultureInfo.InvariantCulture));
+            _ = sb.Append(formattable.ToString(format, CultureInfo.InvariantCulture));
 
             return true;
         }
@@ -272,20 +272,20 @@ public static class JsonAppender
         ArgumentNullException.ThrowIfNull(sb);
         ArgumentNullException.ThrowIfNull(items);
 
-        sb.Append('[');
+        _ = sb.Append('[');
         bool first = true;
         foreach(object? item in items)
         {
             if(!first)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
             first = false;
             AppendValue(sb, item);
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
     }
 
 
@@ -320,22 +320,22 @@ public static class JsonAppender
 
         static bool AppendLiteral(StringBuilder sb, string escape)
         {
-            sb.Append(escape);
+            _ = sb.Append(escape);
 
             return true;
         }
 
         static bool AppendControlEscape(StringBuilder sb, char c)
         {
-            sb.Append("\\u");
-            sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+            _ = sb.Append("\\u");
+            _ = sb.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
 
             return true;
         }
 
         static bool AppendChar(StringBuilder sb, char c)
         {
-            sb.Append(c);
+            _ = sb.Append(c);
 
             return true;
         }
@@ -357,14 +357,14 @@ public static class JsonAppender
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         AppendEscapedString(sb, key);
-        sb.Append("\":\"");
+        _ = sb.Append("\":\"");
         AppendEscapedString(sb, value);
-        sb.Append('"');
+        _ = sb.Append('"');
 
         first = false;
     }
@@ -382,13 +382,13 @@ public static class JsonAppender
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         AppendEscapedString(sb, key);
-        sb.Append("\":");
-        sb.Append(value.ToString(CultureInfo.InvariantCulture));
+        _ = sb.Append("\":");
+        _ = sb.Append(value.ToString(CultureInfo.InvariantCulture));
 
         first = false;
     }
@@ -406,13 +406,13 @@ public static class JsonAppender
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         AppendEscapedString(sb, key);
-        sb.Append("\":");
-        sb.Append(value ? "true" : "false");
+        _ = sb.Append("\":");
+        _ = sb.Append(value ? "true" : "false");
 
         first = false;
     }
@@ -447,28 +447,28 @@ public static class JsonAppender
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         AppendEscapedString(sb, key);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         bool itemFirst = true;
         foreach(string value in values)
         {
             if(!itemFirst)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
             itemFirst = false;
-            sb.Append('"');
+            _ = sb.Append('"');
             AppendEscapedString(sb, value);
-            sb.Append('"');
+            _ = sb.Append('"');
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -486,28 +486,28 @@ public static class JsonAppender
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         AppendEscapedString(sb, key);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         bool itemFirst = true;
         foreach(Uri value in values)
         {
             if(!itemFirst)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
             itemFirst = false;
-            sb.Append('"');
+            _ = sb.Append('"');
             AppendEscapedString(sb, value.OriginalString);
-            sb.Append('"');
+            _ = sb.Append('"');
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -527,13 +527,13 @@ public static class JsonAppender
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         AppendEscapedString(sb, key);
-        sb.Append("\":");
-        sb.Append(rawJsonValue);
+        _ = sb.Append("\":");
+        _ = sb.Append(rawJsonValue);
 
         first = false;
     }

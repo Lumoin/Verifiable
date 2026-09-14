@@ -34,7 +34,7 @@ public abstract class JAdESSigningPayloadInput
 
 /// <summary>An attached JWS Payload (JA-4-07): the bytes both become the wire <c>payload</c> field and are what the Signing Input covers.</summary>
 [DebuggerDisplay("JAdESAttachedPayloadInput: {Payload.Length} bytes")]
-public sealed class JAdESAttachedPayloadInput : JAdESSigningPayloadInput
+public sealed class JAdESAttachedPayloadInput: JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESAttachedPayloadInput"/>.</summary>
     /// <param name="payload">The payload bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory for the duration of the call.</param>
@@ -50,7 +50,7 @@ public sealed class JAdESAttachedPayloadInput : JAdESSigningPayloadInput
 
 /// <summary>A detached JWS Payload agreed out of band, without a <c>sigD</c> header parameter.</summary>
 [DebuggerDisplay("JAdESDetachedExternalPayloadInput: {Payload.Length} bytes")]
-public sealed class JAdESDetachedExternalPayloadInput : JAdESSigningPayloadInput
+public sealed class JAdESDetachedExternalPayloadInput: JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedExternalPayloadInput"/>.</summary>
     /// <param name="payload">The bytes the Signing Input covers. <strong>Borrowed</strong> view. The wire <c>payload</c> field is omitted.</param>
@@ -66,7 +66,7 @@ public sealed class JAdESDetachedExternalPayloadInput : JAdESSigningPayloadInput
 
 /// <summary>The <c>HttpHeaders</c> mechanism of <c>sigD</c> (clause 5.2.8.2): in-library canonicalization, no dereferencing.</summary>
 [DebuggerDisplay("JAdESDetachedHttpHeadersPayloadInput: {HeaderNames.Count} headers")]
-public sealed class JAdESDetachedHttpHeadersPayloadInput : JAdESSigningPayloadInput
+public sealed class JAdESDetachedHttpHeadersPayloadInput: JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedHttpHeadersPayloadInput"/>.</summary>
     /// <param name="headerNames">The <c>pars</c> member: lowercased HTTP header field names, in wire order (JA-5.2.8.2-04/-05).</param>
@@ -87,7 +87,7 @@ public sealed class JAdESDetachedHttpHeadersPayloadInput : JAdESSigningPayloadIn
 
 /// <summary>The <c>ObjectIdByURI</c> mechanism of <c>sigD</c> (clause 5.2.8.3.2): dereferenced, no digests.</summary>
 [DebuggerDisplay("JAdESDetachedObjectIdByUriPayloadInput: {References.Count} references")]
-public sealed class JAdESDetachedObjectIdByUriPayloadInput : JAdESSigningPayloadInput
+public sealed class JAdESDetachedObjectIdByUriPayloadInput: JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedObjectIdByUriPayloadInput"/>.</summary>
     /// <param name="references">The <c>pars</c> entries, in wire order (JA-5.2.8.1-16/-17).</param>
@@ -106,7 +106,7 @@ public sealed class JAdESDetachedObjectIdByUriPayloadInput : JAdESSigningPayload
 /// no digest travels in yet, because <see cref="JAdESSignatureCreation"/> computes it (JA-5.2.8.3.3-04).
 /// </summary>
 [DebuggerDisplay("JAdESDetachedObjectIdByUriHashPayloadInput: {HashAlgorithm}, {References.Count} references")]
-public sealed class JAdESDetachedObjectIdByUriHashPayloadInput : JAdESSigningPayloadInput
+public sealed class JAdESDetachedObjectIdByUriHashPayloadInput: JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedObjectIdByUriHashPayloadInput"/>.</summary>
     /// <param name="hashAlgorithm">The <c>hashM</c> value (JA-5.2.8.1-18/-19) — resolves through the registered digest delegate; only SHA-256/384/512 are supported.</param>
@@ -127,7 +127,7 @@ public sealed class JAdESDetachedObjectIdByUriHashPayloadInput : JAdESSigningPay
 
 /// <summary>A <c>sigD</c> mechanism this document does not itself define — the open extension point JA-5.2.8.1-C1 reserves.</summary>
 [DebuggerDisplay("JAdESDetachedUnknownMechanismPayloadInput: {MechanismIdentifier}")]
-public sealed class JAdESDetachedUnknownMechanismPayloadInput : JAdESSigningPayloadInput
+public sealed class JAdESDetachedUnknownMechanismPayloadInput: JAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="JAdESDetachedUnknownMechanismPayloadInput"/>.</summary>
     /// <param name="mechanismIdentifier">The <c>mId</c> value, verbatim.</param>
@@ -162,7 +162,7 @@ public sealed class JAdESDetachedUnknownMechanismPayloadInput : JAdESSigningPayl
 /// of that argument transfers to this call and <see cref="Headers"/> shares owned members with it.
 /// </remarks>
 [DebuggerDisplay("JAdESSignatureCreationResult: alg={Headers.Algorithm}")]
-public sealed class JAdESSignatureCreationResult : IDisposable
+public sealed class JAdESSignatureCreationResult: IDisposable
 {
     private bool disposed;
 
@@ -505,105 +505,105 @@ public static class JAdESSignatureCreation
                 return new PayloadResolution(null, external.Payload, null);
 
             case JAdESDetachedHttpHeadersPayloadInput httpHeaders:
-                {
-                    var reference = new JAdESHttpHeadersReference(httpHeaders.HeaderNames);
-                    PooledMemory canonicalized = JAdESDetachedObjectDereferencing.Canonicalize(reference, httpHeaders.Context, pool);
-                    return new PayloadResolution(reference, canonicalized.AsReadOnlyMemory(), canonicalized);
-                }
+            {
+                var reference = new JAdESHttpHeadersReference(httpHeaders.HeaderNames);
+                PooledMemory canonicalized = JAdESDetachedObjectDereferencing.Canonicalize(reference, httpHeaders.Context, pool);
+                return new PayloadResolution(reference, canonicalized.AsReadOnlyMemory(), canonicalized);
+            }
 
             case JAdESDetachedObjectIdByUriPayloadInput objectIdByUri:
+            {
+                RequireDereference(dereferenceDelegate, context, "ObjectIdByURI", out JAdESDetachedObjectDereferenceDelegate checkedDereference, out JAdESDetachedObjectDereferenceContext checkedContext);
+                PooledMemory reconstructed = await JAdESDetachedObjectDereferencing.ReconstructObjectIdByUriPayloadAsync(
+                    objectIdByUri.References, base64UrlEncodeEachObject, checkedDereference, checkedContext,
+                    base64UrlEncoder, pool, cancellationToken).ConfigureAwait(false);
+
+                var entries = new List<JAdESReferencedDataObject>(objectIdByUri.References.Count);
+                for(int i = 0; i < objectIdByUri.References.Count; ++i)
                 {
-                    RequireDereference(dereferenceDelegate, context, "ObjectIdByURI", out JAdESDetachedObjectDereferenceDelegate checkedDereference, out JAdESDetachedObjectDereferenceContext checkedContext);
-                    PooledMemory reconstructed = await JAdESDetachedObjectDereferencing.ReconstructObjectIdByUriPayloadAsync(
-                        objectIdByUri.References, base64UrlEncodeEachObject, checkedDereference, checkedContext,
-                        base64UrlEncoder, pool, cancellationToken).ConfigureAwait(false);
-
-                    var entries = new List<JAdESReferencedDataObject>(objectIdByUri.References.Count);
-                    for(int i = 0; i < objectIdByUri.References.Count; ++i)
-                    {
-                        entries.Add(new JAdESReferencedDataObject(objectIdByUri.References[i].Reference, objectIdByUri.References[i].ContentType));
-                    }
-
-                    var reference = new JAdESObjectIdByUriReference(entries);
-                    return new PayloadResolution(reference, reconstructed.AsReadOnlyMemory(), reconstructed);
+                    entries.Add(new JAdESReferencedDataObject(objectIdByUri.References[i].Reference, objectIdByUri.References[i].ContentType));
                 }
+
+                var reference = new JAdESObjectIdByUriReference(entries);
+                return new PayloadResolution(reference, reconstructed.AsReadOnlyMemory(), reconstructed);
+            }
 
             case JAdESDetachedObjectIdByUriHashPayloadInput objectIdByUriHash:
+            {
+                RequireDereference(dereferenceDelegate, context, "ObjectIdByURIHash", out JAdESDetachedObjectDereferenceDelegate checkedDereference, out JAdESDetachedObjectDereferenceContext checkedContext);
+                (Tag digestTag, int outputByteLength) = ResolveDigestParameters(objectIdByUriHash.HashAlgorithm);
+
+                var entries = new List<JAdESReferencedDataObject>(objectIdByUriHash.References.Count);
+                try
                 {
-                    RequireDereference(dereferenceDelegate, context, "ObjectIdByURIHash", out JAdESDetachedObjectDereferenceDelegate checkedDereference, out JAdESDetachedObjectDereferenceContext checkedContext);
-                    (Tag digestTag, int outputByteLength) = ResolveDigestParameters(objectIdByUriHash.HashAlgorithm);
-
-                    var entries = new List<JAdESReferencedDataObject>(objectIdByUriHash.References.Count);
-                    try
+                    for(int i = 0; i < objectIdByUriHash.References.Count; ++i)
                     {
-                        for(int i = 0; i < objectIdByUriHash.References.Count; ++i)
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        JAdESDetachedObjectReferenceInput current = objectIdByUriHash.References[i];
+                        JAdESDetachedObjectDereferenceResult dereferenced = await checkedDereference(
+                            current.Reference, checkedContext, pool, cancellationToken).ConfigureAwait(false);
+
+                        if(dereferenced is not JAdESDetachedObjectDereferenceSuccess success)
                         {
-                            cancellationToken.ThrowIfCancellationRequested();
+                            string reason = dereferenced is JAdESDetachedObjectDereferenceFailure failure
+                                ? failure.Reason
+                                : "the dereference delegate returned neither a success nor a failure result.";
 
-                            JAdESDetachedObjectReferenceInput current = objectIdByUriHash.References[i];
-                            JAdESDetachedObjectDereferenceResult dereferenced = await checkedDereference(
-                                current.Reference, checkedContext, pool, cancellationToken).ConfigureAwait(false);
-
-                            if(dereferenced is not JAdESDetachedObjectDereferenceSuccess success)
-                            {
-                                string reason = dereferenced is JAdESDetachedObjectDereferenceFailure failure
-                                    ? failure.Reason
-                                    : "the dereference delegate returned neither a success nor a failure result.";
-
-                                throw new JAdESDetachedObjectDereferenceException(current.Reference, reason);
-                            }
-
-                            using(success.Content)
-                            {
-                                DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
-                                    success.Content.AsReadOnlyMemory(), outputByteLength, digestTag, pool,
-                                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                                entries.Add(new JAdESReferencedDataObject(current.Reference, current.ContentType, digest));
-                            }
+                            throw new JAdESDetachedObjectDereferenceException(current.Reference, reason);
                         }
 
-                        var reference = new JAdESObjectIdByUriHashReference(objectIdByUriHash.HashAlgorithm, entries);
-
-                        //JA-5.2.8.3.3-05: the JWS Payload contributes as an empty stream to the JWS Signature
-                        //Value computation under this mechanism -- no rented Signing-Input buffer to dispose.
-                        return new PayloadResolution(reference, ReadOnlyMemory<byte>.Empty, null);
-                    }
-                    catch
-                    {
-                        for(int i = 0; i < entries.Count; ++i)
+                        using(success.Content)
                         {
-                            entries[i].Dispose();
-                        }
+                            DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
+                                success.Content.AsReadOnlyMemory(), outputByteLength, digestTag, pool,
+                                cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                        throw;
+                            entries.Add(new JAdESReferencedDataObject(current.Reference, current.ContentType, digest));
+                        }
                     }
+
+                    var reference = new JAdESObjectIdByUriHashReference(objectIdByUriHash.HashAlgorithm, entries);
+
+                    //JA-5.2.8.3.3-05: the JWS Payload contributes as an empty stream to the JWS Signature
+                    //Value computation under this mechanism -- no rented Signing-Input buffer to dispose.
+                    return new PayloadResolution(reference, ReadOnlyMemory<byte>.Empty, null);
                 }
+                catch
+                {
+                    for(int i = 0; i < entries.Count; ++i)
+                    {
+                        entries[i].Dispose();
+                    }
+
+                    throw;
+                }
+            }
 
             case JAdESDetachedUnknownMechanismPayloadInput unknown:
+            {
+                if(unknownHandler is null)
                 {
-                    if(unknownHandler is null)
-                    {
-                        throw new NotSupportedException(
-                            $"sigD.mId '{unknown.MechanismIdentifier}' is neither ObjectIdByURI, " +
-                            "ObjectIdByURIHash, nor HttpHeaders, and no unknown-mechanism handler was supplied " +
-                            "(ETSI TS 119 182-1 V1.2.1, clause 5.2.8.1, JA-5.2.8.1-C1).");
-                    }
-
-                    RequireContext(context, "the unknown-mechanism handler", out JAdESDetachedObjectDereferenceContext checkedUnknownContext);
-
-                    var entries = new List<JAdESReferencedDataObject>(unknown.References.Count);
-                    for(int i = 0; i < unknown.References.Count; ++i)
-                    {
-                        entries.Add(new JAdESReferencedDataObject(unknown.References[i].Reference, unknown.References[i].ContentType));
-                    }
-
-                    var reference = new JAdESUnknownDetachedDataObjectReference(unknown.MechanismIdentifier, entries, unknown.HashAlgorithm);
-                    PooledMemory payload = await unknownHandler(
-                        unknown.MechanismIdentifier, unknown.References, unknown.HashAlgorithm, checkedUnknownContext, pool, cancellationToken).ConfigureAwait(false);
-
-                    return new PayloadResolution(reference, payload.AsReadOnlyMemory(), payload);
+                    throw new NotSupportedException(
+                        $"sigD.mId '{unknown.MechanismIdentifier}' is neither ObjectIdByURI, " +
+                        "ObjectIdByURIHash, nor HttpHeaders, and no unknown-mechanism handler was supplied " +
+                        "(ETSI TS 119 182-1 V1.2.1, clause 5.2.8.1, JA-5.2.8.1-C1).");
                 }
+
+                RequireContext(context, "the unknown-mechanism handler", out JAdESDetachedObjectDereferenceContext checkedUnknownContext);
+
+                var entries = new List<JAdESReferencedDataObject>(unknown.References.Count);
+                for(int i = 0; i < unknown.References.Count; ++i)
+                {
+                    entries.Add(new JAdESReferencedDataObject(unknown.References[i].Reference, unknown.References[i].ContentType));
+                }
+
+                var reference = new JAdESUnknownDetachedDataObjectReference(unknown.MechanismIdentifier, entries, unknown.HashAlgorithm);
+                PooledMemory payload = await unknownHandler(
+                    unknown.MechanismIdentifier, unknown.References, unknown.HashAlgorithm, checkedUnknownContext, pool, cancellationToken).ConfigureAwait(false);
+
+                return new PayloadResolution(reference, payload.AsReadOnlyMemory(), payload);
+            }
 
             default:
                 throw new NotSupportedException($"Unrecognized {nameof(JAdESSigningPayloadInput)} kind '{input.GetType().Name}'.");
@@ -706,7 +706,7 @@ public static class JAdESSignatureCreation
     /// <summary>Returns <paramref name="existing"/> with <paramref name="label"/> appended, unless already present.</summary>
     private static List<string> MergeCriticalLabel(IReadOnlyList<string>? existing, string label)
     {
-        var merged = existing is null ? new List<string>() : new List<string>(existing);
+        List<string> merged = existing is null ? [] : [.. existing];
 
         for(int i = 0; i < merged.Count; ++i)
         {

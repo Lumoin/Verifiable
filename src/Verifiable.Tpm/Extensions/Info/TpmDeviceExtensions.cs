@@ -1,15 +1,8 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Extensions.Pcr;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Extensions.Info;
 
@@ -299,7 +292,7 @@ public static class TpmDeviceExtensions
             {
                 if(bytes[i] != 0)
                 {
-                    sb.Append((char)bytes[i]);
+                    _ = sb.Append((char)bytes[i]);
                 }
             }
         }

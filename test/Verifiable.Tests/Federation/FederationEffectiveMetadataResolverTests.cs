@@ -155,7 +155,7 @@ internal sealed class FederationEffectiveMetadataResolverTests
         Assert.IsNotNull(result);
         Assert.IsTrue(result.IsSuccess);
         Assert.IsNotNull(result.EffectiveMetadata);
-        Assert.IsTrue(result.EffectiveMetadata!.ContainsKey("grant_types"));
+        Assert.IsTrue(result.EffectiveMetadata.ContainsKey("grant_types"));
     }
 
 

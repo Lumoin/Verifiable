@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -26,7 +23,7 @@ internal sealed class ApduCommandExtensionsTests
     [TestMethod]
     public async Task SelectReturnsParsedFileControlInformation()
     {
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -56,7 +53,7 @@ internal sealed class ApduCommandExtensionsTests
     [TestMethod]
     public async Task SelectFileNotFoundIsCardError()
     {
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -79,7 +76,7 @@ internal sealed class ApduCommandExtensionsTests
     [TestMethod]
     public async Task SelectTransportErrorPropagates()
     {
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -227,7 +224,7 @@ internal sealed class ApduCommandExtensionsTests
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0x8000, 1, pool, TestContext.CancellationToken)).ConfigureAwait(false);
     }
 
@@ -238,10 +235,10 @@ internal sealed class ApduCommandExtensionsTests
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0, 0, pool, TestContext.CancellationToken)).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.ReadBinaryAsync(0, 257, pool, TestContext.CancellationToken)).ConfigureAwait(false);
     }
 
@@ -252,10 +249,10 @@ internal sealed class ApduCommandExtensionsTests
             ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0)));
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.GetChallengeAsync(0, pool, TestContext.CancellationToken)).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(
             async () => await device.GetChallengeAsync(257, pool, TestContext.CancellationToken)).ConfigureAwait(false);
     }
 }

@@ -1,10 +1,5 @@
 using System.Text;
-using Verifiable.Core;
-using Verifiable.Core.SecurityEvents;
-using Verifiable.JCose;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Logout;
 
@@ -152,8 +147,12 @@ public static class GlobalTokenRevocationEndpoints
                     GlobalTokenRevocationOutcome.Forbidden =>
                         (null, ServerHttpResponse.Forbidden(
                             OAuthErrors.UnauthorizedClient, "Not authorized to revoke this subject.")),
-                    _ => (null, ServerHttpResponse.UnprocessableEntity(
+                    GlobalTokenRevocationOutcome.Unprocessable =>
+                        (null, ServerHttpResponse.UnprocessableEntity(
                             OAuthErrors.InvalidRequest, "The revocation request could not be processed.")),
+
+                    _ => (null, ServerHttpResponse.UnprocessableEntity(
+                        OAuthErrors.InvalidRequest, "The revocation request could not be processed."))
                 };
             },
 

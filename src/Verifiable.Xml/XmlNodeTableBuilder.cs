@@ -93,7 +93,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         NamespaceScopeBuckets = new PooledStructList<int>(pool, InitialNamespaceScopeBucketCount);
         for(int i = 0; i < InitialNamespaceScopeBucketCount; ++i)
         {
-            NamespaceScopeBuckets.Add(-1);
+            _ = NamespaceScopeBuckets.Add(-1);
         }
 
         StagedAttributes = new PooledStructList<StagedAttribute>(pool, 16);
@@ -107,7 +107,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
     /// <summary>
     /// The node index new nodes attach to: the innermost open element, or the root node.
     /// </summary>
-    private int CurrentParent => ElementStack.Count == 0 ? 0 : ElementStack[ElementStack.Count - 1].NodeIndex;
+    private int CurrentParent => ElementStack.Count == 0 ? 0 : ElementStack[^1].NodeIndex;
 
 
     /// <summary>
@@ -122,7 +122,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
     {
         error = default;
         xmlNamespaceUriOffset = StringHeap.AddRange(XmlCharacters.XmlNamespaceUri);
-        Nodes.Add(new NodeRecord
+        _ = Nodes.Add(new NodeRecord
         {
             Kind = (int)XmlNodeKind.Root,
             Parent = -1,
@@ -143,6 +143,11 @@ internal sealed class XmlNodeTableBuilder: IDisposable
                 XmlTokenKind.Comment => AppendCommentNode(in token),
                 XmlTokenKind.ProcessingInstruction => AppendProcessingInstructionNode(in token),
                 XmlTokenKind.WhitespaceOutsideRoot => true,
+
+                //A default token, an attribute (consumed inline by the element-start handler), and the two
+                //tag-closing tokens (which only end what ElementStart already opened) need no handling here.
+                XmlTokenKind.None or XmlTokenKind.Attribute or XmlTokenKind.ElementStartClose
+                    or XmlTokenKind.ElementEmptyClose => true,
                 _ => true
             };
             if(!isHandled)
@@ -262,7 +267,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         FlushText();
         int valueOffset = StringHeap.Count;
         AppendLineNormalized(StringHeap, token.Value);
-        AppendNode(new NodeRecord
+        _ = AppendNode(new NodeRecord
         {
             Kind = (int)XmlNodeKind.Comment,
             Parent = CurrentParent,
@@ -288,7 +293,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         int targetOffset = StringHeap.AddRange(token.Name);
         int valueOffset = StringHeap.Count;
         AppendLineNormalized(StringHeap, token.Value);
-        AppendNode(new NodeRecord
+        _ = AppendNode(new NodeRecord
         {
             Kind = (int)XmlNodeKind.ProcessingInstruction,
             Parent = CurrentParent,
@@ -333,7 +338,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
 
             if(next.Kind == XmlTokenKind.Attribute)
             {
-                StagedAttributes.Add(new StagedAttribute
+                _ = StagedAttributes.Add(new StagedAttribute
                 {
                     NameOffset = (int)(next.ByteOffset - baseOffset),
                     NameLength = next.Name.Length,
@@ -444,7 +449,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             int valueLength = StringHeap.Count - valueOffset;
             int attributePrefixOffset = StringHeap.AddRange(attributePrefix);
             int attributeLocalOffset = StringHeap.AddRange(attributeLocal);
-            Attributes.Add(new AttributeRecord
+            _ = Attributes.Add(new AttributeRecord
             {
                 Parent = elementIndex,
                 PrefixOffset = attributePrefixOffset,
@@ -456,7 +461,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
                 ValueOffset = valueOffset,
                 ValueLength = valueLength
             });
-            AttributeSourceOffsets.Add(staged.NameOffset);
+            _ = AttributeSourceOffsets.Add(staged.NameOffset);
         }
 
         int attributeCount = Attributes.Count - attributeFirst;
@@ -482,7 +487,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         }
         else
         {
-            ElementStack.Add(new ElementStackEntry
+            _ = ElementStack.Add(new ElementStackEntry
             {
                 NodeIndex = elementIndex,
                 NamespaceScopeMark = scopeMark,
@@ -569,7 +574,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         }
 
         int prefixOffset = StringHeap.AddRange(declaredPrefix);
-        NamespaceDeclarations.Add(new NamespaceDeclarationRecord
+        _ = NamespaceDeclarations.Add(new NamespaceDeclarationRecord
         {
             Parent = elementIndex,
             PrefixOffset = prefixOffset,
@@ -714,7 +719,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         NamespaceScopeBuckets.Truncate(0);
         for(int i = 0; i < newBucketCount; ++i)
         {
-            NamespaceScopeBuckets.Add(-1);
+            _ = NamespaceScopeBuckets.Add(-1);
         }
 
         for(int i = 0; i < NamespaceScope.Count; ++i)
@@ -740,7 +745,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
     private bool TryHandleElementEnd(ReadOnlySpan<byte> working, in XmlToken token, ref XmlReadError error)
     {
         FlushText();
-        ElementStackEntry top = ElementStack[ElementStack.Count - 1];
+        ElementStackEntry top = ElementStack[^1];
         if(!token.Name.SequenceEqual(working.Slice(top.QNameOffset, top.QNameLength)))
         {
             error = new XmlReadError(XmlReadFailure.MismatchedTag, token.ByteOffset + 2);
@@ -769,7 +774,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         }
 
         int valueOffset = StringHeap.AddRange(TextAccumulator.AsSpan());
-        AppendNode(new NodeRecord
+        _ = AppendNode(new NodeRecord
         {
             Kind = (int)XmlNodeKind.Text,
             Parent = CurrentParent,
@@ -830,8 +835,8 @@ internal sealed class XmlNodeTableBuilder: IDisposable
         for(int i = 0; i < count; ++i)
         {
             StagedAttribute staged = StagedAttributes[i];
-            HashKeyScratch.Add(Fnv1a(working.Slice(staged.NameOffset, staged.NameLength), FnvOffsetBasis));
-            HashIndexScratch.Add(i);
+            _ = HashKeyScratch.Add(Fnv1a(working.Slice(staged.NameOffset, staged.NameLength), FnvOffsetBasis));
+            _ = HashIndexScratch.Add(i);
         }
 
         Span<ulong> keys = HashKeyScratch.AsMutableSpan();
@@ -886,8 +891,8 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             ulong hash = Fnv1a(heap.Slice(record.NamespaceOffset, record.NamespaceLength), FnvOffsetBasis);
             hash *= FnvPrime;
             hash = Fnv1a(heap.Slice(record.LocalOffset, record.LocalLength), hash);
-            HashKeyScratch.Add(hash);
-            HashIndexScratch.Add(i);
+            _ = HashKeyScratch.Add(hash);
+            _ = HashIndexScratch.Add(i);
         }
 
         Span<ulong> keys = HashKeyScratch.AsMutableSpan();
@@ -936,7 +941,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             byte octet = raw[i];
             if(octet == 0x0D)
             {
-                destination.Add(0x0A);
+                _ = destination.Add(0x0A);
                 i += i + 1 < raw.Length && raw[i + 1] == 0x0A ? 2 : 1;
                 continue;
             }
@@ -951,7 +956,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
                 continue;
             }
 
-            destination.Add(octet);
+            _ = destination.Add(octet);
             i++;
         }
 
@@ -980,14 +985,14 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             byte octet = raw[i];
             if(octet == 0x0D)
             {
-                destination.Add(0x20);
+                _ = destination.Add(0x20);
                 i += i + 1 < raw.Length && raw[i + 1] == 0x0A ? 2 : 1;
                 continue;
             }
 
             if(octet is 0x0A or 0x09)
             {
-                destination.Add(0x20);
+                _ = destination.Add(0x20);
                 i++;
                 continue;
             }
@@ -1002,7 +1007,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
                 continue;
             }
 
-            destination.Add(octet);
+            _ = destination.Add(octet);
             i++;
         }
 
@@ -1052,7 +1057,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
                     return false;
                 }
 
-                codePoint = codePoint * (isHex ? 16 : 10) + digit;
+                codePoint = (codePoint * (isHex ? 16 : 10)) + digit;
                 if(codePoint > 0x10FFFF)
                 {
                     codePoint = 0x110000;
@@ -1078,7 +1083,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             var rune = new Rune((int)codePoint);
             Span<byte> scratch = stackalloc byte[4];
             int written = rune.EncodeToUtf8(scratch);
-            destination.AddRange(scratch[..written]);
+            _ = destination.AddRange(scratch[..written]);
             i = cursor + 1;
 
             return true;
@@ -1113,7 +1118,7 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             return false;
         }
 
-        destination.Add(replacement);
+        _ = destination.Add(replacement);
         i = nameCursor + 1;
 
         return true;
@@ -1169,12 +1174,12 @@ internal sealed class XmlNodeTableBuilder: IDisposable
             byte octet = raw[i];
             if(octet == 0x0D)
             {
-                destination.Add(0x0A);
+                _ = destination.Add(0x0A);
                 i += i + 1 < raw.Length && raw[i + 1] == 0x0A ? 2 : 1;
                 continue;
             }
 
-            destination.Add(octet);
+            _ = destination.Add(octet);
             i++;
         }
     }

@@ -1,11 +1,9 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
@@ -14,7 +12,6 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.JCose;
 
@@ -94,7 +91,7 @@ internal sealed class JAdESSignatureValidationTests
 
         using JAdESValidationResult missingExternal = await ValidateAsync(wireBytes, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(missingExternal.IsValid);
-        Assert.IsInstanceOfType<JAdESDetachedObjectUnresolvableFailure>(missingExternal.Failure);
+        _ = Assert.IsInstanceOfType<JAdESDetachedObjectUnresolvableFailure>(missingExternal.Failure);
 
         using JAdESValidationResult withExternal = await ValidateAsync(
             wireBytes, publicKey, TestContext.CancellationToken, externalDetachedPayload: payload).ConfigureAwait(false);
@@ -200,7 +197,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult tampered = await ValidateAsync(
             wireBytes, publicKey, TestContext.CancellationToken, dereference: DereferenceFromStoreAsync, dereferenceContext: context).ConfigureAwait(false);
         Assert.IsFalse(tampered.IsValid);
-        Assert.IsInstanceOfType<JAdESDetachedObjectDigestMismatchFailure>(tampered.Failure);
+        _ = Assert.IsInstanceOfType<JAdESDetachedObjectDigestMismatchFailure>(tampered.Failure);
     }
 
 
@@ -289,7 +286,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult result = await ValidateAsync(tamperedWire, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<JAdESSignatureInvalidFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESSignatureInvalidFailure>(result.Failure);
     }
 
 
@@ -317,7 +314,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult result = await ValidateAsync(wireBytes, wrongPublicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<JAdESSignatureInvalidFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESSignatureInvalidFailure>(result.Failure);
     }
 
 
@@ -331,7 +328,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult result = await ValidateAsync("not-a-jws"u8.ToArray(), publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
         Assert.IsNull(result.Headers);
     }
 
@@ -357,7 +354,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult result = await ValidateAsync(wireBytes, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
         Assert.IsNull(result.Headers);
     }
 
@@ -378,7 +375,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult result = await ValidateAsync(wireBytes, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
         Assert.IsNull(result.Headers);
     }
 
@@ -406,7 +403,7 @@ internal sealed class JAdESSignatureValidationTests
         using JAdESValidationResult result = await ValidateAsync(multiSignerWire, publicKey, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -434,7 +431,7 @@ internal sealed class JAdESSignatureValidationTests
 
         Assert.IsFalse(result.IsValid);
         var failure = (JAdESRuleViolationsFailure)result.Failure!;
-        Assert.Contains(static (JAdESRuleViolation v) => v is JAdESX5tForbiddenViolation, failure.Violations);
+        Assert.Contains(static v => v is JAdESX5tForbiddenViolation, failure.Violations);
         Assert.IsNotNull(result.Headers, "Decoded facts must survive a post-decode rule-violation failure.");
     }
 
@@ -461,7 +458,7 @@ internal sealed class JAdESSignatureValidationTests
 
         Assert.IsFalse(result.IsValid);
         var failure = (JAdESRuleViolationsFailure)result.Failure!;
-        Assert.Contains(static (JAdESRuleViolation v) => v is JAdESSigningCertificateIdentificationViolation, failure.Violations);
+        Assert.Contains(static v => v is JAdESSigningCertificateIdentificationViolation, failure.Violations);
         Assert.IsNotNull(result.Headers);
         Assert.AreEqual(WellKnownJwaValues.Es256, result.Headers!.Algorithm);
     }

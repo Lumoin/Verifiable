@@ -1,13 +1,11 @@
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.BouncyCastle;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
@@ -136,7 +134,7 @@ internal sealed class KeriRotationTests
         string[] tooFew = [NextKeys[0]];
         KeriRotationEvent rotation = Rotation(tooFew, backersToRemove: Empty, backersToAdd: Empty);
 
-        await Assert.ThrowsExactlyAsync<KeriException>(async () => await KeriKeyStateMachine.RotateAsync(inception, rotation, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None));
+        _ = await Assert.ThrowsExactlyAsync<KeriException>(async () => await KeriKeyStateMachine.RotateAsync(inception, rotation, AgileDigest, BaseMemoryPool.Shared, CancellationToken.None));
     }
 
 

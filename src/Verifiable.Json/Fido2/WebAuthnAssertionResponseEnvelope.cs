@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 

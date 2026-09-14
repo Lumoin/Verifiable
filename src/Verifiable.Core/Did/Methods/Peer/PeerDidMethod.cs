@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods.Peer
 {
     /// <summary>
@@ -38,7 +36,7 @@ namespace Verifiable.Core.Did.Methods.Peer
         /// <param name="didString">The DID string to associate with this instance. The string must start with <see cref="Prefix"/>.</param>
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="didString"/> is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">Thrown if <paramref name="didString"/> does not start with <see cref="Prefix"/>.</exception>
-        public PeerDidMethod(string didString): base(didString)
+        public PeerDidMethod(string didString) : base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
             if(!didString.StartsWith(Prefix, StringComparison.Ordinal))

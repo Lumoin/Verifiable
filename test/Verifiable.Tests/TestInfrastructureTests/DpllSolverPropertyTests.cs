@@ -171,7 +171,7 @@ internal sealed class DpllSolverPropertyTests
                 var clause = new Literal[holes];
                 for(int h = 0; h < holes; h++)
                 {
-                    clause[h] = new Literal(p * holes + h, true);
+                    clause[h] = new Literal((p * holes) + h, true);
                 }
 
                 clauses.Add(clause);
@@ -186,8 +186,8 @@ internal sealed class DpllSolverPropertyTests
                     {
                         clauses.Add(
                         [
-                            new Literal(p1 * holes + h, false),
-                            new Literal(p2 * holes + h, false)
+                            new Literal((p1 * holes) + h, false),
+                            new Literal((p2 * holes) + h, false)
                         ]);
                     }
                 }

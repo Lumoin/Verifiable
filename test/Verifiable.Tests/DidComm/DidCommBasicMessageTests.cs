@@ -1,9 +1,6 @@
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.DidComm;
 using Verifiable.DidComm.BasicMessage;
-using Verifiable.Foundation;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.DidComm;
@@ -39,7 +36,7 @@ internal sealed class DidCommBasicMessageTests
         DidCommMessage parsed = RoundTrip(message);
         Assert.AreEqual(1547577721, parsed.CreatedTime, "created_time round-trips as the standard header.");
         Assert.IsTrue(parsed.TryInterpretBasicMessage(out BasicMessage? recovered));
-        Assert.AreEqual("Your hovercraft is full of eels.", recovered!.Content);
+        Assert.AreEqual("Your hovercraft is full of eels.", recovered.Content);
         Assert.IsNull(recovered.Lang, "No lang header was set.");
     }
 
@@ -56,7 +53,7 @@ internal sealed class DidCommBasicMessageTests
         //Recovering Lang proves it was a TOP-LEVEL header: TryInterpret reads lang from the extension-header
         //bag (AdditionalHeaders), never from body, so a body-nested lang would recover as null.
         Assert.IsTrue(RoundTrip(message).TryInterpretBasicMessage(out BasicMessage? recovered));
-        Assert.AreEqual("Hei maailma", recovered!.Content);
+        Assert.AreEqual("Hei maailma", recovered.Content);
         Assert.AreEqual("fi", recovered.Lang, "lang round-trips as a top-level header, not a body member.");
     }
 
@@ -68,7 +65,7 @@ internal sealed class DidCommBasicMessageTests
         DidCommMessage message = basic.CreateBasicMessage("bm-3", createdTime: 1700000000, from: Alice);
 
         Assert.IsTrue(RoundTrip(message).TryInterpretBasicMessage(out BasicMessage? recovered));
-        Assert.AreEqual("", recovered!.Content, "An empty content is a valid, if unusual, basic message.");
+        Assert.AreEqual("", recovered.Content, "An empty content is a valid, if unusual, basic message.");
     }
 
 
@@ -124,7 +121,7 @@ internal sealed class DidCommBasicMessageTests
     [TestMethod]
     public void BuildValidationThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new BasicMessage { Content = "hi" }.CreateBasicMessage("", 1700000000));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new BasicMessage { Content = "hi" }.CreateBasicMessage("", 1700000000));
     }
 
 

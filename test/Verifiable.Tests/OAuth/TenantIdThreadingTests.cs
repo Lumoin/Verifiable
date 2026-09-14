@@ -1,12 +1,10 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Keys;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -79,7 +77,7 @@ internal sealed class TenantIdThreadingTests
         PublicKeyMemory? key = await resolver(
             "kid-never-issued",
             new TenantId("some-tenant"),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(key, "Unknown kid must return null.");
@@ -90,7 +88,7 @@ internal sealed class TenantIdThreadingTests
     public async Task HmacResolverReceivesTenantIdFromContext()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         ConcurrentBag<TenantId> observed = [];
         ResolveServerHmacKeyDelegate previous =
@@ -104,7 +102,7 @@ internal sealed class TenantIdThreadingTests
         //Issue a nonce through the integration delegate — exercises the
         //byte-loader path with the configured tenant.
         TenantId tenant = new("tenant-x");
-        ExchangeContext ctx = new();
+        ExchangeContext ctx = [];
         ctx.SetTenantId(tenant.Value);
 
         _ = await host.Server.OAuth().IssueDpopNonceAsync!(
@@ -142,7 +140,7 @@ internal sealed class TenantIdThreadingTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -152,7 +150,7 @@ internal sealed class TenantIdThreadingTests
             [OAuthRequestParameterNames.ClientId] = clientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId("subject-1");
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -171,7 +169,7 @@ internal sealed class TenantIdThreadingTests
         };
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
     }

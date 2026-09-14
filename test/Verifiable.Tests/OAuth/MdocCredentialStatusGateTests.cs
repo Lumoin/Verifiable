@@ -1,15 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Globalization;
-using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
@@ -21,7 +18,6 @@ using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.OAuth;
@@ -127,7 +123,7 @@ internal sealed class MdocCredentialStatusGateTests
 
         Assert.IsNull(refusalMessage,
             "The entry reads 0x00 VALID, so the Response URI answers the OID4VP 1.0 Section 8.2 success.");
-        Assert.IsInstanceOfType<ResponseSent>(result!.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result!.TerminalState,
             "The wallet reaches its ResponseSent terminal once the Response URI answers 200.");
 
         PresentationVerifiedState verified = ReadVerifiedState(run.App, parHandle);
@@ -177,7 +173,7 @@ internal sealed class MdocCredentialStatusGateTests
 
         Assert.IsNull(refusalMessage,
             "The default policy refuses nothing, so the Response URI answers the OID4VP 1.0 Section 8.2 success.");
-        Assert.IsInstanceOfType<ResponseSent>(result!.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result!.TerminalState,
             "The wallet reaches its ResponseSent terminal once the Response URI answers 200.");
 
         PresentationVerifiedState verified = ReadVerifiedState(run.App, parHandle);
@@ -320,7 +316,7 @@ internal sealed class MdocCredentialStatusGateTests
 
         Assert.IsNull(refusalMessage,
             "An mdoc with no status structure has no status to refuse, so the Response URI answers 200.");
-        Assert.IsInstanceOfType<ResponseSent>(result!.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result!.TerminalState,
             "The wallet reaches its ResponseSent terminal once the Response URI answers 200.");
 
         PresentationVerifiedState verified = ReadVerifiedState(run.App, parHandle);
@@ -491,10 +487,10 @@ internal sealed class MdocCredentialStatusGateTests
             "A configuration fault is not an answer the wallet can complete its presentation against.");
         Assert.IsNotNull(refusalMessage,
             "The verifier fails closed, so the wallet sees the failure rather than a 200.");
-        OAuthErrorAssertions.AssertWireStatusCode(500, refusalMessage!,
+        OAuthErrorAssertions.AssertWireStatusCode(500, refusalMessage,
             "A verifier the deployment did not wire a status resolver into faults on its own configuration; the "
             + "endpoint answers the state it cannot classify, not a refusal it composed.");
-        Assert.DoesNotContain("returned status 400", refusalMessage!, StringComparison.Ordinal,
+        Assert.DoesNotContain("returned status 400", refusalMessage, StringComparison.Ordinal,
             "A configuration fault is not an RFC 6749 Section 4.1.2.1 refusal the wallet is told to act on.");
 
         FlowState state = run.App.GetFlowState(parHandle).State;
@@ -582,7 +578,7 @@ internal sealed class MdocCredentialStatusGateTests
         Assert.IsTrue(verified.Credentials.TryGetValue(new CredentialQueryId(MdocCredentialQueryId),
             out VpCredentialClaims? credential),
             "Verified credentials are keyed by the DCQL credential query identifier.");
-        IReadOnlyDictionary<CredentialPath, string> claims = credential!.Extracted;
+        IReadOnlyDictionary<CredentialPath, string> claims = credential.Extracted;
 
         CredentialPath familyNamePath =
             CredentialPath.Root.Append(EudiPid.Mdoc.Namespace).Append(EudiPid.Mdoc.FamilyName);
@@ -665,7 +661,7 @@ internal sealed class MdocCredentialStatusGateTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -722,7 +718,7 @@ internal sealed class MdocCredentialStatusGateTests
     {
         FlowState state = app.GetFlowState(parHandle).State;
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(state,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(state,
             "A presentation the verifier accepts leaves its flow in the verified terminal state.");
 
         return (PresentationVerifiedState)state;
@@ -737,7 +733,7 @@ internal sealed class MdocCredentialStatusGateTests
     {
         FlowState state = app.GetFlowState(parHandle).State;
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
             "A refused presentation leaves the verifier's flow in its terminal failure state.");
 
         var failed = (VerifierFlowFailedState)state;

@@ -31,7 +31,7 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, outcome.Verified, ref first);
 
@@ -50,7 +50,7 @@ public static class VcalmResponseWriter
                 AppendCredentialResults(sb, outcome, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -82,7 +82,7 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, verified, ref first);
 
@@ -101,7 +101,7 @@ public static class VcalmResponseWriter
                 AppendPresentationResults(sb, presentationResult, credentialOutcomes, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -126,10 +126,10 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendRawField(sb, VcalmParameterNames.VerifiableCredential, securedCredentialJson, ref first);
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -154,11 +154,11 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendRawField(sb, VcalmParameterNames.VerifiableCredential, securedStatusListJson, ref first);
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Id, statusListId, ref first);
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -182,10 +182,10 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendRawField(sb, VcalmParameterNames.VerifiablePresentation, securedPresentationJson, ref first);
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -208,18 +208,18 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('[');
+            _ = sb.Append('[');
             for(int i = 0; i < securedPresentationJsons.Count; ++i)
             {
                 if(i > 0)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
-                sb.Append(securedPresentationJsons[i]);
+                _ = sb.Append(securedPresentationJsons[i]);
             }
 
-            sb.Append(']');
+            _ = sb.Append(']');
 
             return sb.ToString();
         }
@@ -238,10 +238,10 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Challenge, challenge, ref first);
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -258,12 +258,12 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Results);
-        sb.Append("\":");
+        _ = sb.Append("\":");
         AppendCredentialResultsObject(sb, outcome);
 
         first = false;
@@ -273,7 +273,7 @@ public static class VcalmResponseWriter
     //The §3.3.1 results object value, reused for each per-credential result in §3.3.2.
     private static void AppendCredentialResultsObject(StringBuilder sb, VcalmVerificationOutcome outcome)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
         bool resultsFirst = true;
 
         if(outcome.ValidFrom is not null)
@@ -293,7 +293,7 @@ public static class VcalmResponseWriter
         AppendStatusResultsField(sb, VcalmParameterNames.CredentialStatus, outcome.StatusResults, ref resultsFirst);
         AppendInputResultArrayField(sb, VcalmParameterNames.Proof, outcome.ProofResults, ref resultsFirst);
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -306,24 +306,24 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Results);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool resultsFirst = true;
 
         //results.presentation { challenge?, domain?, holder?, proof[] }.
         if(!resultsFirst)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Presentation);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool presentationFirst = true;
         if(presentationResult.Challenge is not null)
@@ -359,48 +359,48 @@ public static class VcalmResponseWriter
             [new VcalmInputResult { Verified = presentationResult.Verified, Input = presentationResult.ProofInput }],
             ref presentationFirst);
 
-        sb.Append('}');
+        _ = sb.Append('}');
         resultsFirst = false;
 
         //results.credentials[]: one §3.3.1 VerificationResponse-shaped result per contained credential.
         if(!resultsFirst)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Credentials);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         for(int i = 0; i < credentialOutcomes.Count; ++i)
         {
             if(i > 0)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
             VcalmVerificationOutcome credentialOutcome = credentialOutcomes[i];
-            sb.Append('{');
+            _ = sb.Append('{');
             bool credentialFirst = true;
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, credentialOutcome.Verified, ref credentialFirst);
             AppendProblemDetailsArray(sb, VcalmParameterNames.ProblemDetails, credentialOutcome.ProblemDetails, ref credentialFirst);
 
             if(!credentialFirst)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('"');
+            _ = sb.Append('"');
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Results);
-            sb.Append("\":");
+            _ = sb.Append("\":");
             AppendCredentialResultsObject(sb, credentialOutcome);
 
-            sb.Append('}');
+            _ = sb.Append('}');
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
 
-        sb.Append('}');
+        _ = sb.Append('}');
         first = false;
     }
 
@@ -411,18 +411,18 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool resultFirst = true;
         JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, result.Verified, ref resultFirst);
         JsonAppender.AppendStringField(sb, VcalmParameterNames.Input, result.Input, ref resultFirst);
 
-        sb.Append('}');
+        _ = sb.Append('}');
         first = false;
     }
 
@@ -433,28 +433,28 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         for(int i = 0; i < results.Count; ++i)
         {
             if(i > 0)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('{');
+            _ = sb.Append('{');
             bool resultFirst = true;
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, results[i].Verified, ref resultFirst);
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Input, results[i].Input, ref resultFirst);
-            sb.Append('}');
+            _ = sb.Append('}');
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -474,36 +474,36 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         for(int i = 0; i < results.Count; ++i)
         {
             if(i > 0)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('{');
+            _ = sb.Append('{');
             bool resultFirst = true;
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, results[i].Verified, ref resultFirst);
 
-            sb.Append(",\"");
+            _ = sb.Append(",\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Input);
-            sb.Append("\":{");
+            _ = sb.Append("\":{");
             bool inputFirst = true;
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Id, results[i].Id, ref inputFirst);
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Type, results[i].Type, ref inputFirst);
-            sb.Append('}');
+            _ = sb.Append('}');
 
-            sb.Append('}');
+            _ = sb.Append('}');
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -513,43 +513,29 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         for(int i = 0; i < results.Count; ++i)
         {
             if(i > 0)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('{');
+            _ = sb.Append('{');
             bool resultFirst = true;
             JsonAppender.AppendInt64Field(sb, VcalmParameterNames.Value, results[i].Value, ref resultFirst);
             JsonAppender.AppendBoolField(sb, VcalmParameterNames.Verified, results[i].Verified, ref resultFirst);
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Input, results[i].Input, ref resultFirst);
-            sb.Append('}');
+            _ = sb.Append('}');
         }
 
-        sb.Append(']');
-        first = false;
-    }
-
-
-    private static void AppendEmptyArrayField(StringBuilder sb, string key, ref bool first)
-    {
-        if(!first)
-        {
-            sb.Append(',');
-        }
-
-        sb.Append('"');
-        JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":[]");
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -563,22 +549,22 @@ public static class VcalmResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         for(int i = 0; i < problems.Length; ++i)
         {
             if(i > 0)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
             VcalmProblemDetail problem = problems[i];
-            sb.Append('{');
+            _ = sb.Append('{');
             bool problemFirst = true;
             JsonAppender.AppendStringField(sb, VcalmParameterNames.ProblemType, problem.Type, ref problemFirst);
             if(problem.Title is not null)
@@ -591,10 +577,10 @@ public static class VcalmResponseWriter
                 JsonAppender.AppendStringField(sb, VcalmParameterNames.ProblemDetail, problem.Detail, ref problemFirst);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -610,7 +596,7 @@ public static class VcalmResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(sb, VcalmParameterNames.ProblemType, problem.Type, ref first);
             if(problem.Title is not null)
@@ -623,7 +609,7 @@ public static class VcalmResponseWriter
                 JsonAppender.AppendStringField(sb, VcalmParameterNames.ProblemDetail, problem.Detail, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

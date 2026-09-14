@@ -122,7 +122,7 @@ public readonly struct IdJagClient
         ClientRegistration registration,
         IdJagMintOptions options,
         CancellationToken cancellationToken) =>
-        MintAsync(registration, options, new ExchangeContext(), cancellationToken);
+        MintAsync(registration, options, [], cancellationToken);
 
 
     /// <inheritdoc cref="MintAsync(ClientRegistration, IdJagMintOptions, CancellationToken)"/>
@@ -152,7 +152,7 @@ public readonly struct IdJagClient
         ClientRegistration registration,
         IdJagRedeemOptions options,
         CancellationToken cancellationToken) =>
-        RedeemAsync(registration, options, new ExchangeContext(), cancellationToken);
+        RedeemAsync(registration, options, [], cancellationToken);
 
 
     /// <inheritdoc cref="RedeemAsync(ClientRegistration, IdJagRedeemOptions, CancellationToken)"/>

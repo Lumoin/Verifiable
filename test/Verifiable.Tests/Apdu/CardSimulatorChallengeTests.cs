@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Lds;
-using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -56,14 +52,14 @@ internal sealed class CardSimulatorChallengeTests
         IReadOnlyList<TraceEntry<CardSimulatorState, CardSimulatorInput>> entries = observer.Received;
         Assert.HasCount(2, entries, "GET CHALLENGE steps twice: the command then the RNG fold-back.");
 
-        Assert.IsInstanceOfType<GetChallengeRequested>(entries[0].Input, "The first step is the GET CHALLENGE command.");
+        _ = Assert.IsInstanceOfType<GetChallengeRequested>(entries[0].Input, "The first step is the GET CHALLENGE command.");
         Assert.AreEqual("GetChallenge:Requested", entries[0].Label, "The command declares the entropy request.");
-        Assert.IsInstanceOfType<CardRngAction>(entries[0].StateAfter.NextAction, "The command leaves the RNG action pending.");
+        _ = Assert.IsInstanceOfType<CardRngAction>(entries[0].StateAfter.NextAction, "The command leaves the RNG action pending.");
 
-        Assert.IsInstanceOfType<CardEntropyGenerated>(entries[1].Input, "The second step is the RNG fold-back.");
+        _ = Assert.IsInstanceOfType<CardEntropyGenerated>(entries[1].Input, "The second step is the RNG fold-back.");
         Assert.AreEqual("GetChallenge:Generated", entries[1].Label, "The fold-back frames the response.");
-        Assert.IsInstanceOfType<NullAction>(entries[1].StateAfter.NextAction, "The action is cleared once consumed.");
-        Assert.IsInstanceOfType<ChallengeResponse>(entries[1].StateAfter.ResponseIntent, "The fold-back produced the challenge response.");
+        _ = Assert.IsInstanceOfType<NullAction>(entries[1].StateAfter.NextAction, "The action is cleared once consumed.");
+        _ = Assert.IsInstanceOfType<ChallengeResponse>(entries[1].StateAfter.ResponseIntent, "The fold-back produced the challenge response.");
     }
 
 

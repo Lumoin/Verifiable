@@ -190,11 +190,7 @@ public static class JarExtensions
                 //round trip would break the hash. Projected to List<object>
                 //because the payload dictionary's JSON converter handles
                 //IList<object> but not variance-incompatible IList<string>.
-                List<object> wireArray = new(txData.Count);
-                foreach(string entry in txData)
-                {
-                    wireArray.Add(entry);
-                }
+                List<object> wireArray = [.. txData];
 
                 payload[Oid4VpAuthorizationRequestParameterNames.TransactionData] = wireArray;
             }
@@ -310,11 +306,7 @@ public static class JarExtensions
 
             if(request.TransactionData is { Count: > 0 } txData)
             {
-                List<object> wireArray = new(txData.Count);
-                foreach(string entry in txData)
-                {
-                    wireArray.Add(entry);
-                }
+                List<object> wireArray = [.. txData];
 
                 payload[Oid4VpAuthorizationRequestParameterNames.TransactionData] = wireArray;
             }
@@ -847,6 +839,11 @@ public static class JarExtensions
             {
                 result = (long)d;
                 return true;
+            }
+            default:
+            {
+                //No other runtime type is a whole-number JSON numeric value this reader accepts.
+                break;
             }
         }
 

@@ -134,14 +134,14 @@ public sealed class JAdESAugmentationException: Exception
 
 
     /// <summary>Initializes a new <see cref="JAdESAugmentationException"/> with an unclassified malformed input.</summary>
-    public JAdESAugmentationException(): this(JAdESAugmentationFailureKind.MalformedEncoding, "The JAdES signature could not be augmented.")
+    public JAdESAugmentationException() : this(JAdESAugmentationFailureKind.MalformedEncoding, "The JAdES signature could not be augmented.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="JAdESAugmentationException"/> with an unclassified malformed input.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public JAdESAugmentationException(string message): this(JAdESAugmentationFailureKind.MalformedEncoding, message)
+    public JAdESAugmentationException(string message) : this(JAdESAugmentationFailureKind.MalformedEncoding, message)
     {
     }
 
@@ -149,7 +149,7 @@ public sealed class JAdESAugmentationException: Exception
     /// <summary>Initializes a new <see cref="JAdESAugmentationException"/> with an unclassified malformed input.</summary>
     /// <param name="message">The message describing the fault.</param>
     /// <param name="innerException">The exception that caused it.</param>
-    public JAdESAugmentationException(string message, Exception innerException): this(JAdESAugmentationFailureKind.MalformedEncoding, message, innerException)
+    public JAdESAugmentationException(string message, Exception innerException) : this(JAdESAugmentationFailureKind.MalformedEncoding, message, innerException)
     {
     }
 
@@ -157,7 +157,7 @@ public sealed class JAdESAugmentationException: Exception
     /// <summary>Initializes a new <see cref="JAdESAugmentationException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public JAdESAugmentationException(JAdESAugmentationFailureKind failureKind, string message): base(message)
+    public JAdESAugmentationException(JAdESAugmentationFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -167,7 +167,7 @@ public sealed class JAdESAugmentationException: Exception
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
     /// <param name="innerException">The exception that caused it.</param>
-    public JAdESAugmentationException(JAdESAugmentationFailureKind failureKind, string message, Exception innerException): base(message, innerException)
+    public JAdESAugmentationException(JAdESAugmentationFailureKind failureKind, string message, Exception innerException) : base(message, innerException)
     {
         FailureKind = failureKind;
     }
@@ -953,7 +953,7 @@ public static class JAdESSignatureAugmentation
 
             if(context.CertificatesToReference is { Count: > 0 } certificatesToReference)
             {
-                certificateThumbprints = new List<AdESCertificateThumbprint>(certificatesToReference.Count);
+                certificateThumbprints = new(certificatesToReference.Count);
                 for(int i = 0; i < certificatesToReference.Count; ++i)
                 {
                     PkiCertificateMemory candidate = certificatesToReference[i];
@@ -976,7 +976,7 @@ public static class JAdESSignatureAugmentation
 
             if(context.CrlsToReference is { Count: > 0 } crlsToReference)
             {
-                crlThumbprints = new List<AdESCertificateThumbprint>(crlsToReference.Count);
+                crlThumbprints = new(crlsToReference.Count);
                 for(int i = 0; i < crlsToReference.Count; ++i)
                 {
                     PkiCertificateMemory candidate = crlsToReference[i];
@@ -992,7 +992,7 @@ public static class JAdESSignatureAugmentation
 
             if(context.OcspResponsesToReference is { Count: > 0 } ocspResponsesToReference)
             {
-                ocspThumbprints = new List<AdESCertificateThumbprint>(ocspResponsesToReference.Count);
+                ocspThumbprints = new(ocspResponsesToReference.Count);
                 for(int i = 0; i < ocspResponsesToReference.Count; ++i)
                 {
                     PkiCertificateMemory candidate = ocspResponsesToReference[i];
@@ -1782,7 +1782,7 @@ public static class JAdESSignatureAugmentation
         var elementDict = (Dictionary<string, object>)etsiUArray[0];
         if(elementDict[probeElement.Kind] is Dictionary<string, object> innerDict)
         {
-            innerDict.Remove(JAdESWireNames.TimestampContainerCanonAlg);
+            _ = innerDict.Remove(JAdESWireNames.TimestampContainerCanonAlg);
         }
 
         byte[] jsonBytes = jsonSerializer(elementDict);
@@ -2162,7 +2162,7 @@ public static class JAdESSignatureAugmentation
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(text.Length, 1));
         try
         {
-            Encoding.ASCII.GetBytes(text, owner.Memory.Span);
+            _ = Encoding.ASCII.GetBytes(text, owner.Memory.Span);
 
             return new PooledMemory(owner, text.Length, tag);
         }

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
@@ -267,7 +266,7 @@ public readonly struct XAdESObjectIdentifier: IEquatable<XAdESObjectIdentifier>
             scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, documentationReferencesElementIndex, out child);
         }
 
-        if(scan == ElementScanResult.Found || scan == ElementScanResult.UnexpectedContent)
+        if(scan is ElementScanResult.Found or ElementScanResult.UnexpectedContent)
         {
             //A repeat of an element already consumed is a duplicate; anything else — including an
             //out-of-order element this reader has not consumed yet, such as Description appearing after

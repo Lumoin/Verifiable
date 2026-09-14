@@ -1,12 +1,7 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Resolvers;
 using Verifiable.Core.OutboundFetch;
+using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Core.Did.Methods.Web;
 

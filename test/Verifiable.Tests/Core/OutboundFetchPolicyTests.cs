@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 
@@ -160,7 +158,7 @@ internal sealed class OutboundFetchPolicyTests
     [TestMethod]
     public void ContextCarrierDefaultsToSecureDefaultAndRoundTrips()
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         Assert.AreSame(OutboundFetchPolicy.SecureDefault, context.OutboundFetchPolicy,
             "An unconfigured context is governed by the secure default, not a null policy.");
 

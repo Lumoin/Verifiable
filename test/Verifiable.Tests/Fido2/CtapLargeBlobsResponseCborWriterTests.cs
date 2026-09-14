@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -47,7 +46,7 @@ internal sealed class CtapLargeBlobsResponseCborWriterTests
     [TestMethod]
     public void ThrowsOnNullResponse()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CtapLargeBlobsResponseCborWriter.Write(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CtapLargeBlobsResponseCborWriter.Write(null!));
     }
 
 
@@ -70,6 +69,6 @@ internal sealed class CtapLargeBlobsResponseCborWriterTests
     {
         byte[] emptyMap = [0xA0]; //map(0)
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsResponseCborReader.Read(emptyMap));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsResponseCborReader.Read(emptyMap));
     }
 }

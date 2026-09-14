@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
-using Verifiable.Tpm.Infrastructure;
 
 namespace Verifiable.Tpm;
 
@@ -54,13 +51,13 @@ public sealed class TpmResponse: SensitiveMemory
     /// Gets the response bytes as a span.
     /// </summary>
     /// <returns>A read-only span of the response bytes.</returns>
-    public new ReadOnlySpan<byte> AsReadOnlySpan() => base.AsReadOnlySpan().Slice(0, Length);
+    public new ReadOnlySpan<byte> AsReadOnlySpan() => base.AsReadOnlySpan()[..Length];
 
     /// <summary>
     /// Gets the response bytes as memory.
     /// </summary>
     /// <returns>A read-only memory of the response bytes.</returns>
-    public new ReadOnlyMemory<byte> AsReadOnlyMemory() => base.AsReadOnlyMemory().Slice(0, Length);
+    public new ReadOnlyMemory<byte> AsReadOnlyMemory() => base.AsReadOnlyMemory()[..Length];
 
     private string DebuggerDisplay => $"TpmResponse({Length} bytes)";
 }

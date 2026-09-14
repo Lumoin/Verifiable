@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.DataIntegrity;

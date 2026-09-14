@@ -1,5 +1,6 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
@@ -12,7 +13,6 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -99,7 +99,7 @@ internal sealed class AndroidKeyAttestationTests
 
         Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(parts.Format, attestationStatement: parts.AttestationStatement, authDataBytes, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [rootPki], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(AttestationType.Basic, ((CertifiedAttestationResult)outcome.AttestationResult).Type);
         Assert.IsTrue(outcome.IsAcceptable);
         using Fido2CredentialRecord? record = outcome.CredentialRecord;
@@ -116,7 +116,7 @@ internal sealed class AndroidKeyAttestationTests
     {
         AttestationResult result = await VerifyRsaVariantAsync(MicrosoftX509Functions.ReadCertificateExtensionValue);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -134,7 +134,7 @@ internal sealed class AndroidKeyAttestationTests
         AttestationResult result = await VerifyRsaVariantAsync(
             BouncyCastleX509Functions.ReadCertificateExtensionValue, BouncyCastleX509Functions.ValidateChainAsync);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -152,7 +152,7 @@ internal sealed class AndroidKeyAttestationTests
             teeEnforced: AndroidKeyAttestationTestVectors.ConformantAuthorizationList,
             requireTeeEnforcedAuthorizations: true);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -168,7 +168,7 @@ internal sealed class AndroidKeyAttestationTests
             teeEnforced: AndroidKeyAttestationTestVectors.EmptyAuthorizationList,
             requireTeeEnforcedAuthorizations: false);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -189,7 +189,7 @@ internal sealed class AndroidKeyAttestationTests
             teeEnforced: wrongTeeEnforced,
             requireTeeEnforcedAuthorizations: false);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -203,7 +203,7 @@ internal sealed class AndroidKeyAttestationTests
             teeEnforced: AndroidKeyAttestationTestVectors.ConformantAuthorizationList,
             requireTeeEnforcedAuthorizations: false);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -213,7 +213,7 @@ internal sealed class AndroidKeyAttestationTests
     {
         AttestationResult result = await VerifyEcVariantAsync(aaguid: Guid.NewGuid());
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -477,7 +477,7 @@ internal sealed class AndroidKeyAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(result);
         Assert.AreEqual(Fido2AttestationErrors.MalformedStatement.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 
@@ -536,7 +536,7 @@ internal sealed class AndroidKeyAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(result);
         Assert.AreEqual(Fido2AttestationErrors.ChainValidationFailed.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 

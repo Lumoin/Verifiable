@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
@@ -51,7 +50,7 @@ internal sealed class SymmetricKeyTests
         keyOwner.Memory.Span.Clear();
         using SymmetricKeyMemory material = new(keyOwner, CryptoTags.HmacSha256Key);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             _ = new SymmetricKey(material, "id", null!, MicrosoftHmacFunctionsAdapter.VerifyHmacAsync));
     }
 
@@ -63,7 +62,7 @@ internal sealed class SymmetricKeyTests
         keyOwner.Memory.Span.Clear();
         using SymmetricKeyMemory material = new(keyOwner, CryptoTags.HmacSha256Key);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             _ = new SymmetricKey(material, "id", MicrosoftHmacFunctionsAdapter.ComputeHmacAsync, null!));
     }
 }

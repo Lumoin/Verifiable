@@ -1,17 +1,15 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
-using Verifiable.JCose;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
+using Verifiable.Cryptography;
+using Verifiable.Foundation.Automata;
+using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.OAuth;
@@ -19,7 +17,6 @@ using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -150,7 +147,7 @@ internal sealed class TestWallet
         PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new WalletPostSent(requestUri, walletNonce, Time.GetUtcNow()),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -229,7 +226,7 @@ internal sealed class TestWallet
         PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new JarReceived(requestUri, parsedRequest, Time.GetUtcNow()),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -241,7 +238,7 @@ internal sealed class TestWallet
 
         //The wallet matches DCQL credential queries against its credential store.
         //Each key in the store is a credential query identifier (e.g., "pid").
-        await pdaDcql.StepAsync(
+        _ = await pdaDcql.StepAsync(
             new DcqlMatched(
                 preparedQuery,
                 new Dictionary<string, string>(CredentialStore),
@@ -258,7 +255,7 @@ internal sealed class TestWallet
             ? CredentialStore.Values.First()
             : JsonSerializer.Serialize(CredentialStore, TestSetup.DefaultSerializationOptions);
 
-        await pdaSelected.StepAsync(
+        _ = await pdaSelected.StepAsync(
             new PresentationSelected(vpToken, Time.GetUtcNow()),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -328,7 +325,7 @@ internal sealed class TestWallet
             BaseMemoryPool.Shared,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ResponsePostedByWallet(
                 presentationBuilt.Request.ResponseUri!,
                 presentationBuilt.Request.State,
@@ -411,7 +408,7 @@ internal sealed class TestWallet
             BaseMemoryPool.Shared,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ResponsePostedByWallet(
                 presentationBuilt.Request.ResponseUri!,
                 presentationBuilt.Request.State,
@@ -448,7 +445,7 @@ internal sealed class TestWallet
         PushdownAutomaton<FlowState, FlowInput, WalletFlowStackSymbol> pda =
             WalletFlowAutomaton.CreateFromSnapshot(state, steps, Time);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new RedirectReceived(redirectUri, Time.GetUtcNow()),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 

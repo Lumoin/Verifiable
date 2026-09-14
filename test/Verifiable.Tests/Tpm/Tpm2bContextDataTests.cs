@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 

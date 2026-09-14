@@ -68,11 +68,6 @@ public static class VcalmJsonExtensions
         integration.ParseVcalmCallbackAsync ??=
             VcalmJsonParsing.CreateCallbackParser();
 
-        //§3.6 issuance-in-exchange: the JSON → JsonataValue adapter the workflow step engine feeds to
-        //the credential-template evaluation. STJ stays behind this seam (serialization firewall).
-        integration.ParseVcalmTemplateInputAsync ??=
-            VcalmJsonParsing.CreateTemplateInputParser();
-
         //§3.7.5 inviteRequest body is a fixed-shape object read with JsonDocument; its parser carries no
         //serializer-options dependency.
         integration.ParseVcalmInviteRequestAsync ??=

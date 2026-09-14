@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;

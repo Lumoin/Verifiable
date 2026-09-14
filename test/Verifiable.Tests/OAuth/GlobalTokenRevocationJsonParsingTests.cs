@@ -1,4 +1,3 @@
-using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth.Logout;
@@ -21,7 +20,7 @@ internal sealed class GlobalTokenRevocationJsonParsingTests
     /// <summary>Invokes the parser with a fresh per-call context.</summary>
     private async ValueTask<GlobalTokenRevocationRequest?> ParseAsync(string body) =>
         await GlobalTokenRevocationJsonParsing.ParseGlobalTokenRevocationRequest(
-            body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
 
     /// <summary>An <c>iss_sub</c> sub_id projects to the issuer/subject members.</summary>

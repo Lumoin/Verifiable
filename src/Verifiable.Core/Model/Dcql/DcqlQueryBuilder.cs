@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Core.Model.Dcql;
 
@@ -69,7 +66,7 @@ public sealed class DcqlQueryBuilder: Builder<DcqlQuery, DcqlQueryBuildState, Dc
         //Run all registered transformations to accumulate state.
         DcqlQueryBuildState? capturedState = null;
 
-        await BuildAsync(
+        _ = await BuildAsync(
             seedGeneratorAsync: static (_, _) => ValueTask.FromResult(new DcqlQuery()),
             seedGeneratorParameter: (object?)null,
             preBuildActionAsync: (_, _, _) =>

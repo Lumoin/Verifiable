@@ -1,15 +1,14 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods.Key;
-using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -67,7 +66,7 @@ internal sealed class DataIntegrityPresentationFlowTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -896,11 +895,11 @@ internal sealed class DataIntegrityPresentationFlowTests
 
         Assert.IsTrue(result.IsValid);
         Assert.IsNotNull(result.Verified);
-        var verified = result.Verified!.Value;
+        var verified = result.Verified.Value;
 
         Assert.IsTrue(verified.IsIdentityBound, "The presentation path must mint Bound, not Asserted.");
         Assert.IsTrue(verified.Provenance is BoundProvenance, "The presentation path's provenance must be a BoundProvenance.");
-        var bound = (BoundProvenance)verified.Provenance!;
+        var bound = (BoundProvenance)verified.Provenance;
         Assert.AreEqual(ResolutionSource.CallerControllerArtifact, bound.Source);
         Assert.AreEqual(VerificationRelationship.Authentication, bound.Relationship);
 

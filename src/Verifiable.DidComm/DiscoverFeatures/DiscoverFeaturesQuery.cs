@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Foundation;
 
 namespace Verifiable.DidComm.DiscoverFeatures;

@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 
@@ -56,7 +55,7 @@ public static class JAdESMessageJson
 
     /// <summary>The <see cref="TryParseJAdESMessageDelegate"/> binding — see the type remarks.</summary>
     public static TryParseJAdESMessageDelegate TryParse { get; } = static (
-        ReadOnlySpan<byte> wireBytes, DecodeDelegate base64UrlDecoder, BaseMemoryPool pool, out UnverifiedJAdESMessage? message, out JoseSerializationFormat format) =>
+        wireBytes, base64UrlDecoder, pool, out message, out format) =>
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(pool);

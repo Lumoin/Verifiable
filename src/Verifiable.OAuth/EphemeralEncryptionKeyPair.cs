@@ -136,7 +136,7 @@ public sealed class EphemeralEncryptionKeyPair: IDisposable, IEquatable<Ephemera
         //Uncompressed P-256 point: 0x04 || X (32 bytes) || Y (32 bytes) = 65 bytes.
         ReadOnlySpan<byte> point = publicKey.AsReadOnlySpan();
         const int coordinateLength = 32;
-        const int uncompressedPointLength = 1 + coordinateLength * 2;
+        const int uncompressedPointLength = 1 + (coordinateLength * 2);
 
         if(point.Length != uncompressedPointLength || point[0] != 0x04)
         {

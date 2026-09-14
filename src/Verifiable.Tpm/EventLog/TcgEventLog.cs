@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using Verifiable.Tpm.Spec.Constants;
-
 namespace Verifiable.Tpm.EventLog;
 
 /// <summary>

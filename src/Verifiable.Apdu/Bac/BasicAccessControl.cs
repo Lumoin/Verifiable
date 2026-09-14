@@ -1,12 +1,9 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Mrz;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
@@ -111,7 +108,7 @@ public static class BasicAccessControl
 
         //The MRZ information is the BAC access secret.
         using IMemoryOwner<byte> mrzBytes = pool.Rent(Encoding.ASCII.GetByteCount(mrzInformation), AllocationKind.Pinned);
-        Encoding.ASCII.GetBytes(mrzInformation, mrzBytes.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(mrzInformation, mrzBytes.Memory.Span);
 
         using DigestValue seedHash = await ComputeSha1Async(mrzBytes.Memory, pool, cancellationToken).ConfigureAwait(false);
 
@@ -224,7 +221,7 @@ public static class BasicAccessControl
         CancellationToken cancellationToken)
     {
         //S = RND.IFD || RND.IC || KIFD — a secret because it carries KIFD.
-        using IMemoryOwner<byte> s = pool.Rent(2 * NonceLength + KeyingMaterialLength, AllocationKind.Pinned);
+        using IMemoryOwner<byte> s = pool.Rent((2 * NonceLength) + KeyingMaterialLength, AllocationKind.Pinned);
         terminalNonce.Span.CopyTo(s.Memory.Span);
         chipNonce.Span.CopyTo(s.Memory.Span[NonceLength..]);
         terminalKeyingMaterial.Span.CopyTo(s.Memory.Span[(2 * NonceLength)..]);
@@ -278,7 +275,7 @@ public static class BasicAccessControl
         BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> padded = pool.Rent(Iso9797Padding.PaddedLength(chipCryptogram.Length, BlockSize));
-        Iso9797Padding.Pad(chipCryptogram.Span, BlockSize, padded.Memory.Span);
+        _ = Iso9797Padding.Pad(chipCryptogram.Span, BlockSize, padded.Memory.Span);
 
         VerifyBlockCipherMacDelegate verify = Resolve<VerifyBlockCipherMacDelegate>();
         (bool isValid, _) = await verify(
@@ -460,7 +457,7 @@ public static class BasicAccessControl
         SymmetricKeyMemory macKey, ReadOnlyMemory<byte> data, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> padded = pool.Rent(Iso9797Padding.PaddedLength(data.Length, BlockSize));
-        Iso9797Padding.Pad(data.Span, BlockSize, padded.Memory.Span);
+        _ = Iso9797Padding.Pad(data.Span, BlockSize, padded.Memory.Span);
 
         ComputeBlockCipherMacDelegate computeMac = Resolve<ComputeBlockCipherMacDelegate>();
         (MacValue mac, _) = await computeMac(
@@ -489,7 +486,7 @@ public static class BasicAccessControl
     /// <summary>
     /// Resolves a registered symmetric delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

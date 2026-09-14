@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Text;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.WebFinger;
 
@@ -29,7 +27,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor, "An unrecognised member MUST be ignored, not treated as a parse error.");
-        Assert.AreEqual("acct:alice@example.com", descriptor!.Subject);
+        Assert.AreEqual("acct:alice@example.com", descriptor.Subject);
     }
 
 
@@ -46,7 +44,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor);
-        Assert.AreNotEqual(requestedResource, descriptor!.Subject, "The fixture intentionally differs from the requested resource.");
+        Assert.AreNotEqual(requestedResource, descriptor.Subject, "The fixture intentionally differs from the requested resource.");
         Assert.AreEqual("acct:alice.canonical@example.org", descriptor.Subject,
             "A subject differing from the query target MUST be preserved verbatim, never rejected.");
     }
@@ -59,7 +57,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"aliases":[]}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsNull(descriptor!.Subject);
+        Assert.IsNull(descriptor.Subject);
     }
 
 
@@ -70,7 +68,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"subject":"acct:alice@example.com"}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsEmpty(descriptor!.Aliases);
+        Assert.IsEmpty(descriptor.Aliases);
     }
 
 
@@ -81,7 +79,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"subject":"acct:alice@example.com"}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsEmpty(descriptor!.Properties);
+        Assert.IsEmpty(descriptor.Properties);
     }
 
 
@@ -99,7 +97,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor);
-        Assert.IsTrue(descriptor!.Properties.ContainsKey("http://example.com/ns/a"), "A JSON null value MUST still leave the key present.");
+        Assert.IsTrue(descriptor.Properties.ContainsKey("http://example.com/ns/a"), "A JSON null value MUST still leave the key present.");
         Assert.IsNull(descriptor.Properties["http://example.com/ns/a"]);
         Assert.AreEqual("value", descriptor.Properties["http://example.com/ns/b"]);
         Assert.IsFalse(descriptor.Properties.ContainsKey("http://example.com/ns/c"), "A key never mentioned in the JRD MUST NOT appear at all.");
@@ -123,7 +121,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor);
-        Assert.HasCount(2, descriptor!.Links);
+        Assert.HasCount(2, descriptor.Links);
         Assert.AreEqual("did:webs:example.com:FIRST", descriptor.Links[0].Href);
         Assert.AreEqual("did:webs:example.com:SECOND", descriptor.Links[1].Href);
         Assert.AreEqual("did:webs:example.com:FIRST", WebFingerClient.FindLinkHref(descriptor, "urn:webfinger:did"),
@@ -142,7 +140,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"subject":"acct:alice@example.com"}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsEmpty(descriptor!.Links);
+        Assert.IsEmpty(descriptor.Links);
         Assert.IsNull(WebFingerClient.FindLinkHref(descriptor, "urn:webfinger:did"));
     }
 
@@ -154,7 +152,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"links":[{"rel":"urn:webfinger:did"}]}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.HasCount(1, descriptor!.Links);
+        Assert.HasCount(1, descriptor.Links);
         Assert.IsNull(descriptor.Links[0].Type);
     }
 
@@ -170,7 +168,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"links":[{"rel":"urn:webfinger:did"}]}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsNull(descriptor!.Links[0].Href);
+        Assert.IsNull(descriptor.Links[0].Href);
         Assert.IsNull(WebFingerClient.FindLinkHref(descriptor, "urn:webfinger:did"),
             "A matched relation with no href MUST report null, not throw.");
     }
@@ -190,7 +188,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor);
-        Assert.HasCount(1, descriptor!.Links);
+        Assert.HasCount(1, descriptor.Links);
         Assert.AreEqual("Alice Cooper", descriptor.Links[0].Titles["en-us"],
             "A duplicated language tag MUST NOT be treated as an error, and the last value wins.");
     }
@@ -207,7 +205,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor);
-        IReadOnlyDictionary<string, string> titles = descriptor!.Links[0].Titles;
+        IReadOnlyDictionary<string, string> titles = descriptor.Links[0].Titles;
         Assert.AreEqual("Alice", titles["en-us"]);
         Assert.AreEqual("Alice (default)", titles["und"]);
     }
@@ -220,7 +218,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"links":[{"rel":"urn:webfinger:did"}]}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsEmpty(descriptor!.Links[0].Titles);
+        Assert.IsEmpty(descriptor.Links[0].Titles);
     }
 
 
@@ -231,7 +229,7 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse("""{"links":[{"rel":"urn:webfinger:did"}]}""");
 
         Assert.IsNotNull(descriptor);
-        Assert.IsEmpty(descriptor!.Links[0].Properties);
+        Assert.IsEmpty(descriptor.Links[0].Properties);
     }
 
 
@@ -254,9 +252,9 @@ internal sealed class WebFingerJrdParsingTests
         JsonResourceDescriptor? descriptor = Parse(json);
 
         Assert.IsNotNull(descriptor);
-        Assert.AreEqual("did:webs:example.com:AID", WebFingerClient.FindLinkHref(descriptor!, "urn:webfinger:did"),
+        Assert.AreEqual("did:webs:example.com:AID", WebFingerClient.FindLinkHref(descriptor, "urn:webfinger:did"),
             "Only the requested relation is interpreted.");
-        Assert.IsNull(WebFingerClient.FindLinkHref(descriptor!, "urn:example:not-a-link-in-the-fixture"),
+        Assert.IsNull(WebFingerClient.FindLinkHref(descriptor, "urn:example:not-a-link-in-the-fixture"),
             "A relation this client neither requested nor understands is ignored, never an error.");
     }
 

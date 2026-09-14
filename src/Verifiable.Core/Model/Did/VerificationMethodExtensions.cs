@@ -1,8 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
@@ -90,7 +86,7 @@ namespace Verifiable.Core.Model.Did
                 publicKeyMemory,
                 verificationMethod.Id ?? throw new InvalidOperationException("Verification method must have an ID"),
                 rawKeyMaterial.Algorithm,
-                rawKeyMaterial.Purpose);                
+                rawKeyMaterial.Purpose);
         }
     }
 }

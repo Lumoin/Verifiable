@@ -3,8 +3,6 @@ using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
 namespace Verifiable.Tests.OAuth;
 
@@ -63,7 +61,7 @@ internal static class TestBrowser
         ArgumentException.ThrowIfNullOrWhiteSpace(subjectId);
         ArgumentNullException.ThrowIfNull(issuerUri);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(registration.TenantId);
         context.SetIssuer(issuerUri);
         context.SetSubjectId(subjectId);

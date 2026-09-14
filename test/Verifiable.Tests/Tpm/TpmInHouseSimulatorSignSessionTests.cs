@@ -1,10 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -14,11 +12,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1144,13 +1137,13 @@ internal sealed class TpmInHouseSimulatorSignSessionTests
                 TpmRcConstants.TPM_RC_SUCCESS, result.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : result.ResponseCode,
                 "An audit-claiming session over an audited command succeeds (TPM 2.0 Library Part 1, clause 17.1).");
 
-            (TpmCcConstants Code, byte[] Command, byte[] Response) audited = wire[^1];
-            byte auditedAttributes = ReadResponseSessionAttributes(audited.Response, outHandleCount: 0, sessionIndex: 0);
+            (TpmCcConstants Code, byte[] Command, byte[] Response) = wire[^1];
+            byte auditedAttributes = ReadResponseSessionAttributes(Response, outHandleCount: 0, sessionIndex: 0);
             Assert.AreEqual(
                 (byte)(TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT | TpmaSession.AUDIT_EXCLUSIVE), auditedAttributes,
                 "The response echoes audit SET and auditExclusive SET (the session's first use as an audit session), with auditReset CLEAR (TPM 2.0 Library Part 2, clause 8.4, Table 38).");
 
-            byte[] responseParameters = ReadResponseParameters(audited.Response, outHandleCount: 0);
+            byte[] responseParameters = ReadResponseParameters(Response, outHandleCount: 0);
             byte[] cpHash = await ComputeCpHashAsync(TpmCcConstants.TPM_CC_Sign, handleNames, SerializeCommandParameters(signInput, handleCount: 1), pool).ConfigureAwait(false);
             byte[] rpHash = await ComputeRpHashAsync(TpmCcConstants.TPM_CC_Sign, responseParameters, pool).ConfigureAwait(false);
             byte[] expectedDigest = await ExtendAuditDigestAsync(priorDigest: null, cpHash, rpHash, pool).ConfigureAwait(false);

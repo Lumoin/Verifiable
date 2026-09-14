@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 
@@ -133,7 +130,7 @@ public static class SelectiveDisclosure
             {
                 if(lattice.Selectable.Contains(claim))
                 {
-                    result.Remove(claim);
+                    _ = result.Remove(claim);
                 }
             }
         }
@@ -205,7 +202,7 @@ public static class SelectiveDisclosure
         {
             if(!maximum.Contains(claim))
             {
-                conflicts.Add(claim);
+                _ = conflicts.Add(claim);
             }
         }
 
@@ -283,7 +280,7 @@ public static class SelectiveDisclosure
 
                 //Compute optimal disclosure for this credential.
                 IReadOnlySet<TClaim>? exclusions = null;
-                userExclusions?.TryGetValue(credential, out exclusions);
+                _ = (userExclusions?.TryGetValue(credential, out exclusions));
                 var result = ComputeOptimalDisclosure(
                     lattice,
                     verifierRequested: canSatisfy,
@@ -309,7 +306,7 @@ public static class SelectiveDisclosure
 
             //Add selection.
             selections.Add((bestCandidate.Value.Credential, bestDisclosure));
-            usedCredentials.Add(bestCandidate.Value.Credential);
+            _ = usedCredentials.Add(bestCandidate.Value.Credential);
 
             //Remove satisfied requirements.
             unsatisfied.ExceptWith(bestDisclosure);

@@ -1,9 +1,5 @@
-using System;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tpm.Infrastructure.Commands;
 
 namespace Verifiable.Tests.Tpm;
 

@@ -1,16 +1,10 @@
-using System;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -77,7 +71,7 @@ internal sealed class TpmInHouseSimulatorPolicyLocalityTests
         {
             sessionHandle = await StartSessionAsync(tpm).ConfigureAwait(false);
 
-            TpmResult<PolicyLocalityResponse> result = await tpm.PolicyLocalityAsync(sessionHandle, (TpmaLocality)0, TestContext.CancellationToken).ConfigureAwait(false);
+            TpmResult<PolicyLocalityResponse> result = await tpm.PolicyLocalityAsync(sessionHandle, 0, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsFalse(result.IsSuccess, "A zero locality octet selects nothing and must be refused.");
             Assert.AreEqual(HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_RANGE, 0), result.ResponseCode, "locality, parameter 1 of Table 154, of zero selects nothing and must refuse parameter-encoded TPM_RC_RANGE.");

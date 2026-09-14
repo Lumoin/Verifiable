@@ -1,11 +1,9 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Text;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
-
-using static Verifiable.Tests.Fido2.Fido2TestVectors;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 

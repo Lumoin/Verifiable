@@ -1,5 +1,3 @@
-using System;
-
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;
@@ -108,7 +106,7 @@ internal sealed class ApduReaderWriterTests
         ReadOnlySpan<byte> data = [0x01, 0x02, 0x03];
         var reader = new ApduReader(data);
 
-        reader.ReadByte();
+        _ = reader.ReadByte();
         ReadOnlySpan<byte> remaining = reader.ReadRemainingBytes();
 
         Assert.HasCount(2, remaining);

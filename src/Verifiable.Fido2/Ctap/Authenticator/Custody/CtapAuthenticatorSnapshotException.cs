@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>
@@ -29,7 +27,7 @@ public sealed class CtapAuthenticatorSnapshotException: Exception
     /// snapshot.
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
-    public CtapAuthenticatorSnapshotException(string message): base(message)
+    public CtapAuthenticatorSnapshotException(string message) : base(message)
     {
     }
 
@@ -40,7 +38,7 @@ public sealed class CtapAuthenticatorSnapshotException: Exception
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
     /// <param name="innerException">The underlying parse failure, if any.</param>
-    public CtapAuthenticatorSnapshotException(string message, Exception innerException): base(message, innerException)
+    public CtapAuthenticatorSnapshotException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

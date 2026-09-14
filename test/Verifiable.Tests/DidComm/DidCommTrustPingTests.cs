@@ -1,21 +1,16 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.DidComm.TrustPing;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
@@ -36,7 +31,7 @@ internal sealed class DidCommTrustPingTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //The protected-header serializer the JWE layer hands a Dictionary<string, object> to produce UTF-8 JSON.
     private static JwtHeaderSerializer HeaderSerializer { get; } =
@@ -154,15 +149,15 @@ internal sealed class DidCommTrustPingTests
     [TestMethod]
     public void BuildValidationThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => TrustPingExtensions.CreatePing(""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => TrustPingExtensions.CreatePing(""));
 
         //A ping-response can only be built from an actual ping.
         var notAPing = new DidCommMessage { Id = "x", Type = "https://didcomm.org/basicmessage/2.0/message" };
-        Assert.ThrowsExactly<ArgumentException>(() => notAPing.CreatePingResponse("r"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => notAPing.CreatePingResponse("r"));
 
         //The response id is required.
         DidCommMessage ping = TrustPingExtensions.CreatePing("p", from: Alice);
-        Assert.ThrowsExactly<ArgumentException>(() => ping.CreatePingResponse(""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => ping.CreatePingResponse(""));
     }
 
 
@@ -416,7 +411,7 @@ internal sealed class DidCommTrustPingTests
         Assert.IsTrue(resolution.IsSuccessful, $"'{did}' MUST resolve.");
         Assert.IsNotNull(resolution.Document);
 
-        return resolution.Document!;
+        return resolution.Document;
     }
 
 
@@ -429,7 +424,7 @@ internal sealed class DidCommTrustPingTests
         VerificationMethod method = methods[0];
         Assert.IsNotNull(method.Id);
 
-        string kid = method.Id!.StartsWith('#') ? did + method.Id : method.Id;
+        string kid = method.Id.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id;
 
         return (kid, method);
     }

@@ -1,15 +1,12 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -67,7 +64,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." This plain-bearer credential flow stays within the
@@ -143,7 +140,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -167,11 +164,11 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            parFields, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -194,7 +191,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 [OAuthRequestParameterNames.ClientId] = ClientId,
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             },
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         Assert.IsFalse(seamCalled, "No grant carried authorization_details, so the decision seam is never consulted.");
@@ -218,7 +215,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
@@ -239,8 +236,8 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         Assert.IsNotNull(seenDetails);
-        Assert.HasCount(1, seenDetails!);
-        Assert.AreEqual(DegreeConfigurationId, seenDetails![0].CredentialConfigurationId,
+        Assert.HasCount(1, seenDetails);
+        Assert.AreEqual(DegreeConfigurationId, seenDetails[0].CredentialConfigurationId,
             "The pushed authorization_details must govern; the front-channel value is ignored.");
     }
 
@@ -254,7 +251,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
@@ -275,8 +272,8 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         Assert.IsNotNull(seenDetails);
-        Assert.HasCount(1, seenDetails!);
-        Assert.AreEqual(LicenseConfigurationId, seenDetails![0].CredentialConfigurationId);
+        Assert.HasCount(1, seenDetails);
+        Assert.AreEqual(LicenseConfigurationId, seenDetails[0].CredentialConfigurationId);
 
         using JsonDocument doc = JsonDocument.Parse(tokenResponse.Body);
         JsonElement details = doc.RootElement.GetProperty("authorization_details");
@@ -295,7 +292,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -327,7 +324,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         await AssertParRejectsAsync(host, material, "{ not json").ConfigureAwait(false);
         await AssertParRejectsAsync(host, material,
@@ -362,7 +359,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         ServerHttpResponse tokenResponse = await RunAuthCodeFlowAsync(
             host, material, parDetails: SingleDetail(DegreeConfigurationId)).ConfigureAwait(false);
@@ -381,7 +378,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(
@@ -419,7 +416,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant));
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //§13.10: the Pre-Authorized Code grant mints a plain-bearer credential token; keep it
         //within the long-lived threshold so it is not refused as an unconstrained long-lived token.
@@ -450,13 +447,13 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.AuthorizationDetails] = SingleDetail(DegreeConfigurationId)
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         Assert.AreEqual(SubjectId, seenSubject, "The seam must receive the grant-resolved subject.");
         Assert.IsNotNull(seenDetails);
-        Assert.AreEqual(DegreeConfigurationId, seenDetails![0].CredentialConfigurationId);
+        Assert.AreEqual(DegreeConfigurationId, seenDetails[0].CredentialConfigurationId);
 
         using JsonDocument doc = JsonDocument.Parse(response.Body);
         JsonElement details = doc.RootElement.GetProperty("authorization_details");
@@ -481,7 +478,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         ServerHttpResponse unwired = await DispatchDiscoveryAsync(host, material).ConfigureAwait(false);
         Assert.AreEqual(200, unwired.StatusCode, unwired.Body);
@@ -513,7 +510,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.OAuthDiscoveryEndpoint,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) => ValueTask.FromResult(GrantAllRequested(details));
 
@@ -546,7 +543,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         int resolveCount = 0;
@@ -609,7 +606,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -649,7 +646,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -684,7 +681,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -721,7 +718,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -745,11 +742,11 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            parFields, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -772,7 +769,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 [OAuthRequestParameterNames.ClientId] = ClientId,
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             },
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
         string refreshToken = ExtractFromBody(tokenResponse.Body, "refresh_token");
 
@@ -803,7 +800,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
 
         //RFC 9396 §5: "is an object of known type but containing unknown fields."
@@ -842,7 +839,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
 
         await AssertParAcceptsAsync(host, material,
@@ -862,7 +859,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //The server supports payment_initiation, but the client registered only openid_credential.
         host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
@@ -893,7 +890,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             ImmutableHashSet.Create(
                 WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
                 WellKnownCapabilityIdentifiers.Oid4VciPreAuthorizedCodeGrant));
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
         host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
@@ -924,7 +921,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
                 [OAuthRequestParameterNames.AuthorizationDetails] =
                     """[{"type":"payment_initiation","instructedAmount":{"amount":"1.00"},"currency":"EUR"}]"""
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
@@ -945,7 +942,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.Server.OAuth().AuthorizationDetailTypes.Register(StrictPaymentInitiationHandler());
 
         Assert.IsNull(material.Registration.AllowedAuthorizationDetailsTypes,
@@ -1045,7 +1042,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -1060,7 +1057,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             authorizeFields[OAuthRequestParameterNames.AuthorizationDetails] = frontChannelDetails;
         }
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -1084,7 +1081,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
 
         return await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -1131,7 +1128,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            refreshFields, new ExchangeContext(),
+            refreshFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -1157,7 +1154,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, parResponse.StatusCode, parResponse.Body);
@@ -1186,7 +1183,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
@@ -1201,7 +1198,7 @@ internal sealed class Oid4VciAuthorizationDetailsTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Verifiable.Tpm.Spec.Constants;
@@ -190,7 +188,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
                 //The width is settled before the rental it sizes: a zero sizeofSelect would otherwise reach the
                 //pool as a zero-length rent, and a width no PCR bitmap can have is TPM_RC_VALUE by Table 107's
                 //own bounds rather than an allocation failure.
-                if(sizeofSelect < PcrSelectMin || sizeofSelect > PcrSelectMax)
+                if(sizeofSelect is < PcrSelectMin or > PcrSelectMax)
                 {
                     throw new ArgumentOutOfRangeException(
                         nameof(reader),
@@ -205,9 +203,9 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
                 filled = i + 1;
 
                 ReadOnlySpan<byte> source = reader.ReadBytes(sizeofSelect);
-                source.CopyTo(storage.Memory.Span.Slice(0, sizeofSelect));
+                source.CopyTo(storage.Memory.Span[..sizeofSelect]);
 
-                selections[i] = new TpmsPcrSelection(hashAlg, storage.Memory.Slice(0, sizeofSelect));
+                selections[i] = new TpmsPcrSelection(hashAlg, storage.Memory[..sizeofSelect]);
             }
         }
         catch
@@ -242,12 +240,12 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
         //platform-specific specification requires.
         const int SelectSize = PcrSelectMin;
         IMemoryOwner<byte> storage = pool.Rent(SelectSize);
-        Span<byte> bitmap = storage.Memory.Span.Slice(0, SelectSize);
+        Span<byte> bitmap = storage.Memory.Span[..SelectSize];
         bitmap.Clear();
 
         foreach(int index in pcrIndices)
         {
-            if(index < 0 || index >= SelectSize * 8)
+            if(index is < 0 or >= (SelectSize * 8))
             {
                 storage.Dispose();
                 throw new ArgumentOutOfRangeException(nameof(pcrIndices), $"PCR index {index} is out of range (0-{(SelectSize * 8) - 1}).");
@@ -259,7 +257,7 @@ public sealed class TpmlPcrSelection: ITpmWireType, IDisposable
             bitmap[byteIndex] |= (byte)(1 << bitIndex);
         }
 
-        var selection = new TpmsPcrSelection(hashAlg, storage.Memory.Slice(0, SelectSize));
+        var selection = new TpmsPcrSelection(hashAlg, storage.Memory[..SelectSize]);
         var selections = new TpmsPcrSelection[] { selection };
         var storageOwners = new IMemoryOwner<byte>[] { storage };
 

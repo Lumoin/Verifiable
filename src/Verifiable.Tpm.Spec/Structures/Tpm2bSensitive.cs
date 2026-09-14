@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Spec.Structures;
 

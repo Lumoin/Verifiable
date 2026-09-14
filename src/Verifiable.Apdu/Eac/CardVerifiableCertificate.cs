@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -595,6 +594,11 @@ public sealed class CardVerifiableCertificate: SensitiveMemory
         EllipticCurveTypes.BrainpoolP320r1 => CryptoTags.BrainpoolP320r1ExchangePublicKey,
         EllipticCurveTypes.BrainpoolP384r1 => CryptoTags.BrainpoolP384r1ExchangePublicKey,
         EllipticCurveTypes.BrainpoolP512r1 => CryptoTags.BrainpoolP512r1ExchangePublicKey,
+        EllipticCurveTypes.None => throw new InvalidOperationException("The CV certificate public key uses an elliptic curve not supported for Terminal Authentication."),
+        EllipticCurveTypes.Secp256k1 => throw new InvalidOperationException("The CV certificate public key uses an elliptic curve not supported for Terminal Authentication."),
+        EllipticCurveTypes.NistCurves => throw new InvalidOperationException("The CV certificate public key uses an elliptic curve not supported for Terminal Authentication."),
+        EllipticCurveTypes.Curve25519 => throw new InvalidOperationException("The CV certificate public key uses an elliptic curve not supported for Terminal Authentication."),
+        EllipticCurveTypes.BrainpoolCurves => throw new InvalidOperationException("The CV certificate public key uses an elliptic curve not supported for Terminal Authentication."),
         _ => throw new InvalidOperationException("The CV certificate public key uses an elliptic curve not supported for Terminal Authentication.")
     };
 

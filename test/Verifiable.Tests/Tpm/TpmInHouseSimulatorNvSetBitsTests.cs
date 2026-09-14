@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -15,11 +12,6 @@ using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -179,7 +171,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadIndexAsync(device, pool, registry, BitsIndexHandle, CorrectAuth, BitFieldDataSize).ConfigureAwait(false);
 
@@ -201,7 +193,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -224,7 +216,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> firstResult = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -251,7 +243,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> firstResult = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -277,7 +269,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, ulong.MaxValue).ConfigureAwait(false);
@@ -302,7 +294,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, 0ul).ConfigureAwait(false);
@@ -327,7 +319,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
         byte[] nameBefore = await ReadIndexNameAsync(device, BitsIndexHandle).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> firstResult = await SetBitsAsync(
@@ -444,7 +436,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, BitsIndexHandle, ReadOnlyMemory<byte>.Empty, FirstBits).ConfigureAwait(false);
@@ -467,7 +459,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutOwnerWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutOwnerWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> correctResult = await SetBitsAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, BitsIndexHandle, ReadOnlyMemory<byte>.Empty, FirstBits).ConfigureAwait(false);
@@ -491,7 +483,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
@@ -515,7 +507,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
             device, pool, registry, MismatchedAuthHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -538,7 +530,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutAuthWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutAuthWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> correctResult = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -563,7 +555,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
@@ -586,7 +578,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, NonDaBitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, NonDaBitsAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
@@ -617,7 +609,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -657,7 +649,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> correctResult = await SetBitsAsync(
             device, pool, registry, OrdinaryIndexHandle, OrdinaryIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -682,7 +674,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes, CounterDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterAttributes, CounterDataSize).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> correctResult = await SetBitsAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -706,7 +698,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes, Sha256DigestSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendAttributes, Sha256DigestSize).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsAsync(
             device, pool, registry, ExtendIndexHandle, ExtendIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -728,7 +720,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         using TpmPasswordSession session = TpmPasswordSession.Create(CorrectAuth, pool);
         using Tpm2bMaxNvBuffer writeInputBuffer = Tpm2bMaxNvBuffer.Create(RejectedWriteAttempt, pool);
@@ -754,7 +746,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         using TpmPasswordSession session = TpmPasswordSession.Create(CorrectAuth, pool);
         var incrementInput = new NvIncrementInput(BitsIndexHandle, BitsIndexHandle);
@@ -778,7 +770,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         using TpmPasswordSession session = TpmPasswordSession.Create(CorrectAuth, pool);
         using Tpm2bMaxNvBuffer extendInputBuffer = Tpm2bMaxNvBuffer.Create(RejectedWriteAttempt, pool);
@@ -803,7 +795,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> setBitsResult = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -835,7 +827,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, ClearStclearBitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, ClearStclearBitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> firstResult = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -871,7 +863,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, OrderlyBitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, OrderlyBitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> firstResult = await SetBitsAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -906,7 +898,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -929,7 +921,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, BitsIndexHandle, ReadOnlyMemory<byte>.Empty, FirstBits).ConfigureAwait(false);
@@ -953,7 +945,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
@@ -978,7 +970,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
             device, pool, registry, MismatchedAuthHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -999,7 +991,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutOwnerWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutOwnerWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, BitsIndexHandle, ReadOnlyMemory<byte>.Empty, FirstBits).ConfigureAwait(false);
@@ -1021,7 +1013,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutAuthWriteAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsWithoutAuthWriteAttributes).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -1049,7 +1041,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
             TpmSimulatorState.DefaultLockoutRecoverySeconds, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(lowerResult.IsSuccess, $"Lowering maxTries failed: '{lowerResult.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= LoweredMaxTries; attempt++)
         {
@@ -1077,7 +1069,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, NonDaBitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, NonDaBitsAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> result = await SetBitsOverHmacAsync(
@@ -1104,7 +1096,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawDecryptCode = await SetBitsOverHmacHandFramedAsync(
             device, pool, registry, BitsIndexHandle, CorrectAuth, FirstBits, TpmaSession.DECRYPT).ConfigureAwait(false);
@@ -1132,7 +1124,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawEncryptCode = await SetBitsOverHmacHandFramedAsync(
             device, pool, registry, BitsIndexHandle, CorrectAuth, FirstBits, TpmaSession.ENCRYPT).ConfigureAwait(false);
@@ -1164,7 +1156,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         TpmResponseRegistry registry = CreateNvRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetSessionAuditDigest, TpmResponseCodec.GetSessionAuditDigest);
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         (byte[] response, uint sessionHandle, byte[] cpHash) = await SetBitsOverHmacHandFramedForAuditAsync(
             device, pool, registry, BitsIndexHandle, CorrectAuth, FirstBits).ConfigureAwait(false);
@@ -1223,9 +1215,9 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await SetBitsOverHmacAsync(
                 device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits, TpmaSession.DECRYPT).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1244,9 +1236,9 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await SetBitsOverHmacAsync(
                 device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth, FirstBits, TpmaSession.ENCRYPT).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1266,7 +1258,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateSaltedSessionRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
         using CreatePrimaryResponse tpmKey = await CreateRsaDecryptKeyAsync(device, registry, pool).ConfigureAwait(false);
         uint tpmKeyHandle = tpmKey.ObjectHandle.Value;
 
@@ -1331,8 +1323,8 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrdinaryIndexHandle, OrdinaryAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
@@ -1367,7 +1359,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
         ReadOnlyMemory<byte> indexName = await ReadIndexNameAsync(device, BitsIndexHandle).ConfigureAwait(false);
         ReadOnlyMemory<byte>[] handleNames = [indexName, indexName];
 
@@ -1423,7 +1415,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         //Handle area, a password authorization area, then one octet short of the UINT64 the table declares.
         var body = new List<byte>();
@@ -1455,7 +1447,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         //Handle area, a password authorization area, the eight octets of bits, then one octet too many.
         var body = new List<byte>();
@@ -1485,7 +1477,7 @@ internal sealed class TpmInHouseSimulatorNvSetBitsTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsAttributes).ConfigureAwait(false);
 
         //Handle area and the parameter alone: the frame declares no sessions and carries no authorization area.
         var body = new List<byte>();

@@ -1,15 +1,10 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Extensions.Seal;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Linq;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
@@ -9,7 +8,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
-using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
@@ -303,7 +301,7 @@ internal sealed class JarClientIdentifierTests
 
         string compactJar = JwsSerialization.SerializeCompact(signedJar.Message, Encoder);
 
-        JarAttestationExtensions.TryGetVerifierAttestationJwt(
+        _ = JarAttestationExtensions.TryGetVerifierAttestationJwt(
             compactJar,
             Decoder,
             bytes => JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(
@@ -806,7 +804,7 @@ internal sealed class JarClientIdentifierTests
         //     → didResolver.DereferenceAsync(kid) → KeyDidResolver synthesises
         //       a DidDocument → fragment-match selects the verification method
         //     → VerificationMethodCryptoConversions decodes to PublicKeyMemory.
-        ExchangeContext didContext = new();
+        ExchangeContext didContext = [];
         didContext.SetValidationTime(now);
         using PublicKeyMemory resolvedKey = await composite(
             didContext,

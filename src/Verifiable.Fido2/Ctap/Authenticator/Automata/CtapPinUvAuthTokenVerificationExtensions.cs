@@ -1,9 +1,5 @@
-using System;
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 

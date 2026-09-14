@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 
 namespace Verifiable.Core.Did.Methods.WebPlus;
 

@@ -1,7 +1,4 @@
-using System;
-using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Fido2;
 
@@ -103,37 +100,37 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
 
             switch(memberName)
             {
-                case(ChallengeMember):
+                case ChallengeMember:
                 {
                     challenge = ReadRequiredString(ref reader, memberName);
                     break;
                 }
-                case(TimeoutMember):
+                case TimeoutMember:
                 {
                     timeout = ReadRequiredUInt32(ref reader, memberName);
                     break;
                 }
-                case(RpIdMember):
+                case RpIdMember:
                 {
                     rpId = ReadRequiredString(ref reader, memberName);
                     break;
                 }
-                case(AllowCredentialsMember):
+                case AllowCredentialsMember:
                 {
                     allowCredentials = ReadDescriptors(ref reader, memberName, pool);
                     break;
                 }
-                case(UserVerificationMember):
+                case UserVerificationMember:
                 {
                     userVerification = WellKnownUserVerificationRequirements.FromWireValue(ReadRequiredString(ref reader, memberName));
                     break;
                 }
-                case(HintsMember):
+                case HintsMember:
                 {
                     hints = ReadHints(ref reader, memberName);
                     break;
                 }
-                case(ExtensionsMember):
+                case ExtensionsMember:
                 {
                     (appId, largeBlob) = ReadExtensions(ref reader);
                     break;
@@ -209,17 +206,17 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
 
                 switch(elementMemberName)
                 {
-                    case(TypeMember):
+                    case TypeMember:
                     {
                         type = ReadRequiredString(ref reader, elementMemberName);
                         break;
                     }
-                    case(IdMember):
+                    case IdMember:
                     {
                         idBytes = ReadRequiredBinary(ref reader, elementMemberName);
                         break;
                     }
-                    case(TransportsMember):
+                    case TransportsMember:
                     {
                         transports = ReadStringArray(ref reader, elementMemberName);
                         break;
@@ -347,12 +344,12 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
 
             switch(memberName)
             {
-                case(ReadMember):
+                case ReadMember:
                 {
                     read = ReadRequiredBoolean(ref reader, memberName);
                     break;
                 }
-                case(WriteMember):
+                case WriteMember:
                 {
                     writeBytes = ReadRequiredBinary(ref reader, memberName);
                     break;
@@ -444,7 +441,7 @@ public static class PublicKeyCredentialRequestOptionsJsonReader
 
     private static bool ReadRequiredBoolean(ref Utf8JsonReader reader, string memberName)
     {
-        if(reader.TokenType != JsonTokenType.True && reader.TokenType != JsonTokenType.False)
+        if(reader.TokenType is not JsonTokenType.True and not JsonTokenType.False)
         {
             throw new Fido2FormatException($"The member '{memberName}' MUST be a boolean.");
         }

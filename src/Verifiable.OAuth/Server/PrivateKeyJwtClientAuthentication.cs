@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
@@ -8,8 +7,6 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.WellKnown;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Server;
 
@@ -455,7 +452,7 @@ public static class PrivateKeyJwtClientAuthentication
                     JwtPayload payload;
                     try
                     {
-                        payload = new JwtPayload(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
+                        payload = new(oauth.Codecs.JwtPayloadDeserializer(unverified.Payload.Span));
                     }
                     catch(Exception ex) when(ex is FormatException or InvalidOperationException)
                     {

@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
@@ -308,7 +306,7 @@ internal sealed class VerifiablePresentationRequestTests
         Assert.IsTrue(result.IsSatisfiable);
         Assert.HasCount(2, result.Groups);
         //One group (the membership one) is satisfied, the alumni group is not.
-        Assert.ContainsSingle(result.Groups.Where(g => g.IsSatisfied));
+        _ = Assert.ContainsSingle(result.Groups.Where(g => g.IsSatisfied));
     }
 
 

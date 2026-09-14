@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
@@ -143,7 +142,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
         writer.WriteByteString(authDataOwner.Memory.Span[..4]);
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 
 
@@ -155,7 +154,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
         //time and would refuse to emit this): {1: h'', 1: h''} — a duplicate top-level key.
         byte[] duplicateKeyMap = [0xA2, 0x01, 0x40, 0x01, 0x40];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(duplicateKeyMap));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(duplicateKeyMap));
     }
 
 
@@ -166,7 +165,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
         //Major type 5 (map) with additional info 31 (indefinite length), one entry, then the break byte.
         byte[] indefiniteLengthMap = [0xBF, 0x01, 0x40, 0xFF];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(indefiniteLengthMap));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapMakeCredentialResponseCborReader.Read(indefiniteLengthMap));
     }
 
 
@@ -232,7 +231,7 @@ internal sealed class CtapMakeCredentialResponseCborReaderTests
         CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(encoded.Memory);
 
         Assert.IsTrue(decoded.EpAtt.HasValue, "an explicit epAtt: false must round-trip as present-false, not absence.");
-        Assert.IsFalse(decoded.EpAtt!.Value);
+        Assert.IsFalse(decoded.EpAtt.Value);
     }
 
 

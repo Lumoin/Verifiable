@@ -288,7 +288,7 @@ internal sealed class SdJwtPathExtractionTests
         return SdDisclosure.CreateProperty(
             TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
             claimName,
-            JsonDocument.Parse($"\"{claimValue}\"").RootElement);
+            JsonElement.Parse($"\"{claimValue}\""));
     }
 
 
@@ -296,7 +296,7 @@ internal sealed class SdJwtPathExtractionTests
     {
         return SdDisclosure.CreateArrayElement(
             TestSalts.FromBytes(Encoding.UTF8.GetBytes(salt)),
-            JsonDocument.Parse($"\"{claimValue}\"").RootElement);
+            JsonElement.Parse($"\"{claimValue}\""));
     }
 
 

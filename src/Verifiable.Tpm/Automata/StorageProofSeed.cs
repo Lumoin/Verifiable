@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec;
 
 namespace Verifiable.Tpm.Automata;
 
@@ -43,7 +41,7 @@ public sealed class StorageProofSeed: SensitiveMemory
     /// instance.
     /// </summary>
     /// <param name="storage">The memory owner holding the seed octets.</param>
-    private StorageProofSeed(IMemoryOwner<byte> storage): base(storage, TpmTags.StorageProofSeed)
+    private StorageProofSeed(IMemoryOwner<byte> storage) : base(storage, TpmTags.StorageProofSeed)
     {
     }
 

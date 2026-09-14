@@ -1,22 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -89,7 +82,7 @@ internal sealed class StatusListAggregationHttpFlowTests
         Uri aggregationUri = new(host.BaseAddress, "/aggregation");
 
         using HttpResponseMessage aggregationResponse = await httpClient.GetAsync(aggregationUri, TestContext.CancellationToken).ConfigureAwait(false);
-        aggregationResponse.EnsureSuccessStatusCode();
+        _ = aggregationResponse.EnsureSuccessStatusCode();
         ReadOnlyMemory<byte> fetchedAggregationBytes = await aggregationResponse.Content.ReadAsByteArrayAsync(TestContext.CancellationToken).ConfigureAwait(false);
         StatusListAggregation parsedAggregation = JsonSerializerExtensions.Deserialize<StatusListAggregation>(fetchedAggregationBytes.Span, TestSetup.DefaultSerializationOptions)!;
 
@@ -101,7 +94,7 @@ internal sealed class StatusListAggregationHttpFlowTests
         (OutboundTransportDelegate transport, Func<IReadOnlyList<string?>> contentTypes) = RecordingOutboundTransport.Wrap(
             GuardedHttpClientTransport.BuildSingleHopTransport(statusListHttpClient));
         ExchangeContext context = TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy);
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
             ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
         ResolveVerifiedStatusListTokenDelegate resolve = StatusListTokenResolvers.BuildResolving(
             transport, context, resolveIssuerKey, TestSetup.Base64UrlDecoder, JwtPartJson.Default, BaseMemoryPool.Shared, Clock);

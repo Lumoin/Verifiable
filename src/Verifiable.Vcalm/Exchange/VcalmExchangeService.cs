@@ -67,7 +67,7 @@ public static class VcalmExchangeService
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             //§3.4.1: query is the REQUIRED member; it rides through raw (the deployment composed the
@@ -76,7 +76,7 @@ public static class VcalmExchangeService
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Challenge, challenge, ref first);
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Domain, domain, ref first);
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

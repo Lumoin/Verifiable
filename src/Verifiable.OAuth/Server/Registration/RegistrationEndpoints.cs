@@ -1,12 +1,10 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Server.Registration;
 
@@ -218,7 +216,7 @@ public static class RegistrationEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, clientId, ref first);
             JsonAppender.AppendInt64Field(sb, ClientMetadataParameterNames.ClientIdIssuedAt,
@@ -228,7 +226,7 @@ public static class RegistrationEndpoints
             JsonAppender.AppendStringField(sb, "registration_client_uri",
                 $"/connect/{tenantSegment}/register", ref first);
             AppendMetadataFields(sb, metadata, ref first);
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -529,7 +527,7 @@ public static class RegistrationEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(sb, ClientMetadataParameterNames.ClientId, registration.ClientId, ref first);
             JsonAppender.AppendUriArrayField(sb, ClientMetadataParameterNames.RedirectUris,
@@ -556,7 +554,7 @@ public static class RegistrationEndpoints
                     ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

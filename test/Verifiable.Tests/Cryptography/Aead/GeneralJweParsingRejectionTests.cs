@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -45,7 +44,7 @@ internal sealed class GeneralJweParsingRejectionTests
         //maximum is rejected as an ArgumentException before any parsing begins.
         string oversize = new('a', GeneralJweParsing.MaxGeneralJweByteCount + 1);
 
-        Assert.ThrowsExactly<ArgumentException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => GeneralJweParsing.ParseGeneralJson(
                 oversize,
                 WellKnownJweAlgorithms.EcdhEsA256Kw,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -61,7 +60,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = RemoveTopLevelStringMember(general, "protected");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A General JSON JWE without a 'protected' member must be rejected (RFC 7516 §7.2.1).");
     }
 
@@ -75,7 +74,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = RemoveTopLevelStringMember(general, member);
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             $"A General JSON JWE missing '{member}' must be rejected (RFC 7516 §7.2.1).");
     }
 
@@ -88,7 +87,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = ReplaceRecipientsArray(general, "[]");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A General JSON JWE with an empty 'recipients' array must be rejected (RFC 7516 §7.2.1).");
     }
 
@@ -100,7 +99,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = ReplaceRecipientsArray(general, "\"not-an-array\"");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A General JSON JWE whose 'recipients' is not an array must be rejected.");
     }
 
@@ -112,7 +111,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = ReplaceRecipientsArray(general, "[\"not-an-object\"]");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A 'recipients' element that is not an object must be rejected.");
     }
 
@@ -127,7 +126,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = ReplaceRecipientsArray(general, "[{{");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A 'recipients' element with unbalanced braces must be rejected.");
     }
 
@@ -147,7 +146,7 @@ internal sealed class GeneralJweParsingRejectionTests
 
         string mutated = ReplaceRecipientsArray(general, element);
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             $"A 'recipients' element missing its {missing} must be rejected.");
     }
 
@@ -159,7 +158,7 @@ internal sealed class GeneralJweParsingRejectionTests
         //expected algorithm. The baseline carries ECDH-ES+A256KW; expect ECDH-1PU+A256KW.
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
 
-        Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseGeneralJson(
                 general,
                 WellKnownJweAlgorithms.Ecdh1PuA256Kw,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -176,7 +175,7 @@ internal sealed class GeneralJweParsingRejectionTests
         //expected encryption. The baseline carries A256GCM; expect A256CBC-HS512.
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
 
-        Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseGeneralJson(
                 general,
                 WellKnownJweAlgorithms.EcdhEsA256Kw,
                 WellKnownJweEncryptionAlgorithms.A256CbcHs512,
@@ -198,7 +197,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = RewriteProtectedHeaderJsonValue(general, "alg", WellKnownJweAlgorithms.EcdhEs);
 
-        Assert.ThrowsExactly<NotSupportedException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<NotSupportedException>(() => GeneralJweParsing.ParseGeneralJson(
                 mutated,
                 WellKnownJweAlgorithms.EcdhEs,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -217,7 +216,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = RewriteProtectedHeaderJsonValue(general, "alg", WellKnownJweAlgorithms.A256Kw);
 
-        Assert.ThrowsExactly<NotSupportedException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<NotSupportedException>(() => GeneralJweParsing.ParseGeneralJson(
                 mutated,
                 WellKnownJweAlgorithms.A256Kw,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -237,7 +236,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = RewriteProtectedHeaderJsonValue(general, "alg", WellKnownJweAlgorithms.Dir);
 
-        Assert.ThrowsExactly<NotSupportedException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<NotSupportedException>(() => GeneralJweParsing.ParseGeneralJson(
                 mutated,
                 WellKnownJweAlgorithms.Dir,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -258,7 +257,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string withProtectedCty = InsertProtectedHeaderMember(general, "\"cty\":\"application/json\"");
         string mutated = InsertTopLevelMember(withProtectedCty, "\"unprotected\":{\"cty\":\"application/json\"}");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A header parameter ('cty') present in both the protected and unprotected headers must be rejected (RFC 7516 §7.2.1).");
     }
 
@@ -271,7 +270,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = InsertProtectedHeaderMember(general, "\"kid\":\"did:example:recipient-0#key-1\"");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A header parameter ('kid') present in both the protected header and a recipient header must be rejected (RFC 7516 §7.2.1).");
     }
 
@@ -285,7 +284,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = InsertTopLevelMember(general, "\"tag\":\"AAAAAAAAAAAAAAAAAAAAAA\"");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A duplicated top-level envelope member ('tag') must be rejected (RFC 7516 §5.2 step 4).");
     }
 
@@ -299,7 +298,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptSingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = InsertTopLevelMember(general, "\"unprotected\":{\"apu\":\"QWxpY2U\"}");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "An 'unprotected' header carrying the cryptographic parameter 'apu' must be rejected.");
     }
 
@@ -330,7 +329,7 @@ internal sealed class GeneralJweParsingRejectionTests
         //"AAAAAAAAAAAAAAAAAAAAAA" base64url decodes to 16 bytes, not the 12 A256GCM requires.
         string mutated = ReplaceTopLevelStringValue(general, "iv", "AAAAAAAAAAAAAAAAAAAAAA");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "An 'iv' whose decoded length does not match the enc's IV length must be rejected (RFC 7516 §5.2).");
     }
 
@@ -345,7 +344,7 @@ internal sealed class GeneralJweParsingRejectionTests
         //"AAAAAAAA" base64url decodes to 6 bytes, not the 16 A256GCM requires.
         string mutated = ReplaceTopLevelStringValue(general, "tag", "AAAAAAAA");
 
-        Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
+        _ = Assert.ThrowsExactly<FormatException>(() => ParseAnoncrypt(mutated),
             "A 'tag' whose decoded length does not match the enc's tag length must be rejected (RFC 7516 §5.2).");
     }
 
@@ -360,7 +359,7 @@ internal sealed class GeneralJweParsingRejectionTests
         string general = await EncryptAnoncryptP256SingleRecipientJsonAsync().ConfigureAwait(false);
         string mutated = TamperProtectedHeaderEpkY(general);
 
-        Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseGeneralJson(
+        _ = Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseGeneralJson(
                 mutated,
                 WellKnownJweAlgorithms.EcdhEsA256Kw,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -516,8 +515,8 @@ internal sealed class GeneralJweParsingRejectionTests
     {
         string token = $"\"{member}\":";
         int memberStart = json.IndexOf(token, StringComparison.Ordinal);
-        int valueQuoteStart = json.IndexOf('"', memberStart + token.Length);
-        int valueQuoteEnd = json.IndexOf('"', valueQuoteStart + 1);
+        int valueQuoteStart = json.IndexOf('"', memberStart + token.Length, StringComparison.Ordinal);
+        int valueQuoteEnd = json.IndexOf('"', valueQuoteStart + 1, StringComparison.Ordinal);
         int afterValue = valueQuoteEnd + 1;
 
         if(afterValue < json.Length && json[afterValue] == ',')
@@ -525,7 +524,7 @@ internal sealed class GeneralJweParsingRejectionTests
             return json[..memberStart] + json[(afterValue + 1)..];
         }
 
-        int commaPrev = json.LastIndexOf(',', memberStart);
+        int commaPrev = json.LastIndexOf(',', memberStart, StringComparison.Ordinal);
 
         return json[..commaPrev] + json[afterValue..];
     }
@@ -536,7 +535,7 @@ internal sealed class GeneralJweParsingRejectionTests
     {
         string token = $"\"{member}\":\"";
         int valueStart = json.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = json.IndexOf('"', valueStart);
+        int valueEnd = json.IndexOf('"', valueStart, StringComparison.Ordinal);
 
         return json[..valueStart] + newValue + json[valueEnd..];
     }
@@ -626,7 +625,7 @@ internal sealed class GeneralJweParsingRejectionTests
     {
         const string token = "\"encrypted_key\":\"";
         int valueStart = json.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = json.IndexOf('"', valueStart);
+        int valueEnd = json.IndexOf('"', valueStart, StringComparison.Ordinal);
 
         return json[valueStart..valueEnd];
     }
@@ -659,7 +658,7 @@ internal sealed class GeneralJweParsingRejectionTests
         //epk is a nested object: ..."y":"<base64url>"...; flip the first char of its value.
         const string token = "\"y\":\"";
         int valueStart = headerJson.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = headerJson.IndexOf('"', valueStart);
+        int valueEnd = headerJson.IndexOf('"', valueStart, StringComparison.Ordinal);
         char[] value = headerJson[valueStart..valueEnd].ToCharArray();
         value[0] = value[0] == 'A' ? 'B' : 'A';
         string tamperedHeaderJson = headerJson[..valueStart] + new string(value) + headerJson[valueEnd..];
@@ -677,7 +676,7 @@ internal sealed class GeneralJweParsingRejectionTests
     {
         const string token = "\"protected\":\"";
         int valueStart = generalJson.IndexOf(token, StringComparison.Ordinal) + token.Length;
-        int valueEnd = generalJson.IndexOf('"', valueStart);
+        int valueEnd = generalJson.IndexOf('"', valueStart, StringComparison.Ordinal);
         protectedEncoded = generalJson[valueStart..valueEnd];
 
         using IMemoryOwner<byte> decoded = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);

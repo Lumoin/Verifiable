@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.Json.Converters;
@@ -72,7 +70,7 @@ public static class JwtClaimsJson
     //of this leaf into Verifiable.DidComm (the serialization firewall boundary).
     private static JwtPayload DeserializePayload(System.ReadOnlySpan<byte> payloadJson)
     {
-        return new JwtPayload(DeserializeObject(payloadJson, "payload"));
+        return new(DeserializeObject(payloadJson, "payload"));
     }
 
 

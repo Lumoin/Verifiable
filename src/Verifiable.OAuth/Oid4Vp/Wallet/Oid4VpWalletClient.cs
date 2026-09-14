@@ -1,14 +1,12 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;
+using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
 
@@ -102,7 +100,7 @@ public sealed class Oid4VpWalletClient
     public ValueTask<PresentationResult> PresentJarAsync(
         PresentJarOptions presentJarOptions,
         CancellationToken cancellationToken) =>
-        PresentJarAsync(presentJarOptions, new ExchangeContext(), cancellationToken);
+        PresentJarAsync(presentJarOptions, [], cancellationToken);
 
 
     /// <summary>
@@ -274,7 +272,7 @@ public sealed class Oid4VpWalletClient
             {
                 //Copy the header into a standalone instance so it survives the
                 //UnverifiedJwsMessage's disposal below.
-                jarHeader = new UnverifiedJwtHeader(unverifiedJar.Signatures[0].ProtectedHeader);
+                jarHeader = new(unverifiedJar.Signatures[0].ProtectedHeader);
             }
 
             //Stamp the trust-material evaluation instant from the wallet's
@@ -420,8 +418,8 @@ public sealed class Oid4VpWalletClient
         if(!string.Equals(request.ClientId, expectedVerifierClientId, StringComparison.Ordinal))
         {
             //Surface the tampering detection on the active span before failing closed.
-            Activity.Current?.AddEvent(
-                new ActivityEvent(OAuthEventNames.Oid4VpClientIdMixUpRejected));
+            _ = (Activity.Current?.AddEvent(
+                new ActivityEvent(OAuthEventNames.Oid4VpClientIdMixUpRejected)));
 
             throw new InvalidOperationException(
                 $"The Authorization Request's client_id '{request.ClientId}' does not match the " +
@@ -520,7 +518,7 @@ public sealed class Oid4VpWalletClient
         //from RequestUriReceived to JarParsed.
         if(walletNonceSent is not null)
         {
-            await pda.StepAsync(
+            _ = await pda.StepAsync(
                 new WalletPostSent(
                     presentJarOptions.RequestUri,
                     walletNonceSent,
@@ -528,7 +526,7 @@ public sealed class Oid4VpWalletClient
                 cancellationToken).ConfigureAwait(false);
         }
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new JarReceived(presentJarOptions.RequestUri, request, Infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
@@ -562,7 +560,7 @@ public sealed class Oid4VpWalletClient
 
         string? responseEncryptionApu = presentationSet.ResponseEncryptionApu;
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new DcqlMatched(
                 preparedQuery,
                 presentationsByQueryId,
@@ -578,7 +576,7 @@ public sealed class Oid4VpWalletClient
                 presentationsByQueryId,
                 WalletConfiguration.JwtPayloadSerializer);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new PresentationSelected(vpTokenJson, Infrastructure.TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
 
@@ -664,7 +662,7 @@ public sealed class Oid4VpWalletClient
                     vpTokenJson,
                     request.State);
 
-                await pda.StepAsync(
+                _ = await pda.StepAsync(
                     new ResponsePostedByWallet(
                         request.ResponseUri,
                         request.State,
@@ -719,7 +717,7 @@ public sealed class Oid4VpWalletClient
                 $"{postResponse.Body}");
         }
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ResponsePostedByWallet(
                 request.ResponseUri,
                 request.State,

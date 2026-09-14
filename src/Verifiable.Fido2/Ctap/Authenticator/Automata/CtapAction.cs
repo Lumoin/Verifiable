@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;

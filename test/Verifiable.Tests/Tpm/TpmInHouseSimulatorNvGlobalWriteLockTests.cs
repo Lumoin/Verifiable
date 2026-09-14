@@ -1,7 +1,5 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -9,11 +7,6 @@ using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -142,7 +135,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> firstWrite = await WriteIndexAsync(
             device, pool, registry, GlobalLockIndexHandle, CorrectAuth, IndexData).ConfigureAwait(false);
@@ -177,7 +170,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
         byte[] nameBefore = await ReadIndexNameAsync(device, PlainIndexHandle).ConfigureAwait(false);
 
         TpmResult<NvGlobalWriteLockResponse> lockResult = await GlobalWriteLockAsync(device, pool, registry).ConfigureAwait(false);
@@ -185,7 +178,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, PlainIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED,
+            default, attributes & TpmaNv.TPMA_NV_WRITELOCKED,
             "TPMA_NV_GLOBALLOCK CLEAR means the command has no effect on this Index.");
 
         byte[] nameAfter = await ReadIndexNameAsync(device, PlainIndexHandle).ConfigureAwait(false);
@@ -212,7 +205,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, OrderlyGlobalLockIndexHandle, OrderlyGlobalLockAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrderlyGlobalLockIndexHandle, OrderlyGlobalLockAttributes).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> firstWrite = await WriteIndexAsync(
             device, pool, registry, OrderlyGlobalLockIndexHandle, CorrectAuth, IndexData).ConfigureAwait(false);
@@ -247,10 +240,10 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
 
         TpmaNv beforeLock = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), beforeLock & TpmaNv.TPMA_NV_WRITTEN, "The Index has never been written.");
+        Assert.AreEqual(default, beforeLock & TpmaNv.TPMA_NV_WRITTEN, "The Index has never been written.");
 
         TpmResult<NvGlobalWriteLockResponse> lockResult = await GlobalWriteLockAsync(device, pool, registry).ConfigureAwait(false);
         Assert.IsTrue(lockResult.IsSuccess, $"TPM2_NV_GlobalWriteLock() failed: '{lockResult.ResponseCode}'.");
@@ -282,9 +275,9 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, OrderlyGlobalLockIndexHandle, OrderlyGlobalLockAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrderlyGlobalLockIndexHandle, OrderlyGlobalLockAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
 
         TpmResult<NvGlobalWriteLockResponse> lockResult = await GlobalWriteLockAsync(device, pool, registry).ConfigureAwait(false);
         Assert.IsTrue(lockResult.IsSuccess, $"TPM2_NV_GlobalWriteLock() failed: '{lockResult.ResponseCode}'.");
@@ -295,7 +288,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
 
         Assert.AreEqual(TpmaNv.TPMA_NV_WRITELOCKED, globalLockAttributes & TpmaNv.TPMA_NV_WRITELOCKED, "The elected Ordinary Index locks.");
         Assert.AreEqual(TpmaNv.TPMA_NV_WRITELOCKED, orderlyAttributes & TpmaNv.TPMA_NV_WRITELOCKED, "The elected orderly Index locks as well.");
-        Assert.AreEqual(default(TpmaNv), plainAttributes & TpmaNv.TPMA_NV_WRITELOCKED, "The Index carrying no TPMA_NV_GLOBALLOCK is untouched.");
+        Assert.AreEqual(default, plainAttributes & TpmaNv.TPMA_NV_WRITELOCKED, "The Index carrying no TPMA_NV_GLOBALLOCK is untouched.");
 
         TpmResult<NvWriteResponse> globalLockWrite = await WriteIndexAsync(
             device, pool, registry, GlobalLockIndexHandle, CorrectAuth, RefusedWriteAttempt).ConfigureAwait(false);
@@ -344,16 +337,16 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
 
         TpmResult<NvGlobalWriteLockResponse> firstLock = await GlobalWriteLockAsync(device, pool, registry).ConfigureAwait(false);
         Assert.IsTrue(firstLock.IsSuccess, $"The first TPM2_NV_GlobalWriteLock() failed: '{firstLock.ResponseCode}'.");
 
-        await DefineIndexAsync(device, pool, registry, LateGlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, LateGlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
 
         TpmaNv afterDefinition = await ReadIndexAttributesAsync(device, LateGlobalLockIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            default(TpmaNv), afterDefinition & TpmaNv.TPMA_NV_WRITELOCKED,
+            default, afterDefinition & TpmaNv.TPMA_NV_WRITELOCKED,
             "The earlier global lock does not reach an Index that did not yet exist.");
 
         TpmResult<NvWriteResponse> writeBeforeSecondLock = await WriteIndexAsync(
@@ -387,8 +380,8 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
 
         TpmResult<NvGlobalWriteLockResponse> firstLock = await GlobalWriteLockAsync(device, pool, registry).ConfigureAwait(false);
         Assert.IsTrue(firstLock.IsSuccess, $"The first TPM2_NV_GlobalWriteLock() failed: '{firstLock.ResponseCode}'.");
@@ -426,9 +419,9 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, OrderlyGlobalLockIndexHandle, OrderlyGlobalLockAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, GlobalLockIndexHandle, GlobalLockOnlyAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, OrderlyGlobalLockIndexHandle, OrderlyGlobalLockAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
 
         byte[] globalLockNameBefore = await ReadIndexNameAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
         byte[] orderlyNameBefore = await ReadIndexNameAsync(device, OrderlyGlobalLockIndexHandle).ConfigureAwait(false);
@@ -467,7 +460,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED,
+            default, attributes & TpmaNv.TPMA_NV_WRITELOCKED,
             "A TPM Reset must CLEAR a globally set TPMA_NV_WRITELOCKED on an Index whose TPMA_NV_WRITEDEFINE is CLEAR.");
 
         TpmResult<NvWriteResponse> writeResult = await WriteIndexAsync(
@@ -496,7 +489,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED,
+            default, attributes & TpmaNv.TPMA_NV_WRITELOCKED,
             "A TPM Restart must CLEAR a globally set TPMA_NV_WRITELOCKED on an Index whose TPMA_NV_WRITEDEFINE is CLEAR.");
 
         TpmResult<NvWriteResponse> writeResult = await WriteIndexAsync(
@@ -597,7 +590,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         Assert.IsTrue(redefineResult.IsSuccess, $"The redefinition must succeed: '{redefineResult.ResponseCode}'.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, WriteDefineGlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A newly defined Index carries TPMA_NV_WRITELOCKED CLEAR.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A newly defined Index carries TPMA_NV_WRITELOCKED CLEAR.");
 
         TpmResult<NvWriteResponse> writeResult = await WriteIndexAsync(
             device, pool, registry, WriteDefineGlobalLockIndexHandle, CorrectAuth, IndexData).ConfigureAwait(false);
@@ -621,7 +614,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, WriteDefineGlobalLockIndexHandle, WriteDefineGlobalLockAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, WriteDefineGlobalLockIndexHandle, WriteDefineGlobalLockAttributes).ConfigureAwait(false);
 
         TpmResult<NvGlobalWriteLockResponse> lockResult = await GlobalWriteLockAsync(device, pool, registry).ConfigureAwait(false);
         Assert.IsTrue(lockResult.IsSuccess, $"TPM2_NV_GlobalWriteLock() failed: '{lockResult.ResponseCode}'.");
@@ -635,7 +628,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
 
         TpmaNv afterReset = await ReadIndexAttributesAsync(device, WriteDefineGlobalLockIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            default(TpmaNv), afterReset & TpmaNv.TPMA_NV_WRITELOCKED,
+            default, afterReset & TpmaNv.TPMA_NV_WRITELOCKED,
             "TPMA_NV_WRITTEN CLEAR unlocks the Index even under TPMA_NV_WRITEDEFINE, so no Index is defined that can never be written.");
 
         TpmResult<NvWriteResponse> writeResult = await WriteIndexAsync(
@@ -657,7 +650,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterGlobalLockAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterGlobalLockAttributes, EightOctetDataSize).ConfigureAwait(false);
 
         TpmResult<NvIncrementResponse> firstIncrement = await IncrementAsync(device, pool, registry, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
         Assert.IsTrue(firstIncrement.IsSuccess, $"The Counter Index must increment before the global lock: '{firstIncrement.ResponseCode}'.");
@@ -686,7 +679,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendGlobalLockAttributes, Sha256DigestSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ExtendIndexHandle, ExtendGlobalLockAttributes, Sha256DigestSize).ConfigureAwait(false);
 
         TpmResult<NvExtendResponse> firstExtend = await ExtendAsync(device, pool, registry, ExtendIndexHandle, CorrectAuth, AcceptedExtendAttempt).ConfigureAwait(false);
         Assert.IsTrue(firstExtend.IsSuccess, $"The Extend Index must extend before the global lock: '{firstExtend.ResponseCode}'.");
@@ -716,7 +709,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsGlobalLockAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsGlobalLockAttributes, EightOctetDataSize).ConfigureAwait(false);
 
         TpmResult<NvSetBitsResponse> firstSetBits = await SetBitsAsync(device, pool, registry, BitsIndexHandle, CorrectAuth, AcceptedBits).ConfigureAwait(false);
         Assert.IsTrue(firstSetBits.IsSuccess, $"The Bit Field Index must accept bits before the global lock: '{firstSetBits.ResponseCode}'.");

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -121,7 +119,7 @@ public sealed class TrustedListSchemeInformation
 /// trust in each list it points to rather than relying on PKIX discovery.
 /// </summary>
 [DebuggerDisplay("OtherTrustedListPointer: {TslLocation}, territory={AdditionalInformation.SchemeTerritory}")]
-public sealed class OtherTrustedListPointer : IDisposable
+public sealed class OtherTrustedListPointer: IDisposable
 {
     /// <summary>The location (URI) the pointed-to list is published at (clause 5.3.13 item a).</summary>
     public required Uri TslLocation { get; init; }
@@ -169,7 +167,7 @@ public sealed class OtherTrustedListPointerAdditionalInformation
 /// ETSI TS 119 612 V2.4.1 clause 5.4</see>.
 /// </summary>
 [DebuggerDisplay("TrustServiceProvider: {Names.Count} names, {Services.Count} services")]
-public sealed class TrustServiceProvider : IDisposable
+public sealed class TrustServiceProvider: IDisposable
 {
     /// <summary>The TSP's legal name, one entry per language (clause 5.4.1).</summary>
     public required IReadOnlyList<LocalizedText> Names { get; init; }
@@ -210,7 +208,7 @@ public sealed class TrustServiceProvider : IDisposable
 /// status alone.
 /// </summary>
 [DebuggerDisplay("TrustService: {ServiceTypeIdentifier}, {Status}, since {StatusStartingTime}")]
-public sealed class TrustService : IDisposable
+public sealed class TrustService: IDisposable
 {
     /// <summary>What kind of service this is (clause 5.5.1).</summary>
     public required TrustServiceTypeIdentifier ServiceTypeIdentifier { get; init; }
@@ -257,7 +255,7 @@ public sealed class TrustService : IDisposable
 /// points, only what identifies the prior state and how long it held.
 /// </summary>
 [DebuggerDisplay("TrustServiceHistoryEntry: {ServiceTypeIdentifier}, {PreviousStatus}, since {StatusStartingTime}")]
-public sealed class TrustServiceHistoryEntry : IDisposable
+public sealed class TrustServiceHistoryEntry: IDisposable
 {
     /// <summary>The service type identifier as it was in this prior state (clause 5.6.1).</summary>
     public required TrustServiceTypeIdentifier ServiceTypeIdentifier { get; init; }
@@ -296,7 +294,7 @@ public sealed class TrustServiceHistoryEntry : IDisposable
 /// tree carries; the caller disposes it.
 /// </summary>
 [DebuggerDisplay("TrustedList: {SchemeInformation.TslType}, {TrustServiceProviders.Count} providers")]
-public sealed class TrustedList : IDisposable
+public sealed class TrustedList: IDisposable
 {
     /// <summary>The list's scheme information (clause 5.3).</summary>
     public required TrustedListSchemeInformation SchemeInformation { get; init; }

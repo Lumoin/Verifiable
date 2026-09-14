@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Server;
 
 namespace Verifiable.Vcalm.Exchange;
 

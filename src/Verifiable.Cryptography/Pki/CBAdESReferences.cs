@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -278,7 +276,7 @@ public abstract class CBAdESCertificateReferenceKeyIdentifier
 /// <c>kid</c> integer are the same key identifier no matter which decode produced them.
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReferenceKeyIdentifierInteger: {Value}")]
-public sealed class CBAdESCertificateReferenceKeyIdentifierInteger : CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierInteger>
+public sealed class CBAdESCertificateReferenceKeyIdentifierInteger: CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierInteger>
 {
     /// <summary>Initializes a new <see cref="CBAdESCertificateReferenceKeyIdentifierInteger"/>.</summary>
     /// <param name="value">The integer key identifier.</param>
@@ -329,7 +327,7 @@ public sealed class CBAdESCertificateReferenceKeyIdentifierInteger : CBAdESCerti
 /// fixes byte for byte, never a phrase to collate.
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReferenceKeyIdentifierText: {Value}")]
-public sealed class CBAdESCertificateReferenceKeyIdentifierText : CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierText>
+public sealed class CBAdESCertificateReferenceKeyIdentifierText: CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierText>
 {
     /// <summary>Initializes a new <see cref="CBAdESCertificateReferenceKeyIdentifierText"/>.</summary>
     /// <param name="value">The textual key identifier.</param>
@@ -386,7 +384,7 @@ public sealed class CBAdESCertificateReferenceKeyIdentifierText : CBAdESCertific
 /// constructor remarks) and never disposed, so the comparison is always safe.
 /// </remarks>
 [DebuggerDisplay("CBAdESCertificateReferenceKeyIdentifierBytes: {Value.Length} bytes")]
-public sealed class CBAdESCertificateReferenceKeyIdentifierBytes : CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierBytes>
+public sealed class CBAdESCertificateReferenceKeyIdentifierBytes: CBAdESCertificateReferenceKeyIdentifier, IEquatable<CBAdESCertificateReferenceKeyIdentifierBytes>
 {
     /// <summary>Initializes a new <see cref="CBAdESCertificateReferenceKeyIdentifierBytes"/>.</summary>
     /// <param name="value">
@@ -1034,7 +1032,7 @@ public abstract class CBAdESOcspResponderIdentifier
 /// borrowed view, never disposed, so the comparison never reaches past memory this instance does not own.
 /// </remarks>
 [DebuggerDisplay("CBAdESOcspResponderIdentifierByName: {Name.Length} bytes")]
-public sealed class CBAdESOcspResponderIdentifierByName : CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByName>
+public sealed class CBAdESOcspResponderIdentifierByName: CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByName>
 {
     /// <summary>Initializes a new <see cref="CBAdESOcspResponderIdentifierByName"/>.</summary>
     /// <param name="name">
@@ -1111,7 +1109,7 @@ public sealed class CBAdESOcspResponderIdentifierByName : CBAdESOcspResponderIde
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESOcspResponderIdentifierByKey: {KeyDigest.Length} bytes")]
-public sealed class CBAdESOcspResponderIdentifierByKey : CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByKey>
+public sealed class CBAdESOcspResponderIdentifierByKey: CBAdESOcspResponderIdentifier, IEquatable<CBAdESOcspResponderIdentifierByKey>
 {
     /// <summary>Initializes a new <see cref="CBAdESOcspResponderIdentifierByKey"/>.</summary>
     /// <param name="keyDigest">

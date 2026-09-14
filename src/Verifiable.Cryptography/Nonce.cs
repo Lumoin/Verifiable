@@ -79,7 +79,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     /// stopped on <see cref="Dispose()"/>. Pass <see langword="null"/> when no OTel
     /// listener is active.
     /// </param>
-    public Nonce(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): base(sensitiveMemory, tag, lifetime)
+    public Nonce(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null) : base(sensitiveMemory, tag, lifetime)
     {
         this.Lifetime = lifetime;
     }
@@ -108,7 +108,7 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     public ReadOnlySpan<byte> UseNonce()
     {
         int count = Interlocked.Increment(ref useCount);
-        Lifetime?.SetTag(CryptoTelemetry.Nonce.UseCount, count);
+        _ = (Lifetime?.SetTag(CryptoTelemetry.Nonce.UseCount, count));
 
         return AsReadOnlySpan();
     }
@@ -169,8 +169,8 @@ public sealed class Nonce: SensitiveMemory, IEquatable<Nonce>
     {
         if(disposing)
         {
-            Lifetime?.SetTag(CryptoTelemetry.Nonce.FinalUseCount, useCount);
-            Lifetime?.SetTag(CryptoTelemetry.Nonce.Used, useCount > 0);
+            _ = (Lifetime?.SetTag(CryptoTelemetry.Nonce.FinalUseCount, useCount));
+            _ = (Lifetime?.SetTag(CryptoTelemetry.Nonce.Used, useCount > 0));
         }
 
         base.Dispose(disposing);

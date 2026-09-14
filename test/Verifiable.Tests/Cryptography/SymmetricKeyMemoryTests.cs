@@ -12,7 +12,7 @@ internal sealed class SymmetricKeyMemoryTests
     [TestMethod]
     public void ConstructorWithNullMemoryThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             _ = new SymmetricKeyMemory(null!, CryptoTags.HmacSha256Key));
     }
 
@@ -22,7 +22,7 @@ internal sealed class SymmetricKeyMemoryTests
     {
         using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             _ = new SymmetricKeyMemory(owner, null!));
     }
 

@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography.Pki;
@@ -132,5 +131,5 @@ public static class PremisWellKnown
     /// <c>3.0</c> and one stating a later revision of the same major version both satisfy it.
     /// </remarks>
     public static bool IsPremisMajorVersion(string? metadataTypeVersion) =>
-        metadataTypeVersion is not null && metadataTypeVersion.StartsWith('3');
+        metadataTypeVersion is not null && metadataTypeVersion.StartsWith('3', StringComparison.Ordinal);
 }

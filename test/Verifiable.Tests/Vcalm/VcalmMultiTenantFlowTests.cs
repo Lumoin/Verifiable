@@ -1,27 +1,22 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.OAuth;
-using Verifiable.OAuth.Server;
-using Verifiable.Vcalm;
-using Verifiable.Vcalm.Exchange;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
-using Verifiable.Server;
+using Verifiable.Vcalm;
+using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -226,12 +221,12 @@ internal sealed class VcalmMultiTenantFlowTests
 
         //Tenant A retrieves its own credential.
         ServerHttpResponse onOwnTenant = await app.DispatchVcalmCredentialByIdAsync(
-            t.SegmentA, "GET", CredentialId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            t.SegmentA, "GET", CredentialId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, onOwnTenant.StatusCode, onOwnTenant.Body);
 
         //Tenant B cannot reach tenant A's credential by the same id — 404, not a cross-tenant read.
         ServerHttpResponse onOtherTenant = await app.DispatchVcalmCredentialByIdAsync(
-            t.SegmentB, "GET", CredentialId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            t.SegmentB, "GET", CredentialId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(404, onOtherTenant.StatusCode,
             "Tenant B cannot retrieve a credential issued and stored under tenant A.");
     }
@@ -255,7 +250,7 @@ internal sealed class VcalmMultiTenantFlowTests
         OwnedKeys.Add(hostMaterial);
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
 
         //The resolver is wired — so the §3.2.1 route materializes — but resolves NO issuance for any
         //tenant: the capability-present-but-no-identity misconfiguration.
@@ -338,14 +333,14 @@ internal sealed class VcalmMultiTenantFlowTests
         OwnedKeys.Add(hostMaterial);
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
         vcalm.ResolveVcalmStatusListIssuanceAsync = (_, _) =>
             ValueTask.FromResult<VcalmCredentialIssuance?>(null);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             hostMaterial.Registration.TenantId.Value, WellKnownVcalmEndpointNames.VcalmCreateStatusList, "POST",
             new RequestFields(), "{\"statusPurpose\":\"revocation\",\"id\":\"https://status.example/x\"}",
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(500, response.StatusCode, response.Body);
         Assert.Contains("No VCALM status-list issuance configuration resolved for this tenant.", response.Body,
@@ -390,13 +385,13 @@ internal sealed class VcalmMultiTenantFlowTests
         OwnedKeys.Add(hostMaterial);
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
         vcalm.ResolveVcalmPresentationSigningAsync = (_, _) =>
             ValueTask.FromResult<VcalmPresentationSigning?>(null);
 
         string body = "{\"presentation\":" + VcalmWireFixtures.SerializeUnproofedPresentation("did:example:holder", SerializePresentation)
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"d.example\"}}";
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCurrentChannelDomain("d.example");
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -425,7 +420,7 @@ internal sealed class VcalmMultiTenantFlowTests
         OwnedKeys.Add(hostMaterial);
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
         vcalm.ResolveVcalmCredentialDerivationAsync = (_, _) =>
             ValueTask.FromResult<VcalmCredentialDerivation?>(null);
 
@@ -437,7 +432,7 @@ internal sealed class VcalmMultiTenantFlowTests
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             hostMaterial.Registration.TenantId.Value, WellKnownVcalmEndpointNames.VcalmCredentialsDerive, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(500, response.StatusCode, response.Body);
         Assert.Contains("No VCALM credential-derivation configuration resolved for this tenant.", response.Body,
@@ -547,7 +542,7 @@ internal sealed class VcalmMultiTenantFlowTests
         };
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
 
         //The productized multi-tenant seam: resolve the §3.2.1 issuance configuration for the tenant the
         //dispatcher stamped on the request, instead of reading one server-global value.
@@ -657,7 +652,7 @@ internal sealed class VcalmMultiTenantFlowTests
             "POST",
             new RequestFields(),
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
@@ -682,7 +677,7 @@ internal sealed class VcalmMultiTenantFlowTests
             "POST",
             new RequestFields(),
             verifyBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -744,7 +739,7 @@ internal sealed class VcalmMultiTenantFlowTests
             TestSetup.Base58Encoder,
             MicrosoftCryptographicFunctionsAdapter.ComputeDigestAsync,
             Pool,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         return SerializeCredential(secured);
@@ -804,7 +799,7 @@ internal sealed class VcalmMultiTenantFlowTests
         };
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
 
         vcalm.ResolveVcalmCredentialIssuanceAsync = (context, _) =>
             ValueTask.FromResult(issuanceBySegment.GetValueOrDefault(TenantSegment(context)));
@@ -869,7 +864,7 @@ internal sealed class VcalmMultiTenantFlowTests
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateStatusList, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);
 
@@ -885,7 +880,7 @@ internal sealed class VcalmMultiTenantFlowTests
 
         //§3.5.2 binds the proof's domain to the channel domain — the holder refuses a domain that does
         //not match the channel it is presenting over.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCurrentChannelDomain(domain);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -902,7 +897,7 @@ internal sealed class VcalmMultiTenantFlowTests
     //dispatch (the dispatcher stamps the tenant in the endpoint tests; here it is set directly).
     private static ExchangeContext ContextForTenant(string segment)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
 
         return context;

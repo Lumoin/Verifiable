@@ -1,10 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 

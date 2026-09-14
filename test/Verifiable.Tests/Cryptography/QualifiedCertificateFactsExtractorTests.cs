@@ -1,16 +1,12 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Globalization;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Cryptography.Pki.Xml;
 using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Cryptography;
@@ -236,7 +232,7 @@ internal sealed class QualifiedCertificateFactsExtractorTests
         using PkiCertificateMemory certificate = MintCertificate(name, name, DefaultNotBefore, DefaultNotAfter, []);
         using PkiCertificateMemory mistagged = CloneCertificate(certificate, PkiCertificateTags.X509Crl);
 
-        Assert.ThrowsExactly<ArgumentException>(() => QualifiedCertificateFactsExtractor.Extract(mistagged), "A CRL-tagged carrier must be rejected before any parsing.");
+        _ = Assert.ThrowsExactly<ArgumentException>(() => QualifiedCertificateFactsExtractor.Extract(mistagged), "A CRL-tagged carrier must be rejected before any parsing.");
     }
 
 
@@ -251,7 +247,7 @@ internal sealed class QualifiedCertificateFactsExtractorTests
         ReadOnlySpan<byte> garbageBytes = [0x01, 0x02, 0x03];
         garbageBytes.CopyTo(garbageOwner.Memory.Span);
         using PkiCertificateMemory garbage = new(garbageOwner, PkiCertificateTags.X509Certificate);
-        Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(garbage), "Garbage bytes must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(garbage), "Garbage bytes must throw.");
 
         X500DistinguishedName name = CreateName([Utf8(WellKnownOids.CommonName, "Trailing Data")]);
         using PkiCertificateMemory certificate = MintCertificate(name, name, DefaultNotBefore, DefaultNotAfter, []);
@@ -259,7 +255,7 @@ internal sealed class QualifiedCertificateFactsExtractorTests
         certificate.AsReadOnlySpan().CopyTo(trailingOwner.Memory.Span);
         trailingOwner.Memory.Span[certificate.Length] = 0x00;
         using PkiCertificateMemory trailing = new(trailingOwner, PkiCertificateTags.X509Certificate);
-        Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(trailing), "Trailing data after the Certificate sequence must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(trailing), "Trailing data after the Certificate sequence must throw.");
     }
 
 
@@ -393,15 +389,15 @@ internal sealed class QualifiedCertificateFactsExtractorTests
         using PkiCertificateMemory misTagged = MintSyntheticCertificate(
             extensions: [new X509KeyUsageExtension(X509KeyUsageFlags.NonRepudiation, critical: true)],
             extensionsTagNumber: 4);
-        Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(misTagged), "A [4]-tagged element where extensions [3] belongs is not an RFC 5280 to-be-signed field and must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(misTagged), "A [4]-tagged element where extensions [3] belongs is not an RFC 5280 to-be-signed field and must throw.");
 
         using PkiCertificateMemory malformedContent = MintSyntheticCertificate(malformExtensionsContent: true);
-        Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(malformedContent), "An extensions block wrapping junk instead of the Extensions sequence must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(malformedContent), "An extensions block wrapping junk instead of the Extensions sequence must throw.");
 
         //A valid KeyUsage BIT STRING (nonRepudiation) followed by a trailing NULL inside the extnValue.
         using PkiCertificateMemory trailingValue = MintSyntheticCertificate(
             extensions: [new X509Extension(WellKnownOids.KeyUsageExtension, [0x03, 0x02, 0x06, 0x40, 0x05, 0x00], critical: false)]);
-        Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(trailingValue), "Trailing content after the value inside an extnValue must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(trailingValue), "Trailing content after the value inside an extnValue must throw.");
     }
 
 
@@ -824,7 +820,7 @@ internal sealed class QualifiedCertificateFactsExtractorTests
                     new QcStatementSpec(WellKnownOids.QcType, DeclaredTypeOids: [WellKnownOids.QcTypeElectronicSignature], WriteInfo: WriteTrailingNullAfterDeclaredTypes()))
             ]);
 
-        Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(certificate), "A NULL after the QcType declared-types SEQUENCE must be rejected as trailing data.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => QualifiedCertificateFactsExtractor.Extract(certificate), "A NULL after the QcType declared-types SEQUENCE must be rejected as trailing data.");
     }
 
 
@@ -895,7 +891,7 @@ internal sealed class QualifiedCertificateFactsExtractorTests
         Assert.AreEqual(EuIdentityVerificationMethod.Eidas2Acd, EuIdentityVerificationMethodMapping.FromOid(WellKnownOids.QcIdentMethodEidas2Acd), "id-etsi-qct-eIDAS2-acd (arc value 3) must map to Eidas2Acd.");
         Assert.AreEqual(EuIdentityVerificationMethod.Eidas2B, EuIdentityVerificationMethodMapping.FromOid(WellKnownOids.QcIdentMethodEidas2B), "id-etsi-qct-eIDAS2-b (arc value 4) must map to Eidas2B.");
         Assert.IsNull(EuIdentityVerificationMethodMapping.FromOid(UnknownQcIdentMethodOid), "An identifier outside the four known methods must map to null.");
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EuIdentityVerificationMethodMapping.ToOid(EuIdentityVerificationMethod.None), "ToOid must reject EuIdentityVerificationMethod.None; there is no identification-method OID for the CLR default.");
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EuIdentityVerificationMethodMapping.ToOid(EuIdentityVerificationMethod.None), "ToOid must reject EuIdentityVerificationMethod.None; there is no identification-method OID for the CLR default.");
     }
 
 
@@ -1295,23 +1291,23 @@ internal sealed class QualifiedCertificateFactsExtractorTests
     private static TrustedList CreateSingleServiceTrustedList(
         PkiCertificateMemory certificate,
         TrustServiceAdditionalInformationType additionalInformationType) => new()
-    {
-        SchemeInformation = new TrustedListSchemeInformation
         {
-            TslVersionIdentifier = 6,
-            TslSequenceNumber = 1,
-            TslType = TrustedListKind.Generic,
-            SchemeOperatorNames = [new LocalizedText("en", "Example Supervisory Body")],
-            SchemeOperatorPostalAddresses = [],
-            SchemeOperatorElectronicAddresses = [],
-            SchemeNames = [new LocalizedText("en", "FI: Example Trusted List")],
-            SchemeInformationUris = [],
-            StatusDeterminationApproach = "http://uri.etsi.org/TrstSvc/TrustedList/StatusDetn/EUappropriate",
-            SchemeTerritory = "FI",
-            HistoricalInformationPeriodYears = 65535,
-            ListIssueDateTime = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero)
-        },
-        TrustServiceProviders =
+            SchemeInformation = new TrustedListSchemeInformation
+            {
+                TslVersionIdentifier = 6,
+                TslSequenceNumber = 1,
+                TslType = TrustedListKind.Generic,
+                SchemeOperatorNames = [new LocalizedText("en", "Example Supervisory Body")],
+                SchemeOperatorPostalAddresses = [],
+                SchemeOperatorElectronicAddresses = [],
+                SchemeNames = [new LocalizedText("en", "FI: Example Trusted List")],
+                SchemeInformationUris = [],
+                StatusDeterminationApproach = "http://uri.etsi.org/TrstSvc/TrustedList/StatusDetn/EUappropriate",
+                SchemeTerritory = "FI",
+                HistoricalInformationPeriodYears = 65535,
+                ListIssueDateTime = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            },
+            TrustServiceProviders =
         [
             new TrustServiceProvider
             {
@@ -1336,5 +1332,5 @@ internal sealed class QualifiedCertificateFactsExtractorTests
                 ]
             }
         ]
-    };
+        };
 }

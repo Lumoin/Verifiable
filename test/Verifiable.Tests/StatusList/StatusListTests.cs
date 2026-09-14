@@ -1,9 +1,5 @@
-using System.Buffers;
-using System.IO;
 using System.IO.Compression;
-using Lumoin.Base;
 using Verifiable.Core.StatusList;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -18,32 +14,32 @@ internal sealed class StatusListTests
     /// Gets the default capacity for small status lists used in tests.
     /// </summary>
     private int SmallListCapacity { get; } = StatusListTestConstants.SmallListCapacity;
-    
+
     /// <summary>
     /// Gets the default capacity for a medium-sized list used in status list tests.
     /// </summary>
     private int MediumListCapacity { get; } = StatusListTestConstants.MediumListCapacity;
-    
+
     /// <summary>
     /// Gets the index of the suspended credential used for testing purposes.
     /// </summary>
     private int SuspendedCredentialIndex { get; } = StatusListTestConstants.SuspendedCredentialIndex;
-    
+
     /// <summary>
     /// Gets the example aggregation URI used for testing purposes.
     /// </summary>
     private string ExampleAggregationUri { get; } = StatusListTestConstants.ExampleAggregationUri;
-    
+
     /// <summary>
     /// Gets the one-bit compressed hexadecimal string used for status list testing.
     /// </summary>
     private string OneBitCompressedHex { get; } = StatusListTestConstants.OneBitCompressedHex;
-    
+
     /// <summary>
     /// Gets the two-bit compressed hexadecimal string used for status list testing.
     /// </summary>
     private string TwoBitCompressedHex { get; } = StatusListTestConstants.TwoBitCompressedHex;
-    
+
     /// <summary>
     /// Gets a shared memory pool for efficient allocation and reuse of byte buffers.
     /// </summary>
@@ -273,7 +269,7 @@ internal sealed class StatusListTests
     {
         using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = list[-1]);
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = list[-1]);
     }
 
 
@@ -282,7 +278,7 @@ internal sealed class StatusListTests
     {
         using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = list[SmallListCapacity]);
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = list[SmallListCapacity]);
     }
 
 
@@ -291,7 +287,7 @@ internal sealed class StatusListTests
     {
         using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => list[0] = 2);
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => list[0] = 2);
     }
 
 
@@ -337,7 +333,7 @@ internal sealed class StatusListTests
         var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
         list.Dispose();
 
-        Assert.ThrowsExactly<ObjectDisposedException>(() => _ = list[0]);
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => _ = list[0]);
     }
 
 
@@ -382,5 +378,5 @@ internal sealed class StatusListTests
         b[5] = StatusTypes.Invalid;
 
         Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
-    }   
+    }
 }

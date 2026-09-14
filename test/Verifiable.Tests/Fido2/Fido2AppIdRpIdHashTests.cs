@@ -1,9 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -155,7 +154,7 @@ internal sealed class Fido2AppIdRpIdHashTests
             if(string.Equals(output.Identifier, identifier, StringComparison.Ordinal))
             {
                 Utf8JsonReader reader = new(output.Value.Span);
-                reader.Read();
+                _ = reader.Read();
 
                 return reader.GetBoolean();
             }

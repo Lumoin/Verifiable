@@ -1,14 +1,9 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -114,15 +109,15 @@ internal sealed class InspectionStageTests
         //the chain walk picks the OID4VP PAR endpoint, one or more
         //StateTransitionStage from FlowRunner, OutgoingResponseStage before
         //the 200 returns to the caller.
-        (Uri _, string _) = await host.HandleParAsync(
+        (_, _) = await host.HandleParAsync(
             keys,
             new TransactionNonce("nonce-four-stage-01"),
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
+        _ = Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
             "First inspection stage of a successful dispatch must be IncomingRequestStage.");
-        Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
+        _ = Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
             "Last inspection stage of a successful dispatch must be OutgoingResponseStage.");
 
         int matchedIndex = recorded.FindIndex(s => s is MatchedStage);
@@ -165,7 +160,7 @@ internal sealed class InspectionStageTests
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         ServerHttpResponse response = await host.Server.DispatchAsync(
             request, context, TestContext.CancellationToken).ConfigureAwait(false);
@@ -206,16 +201,16 @@ internal sealed class InspectionStageTests
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
-        await host.Server.DispatchAsync(request, context, TestContext.CancellationToken)
+        _ = await host.Server.DispatchAsync(request, context, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
+        _ = Assert.IsInstanceOfType<IncomingRequestStage>(recorded[0],
             "IncomingRequestStage must fire even on an unmatched request — "
             + "audit and replay tooling see every inbound request, not just "
             + "the ones that found a handler.");
-        Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
+        _ = Assert.IsInstanceOfType<OutgoingResponseStage>(recorded[^1],
             "OutgoingResponseStage must fire even on the 404 path — observers "
             + "see the response envelope on every code path.");
         Assert.HasCount(0, recorded.OfType<StateTransitionStage>(),
@@ -245,7 +240,7 @@ internal sealed class InspectionStageTests
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
         string segment = keys.Registration.TenantId;
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(VerifierBaseUri);
 

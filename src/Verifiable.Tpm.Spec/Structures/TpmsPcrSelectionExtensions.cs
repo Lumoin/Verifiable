@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Spec.Structures;
 
 /// <summary>
@@ -47,7 +43,7 @@ public static class TpmsPcrSelectionExtensions
             {
                 if((value & (1 << bitIndex)) != 0)
                 {
-                    selected.Add(byteIndex * 8 + bitIndex);
+                    selected.Add((byteIndex * 8) + bitIndex);
                 }
             }
         }

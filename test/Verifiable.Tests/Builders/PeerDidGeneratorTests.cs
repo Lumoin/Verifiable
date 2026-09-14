@@ -1,18 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -32,7 +27,7 @@ internal sealed class PeerDidGeneratorTests
 
     private const string KeyAgreementKey = "z6LSg8zQom395jKLrGiBNruB9MM6V8PWuf2FpEy4uRFiqQBR";
 
-    private static ExchangeContext ResolutionContext { get; } = new();
+    private static ExchangeContext ResolutionContext { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -146,7 +141,7 @@ internal sealed class PeerDidGeneratorTests
         var inputDocument = NewInputDocument();
         inputDocument.Id = new GenericDidMethod("did:example:123456789abcdefghi");
 
-        Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
             inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared));
     }
 
@@ -168,7 +163,7 @@ internal sealed class PeerDidGeneratorTests
             ]
         };
 
-        Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
             inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared));
     }
 
@@ -189,9 +184,9 @@ internal sealed class PeerDidGeneratorTests
                 new VerificationMethod { Id = "#key-1", Type = "Multikey", KeyFormat = new PublicKeyMultibase(SigningKey) }
             ]
         };
-        inputDocument.WithAuthentication("did:example:123456789abcdefghi#key-1");
+        _ = inputDocument.WithAuthentication("did:example:123456789abcdefghi#key-1");
 
-        Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo4(
             inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared));
     }
 
@@ -214,7 +209,7 @@ internal sealed class PeerDidGeneratorTests
                 new VerificationMethod { Id = "#key-1", Type = "Multikey", Controller = "did:example:other", KeyFormat = new PublicKeyMultibase(SigningKey) }
             ]
         };
-        inputDocument.WithAuthentication("#key-1");
+        _ = inputDocument.WithAuthentication("#key-1");
 
         string longForm = PeerDidGenerator.GenerateNumalgo4(inputDocument, SerializeDidDocument, SHA256.HashData, BaseMemoryPool.Shared);
         Assert.IsTrue(longForm.StartsWith("did:peer:4", StringComparison.Ordinal));
@@ -291,13 +286,13 @@ internal sealed class PeerDidGeneratorTests
 
         //A missing type, multiple types, multiple endpoints, and extension data are all unrepresentable in
         //the abbreviated format and must fail closed rather than be silently truncated.
-        Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
+        _ = Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
             keys, [new Service { ServiceEndpoint = "https://example.com" }], pool));
-        Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
+        _ = Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
             keys, [new Service { Types = ["A", "B"], ServiceEndpoint = "https://example.com" }], pool));
-        Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
+        _ = Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
             keys, [new Service { Type = "DIDCommMessaging", ServiceEndpoints = ["https://example.com"] }], pool));
-        Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
+        _ = Assert.Throws<ArgumentException>(() => PeerDidGenerator.GenerateNumalgo2(
             keys, [new Service { Type = "DIDCommMessaging", ServiceEndpoint = "https://example.com", AdditionalData = new Dictionary<string, object> { ["x"] = "y" } }], pool));
     }
 
@@ -401,10 +396,10 @@ internal sealed class PeerDidGeneratorTests
 
     private static PublicKeyMemory DecodeMultibaseKey(string multibaseKey, BaseMemoryPool pool)
     {
-        var decoded = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(
+        var (algorithm, purpose, scheme, keyMaterial) = CryptoFormatConversions.DefaultBase58ToAlgorithmConverter(
             multibaseKey, pool, DefaultCoderSelector.SelectDecoder(typeof(PublicKeyMultibase)));
 
-        return new PublicKeyMemory(decoded.keyMaterial, Tag.Create(decoded.Algorithm).With(decoded.Purpose).With(decoded.Scheme));
+        return new PublicKeyMemory(keyMaterial, Tag.Create(algorithm).With(purpose).With(scheme));
     }
 
 
@@ -437,7 +432,7 @@ internal sealed class PeerDidGeneratorTests
 
 
     private static string ShortFormOf(string longFormDid) =>
-        longFormDid[..longFormDid.IndexOf(':', PeerDidMethod.Prefix.Length)];
+        longFormDid[..longFormDid.IndexOf(':', PeerDidMethod.Prefix.Length, StringComparison.Ordinal)];
 
 
     private static DidResolver CreateResolver() =>

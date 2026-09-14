@@ -108,7 +108,7 @@ public sealed class MessageTypeUri: IEquatable<MessageTypeUri>
         }
 
         //Split off the trailing message-type-name (capture group 4).
-        int lastSlash = value.LastIndexOf('/');
+        int lastSlash = value.LastIndexOf('/', StringComparison.Ordinal);
         if(lastSlash <= 0 || lastSlash == value.Length - 1)
         {
             return false;
@@ -118,7 +118,7 @@ public sealed class MessageTypeUri: IEquatable<MessageTypeUri>
         string piuri = value[..lastSlash];
 
         //Split the version token (capture group 3) off the PIURI.
-        int versionSlash = piuri.LastIndexOf('/');
+        int versionSlash = piuri.LastIndexOf('/', StringComparison.Ordinal);
         if(versionSlash <= 0 || versionSlash == piuri.Length - 1)
         {
             return false;
@@ -252,7 +252,7 @@ public sealed class MessageTypeUri: IEquatable<MessageTypeUri>
     }
 
 
-    private static bool IsIdentifierPunctuation(char c) => c == '_' || c == '-' || c == '.';
+    private static bool IsIdentifierPunctuation(char c) => c is '_' or '-' or '.';
 
 
     //identifier = alpha *(*(alphanum / "_" / "-" / ".") alphanum): starts with a letter, ends with

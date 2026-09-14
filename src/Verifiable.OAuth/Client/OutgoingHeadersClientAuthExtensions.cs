@@ -129,10 +129,10 @@ public static class OutgoingHeadersClientAuthExtensions
     /// character class would only rename the citation, not simplify it.
     /// </summary>
     private static bool IsUnreservedOctet(byte b) =>
-        (b >= (byte)'A' && b <= (byte)'Z')
-        || (b >= (byte)'a' && b <= (byte)'z')
-        || (b >= (byte)'0' && b <= (byte)'9')
-        || b == (byte)'-' || b == (byte)'.' || b == (byte)'_' || b == (byte)'*';
+        b is (>= (byte)'A' and <= (byte)'Z')
+            or (>= (byte)'a' and <= (byte)'z')
+            or (>= (byte)'0' and <= (byte)'9')
+            or (byte)'-' or (byte)'.' or (byte)'_' or (byte)'*';
 
 
     /// <summary>Renders <paramref name="nibble"/> (0-15) as an uppercase hex digit.</summary>

@@ -1,19 +1,13 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -75,7 +69,7 @@ internal sealed class TpmEntropyProviderTests
     public async Task GenerateNonceChunksRequestLargerThanDeviceMaximum()
     {
         //Larger than a single TPM2_GetRandom can return, so FillFromTpm must issue several draws.
-        const int ByteLength = TpmLifecycleTransitions.MaxRandomBytes * 2 + 5;
+        const int ByteLength = (TpmLifecycleTransitions.MaxRandomBytes * 2) + 5;
         using TpmDevice device = await CreateOperationalDeviceAsync("tpm-entropy-chunk").ConfigureAwait(false);
         var provider = new TpmEntropyProvider(device, BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), emittedBy: "tpm-entropy-chunk");
 
@@ -168,7 +162,7 @@ internal sealed class TpmEntropyProviderTests
     {
         //A device whose TPM2_SelfTest reports TPM_RC_TESTING (tests in progress, not failed). The
         //in-process simulator never emits this, so a scripted device exercises the mapping.
-        ValueTask<TpmResult<TpmResponse>> TestingHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
+        static ValueTask<TpmResult<TpmResponse>> TestingHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(HeaderOnlyResponse(TpmRcConstants.TPM_RC_TESTING, handlerPool));
 
         using TpmDevice device = TpmDevice.Create(TestingHandler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
@@ -187,7 +181,7 @@ internal sealed class TpmEntropyProviderTests
         const uint TransportCode = 0x8028400Au;
 
         //A device whose self-test round-trip fails at the transport layer (no self-test verdict).
-        ValueTask<TpmResult<TpmResponse>> TransportFailHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
+        static ValueTask<TpmResult<TpmResponse>> TransportFailHandler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(TpmResult<TpmResponse>.TransportError(TransportCode));
 
         using TpmDevice device = TpmDevice.Create(TransportFailHandler, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
@@ -205,7 +199,7 @@ internal sealed class TpmEntropyProviderTests
         Justification = "The simulator is the test class's durable chip: its ownership rides the returned TpmDevice's submit delegate for the rest of the test, and its pooled state is reclaimed with the suite's process-wide pool.")]
     private async Task<TpmDevice> CreateOperationalDeviceAsync(string tpmId, TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
-        var simulator = new TpmSimulator(tpmId,selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var simulator = new TpmSimulator(tpmId, selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;
@@ -221,7 +215,7 @@ internal sealed class TpmEntropyProviderTests
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
         Justification = "Ownership of the rented command buffer transfers to the caller, which disposes it.")]
     private static IMemoryOwner<byte> FrameCommand<TInput>(TInput input, BaseMemoryPool pool, out int length)
-        where TInput: ITpmCommandInput
+        where TInput : ITpmCommandInput
     {
         length = TpmHeader.HeaderSize + input.GetSerializedSize();
         IMemoryOwner<byte> owner = pool.Rent(length);
@@ -241,7 +235,7 @@ internal sealed class TpmEntropyProviderTests
     {
         IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         var writer = new TpmWriter(owner.Memory.Span);
-        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)responseCode);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, TpmHeader.HeaderSize, (uint)responseCode);
         header.WriteTo(ref writer);
 
         return TpmResult<TpmResponse>.Success(new TpmResponse(owner, TpmHeader.HeaderSize));

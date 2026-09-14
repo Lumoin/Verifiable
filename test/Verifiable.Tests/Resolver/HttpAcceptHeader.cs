@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 
 namespace Verifiable.Tests.Resolver;
@@ -107,7 +105,7 @@ internal sealed class HttpAcceptHeader
 
     private static bool TryParseRange(string element, out MediaRange range)
     {
-        range = default!;
+        range = default;
 
         string[] parts = element.Split(';');
         string mediaType = parts[0].Trim();

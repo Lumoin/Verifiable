@@ -1,9 +1,7 @@
-using System.Security.Cryptography;
 using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;

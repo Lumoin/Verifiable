@@ -1,4 +1,3 @@
-using System.Buffers;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
@@ -45,7 +44,7 @@ internal sealed class TimeProviderInjectionRespectTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
         var issuer = new ClaimIssuer<string>(
-            "time-provider-injection-respect-claim-issuer", new List<ClaimDelegate<string>>(), timeProvider);
+            "time-provider-injection-respect-claim-issuer", [], timeProvider);
 
         ClaimIssueResult result = await issuer.GenerateClaimsAsync(
             "irrelevant-input", "time-provider-injection-respect-correlation", TestContext.CancellationToken).ConfigureAwait(false);
@@ -147,10 +146,10 @@ internal sealed class TimeProviderInjectionRespectTests
         MetadataBlobResult justInsideResult = await verify(justInsideRequest, TestContext.CancellationToken);
         MetadataBlobResult justOutsideResult = await verify(justOutsideRequest, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(justInsideResult, "nextUpdate on the same calendar date as the injected instant must not be stale.");
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(justInsideResult, "nextUpdate on the same calendar date as the injected instant must not be stale.");
         ((VerifiedMetadataBlobResult)justInsideResult).Blob.Dispose();
 
-        Assert.IsInstanceOfType<RejectedMetadataBlobResult>(justOutsideResult, "nextUpdate one day before the injected instant must be stale.");
+        _ = Assert.IsInstanceOfType<RejectedMetadataBlobResult>(justOutsideResult, "nextUpdate one day before the injected instant must be stale.");
         Assert.AreEqual(Fido2MetadataErrors.BlobStale.Code, ((RejectedMetadataBlobResult)justOutsideResult).Error.Code);
     }
 

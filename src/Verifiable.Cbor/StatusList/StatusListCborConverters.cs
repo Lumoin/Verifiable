@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
 using Verifiable.Core.StatusList;
 

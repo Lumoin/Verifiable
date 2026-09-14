@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Ctap;
@@ -335,7 +331,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(1));
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             CtapNfcResponder.Create(null!, stub.TransceiveAsync, stub.PollAsync, stub.CancelAsync));
     }
 
@@ -345,7 +341,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(1));
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             CtapNfcResponder.Create(UnreachablePayload, null!, stub.PollAsync, stub.CancelAsync));
     }
 
@@ -355,7 +351,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(1));
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, null!, stub.CancelAsync));
     }
 
@@ -365,7 +361,7 @@ internal sealed class CtapNfcResponderDeferralTests
     {
         var stub = new DeferralStub(BuildScriptedPayload(1));
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             CtapNfcResponder.Create(UnreachablePayload, stub.TransceiveAsync, stub.PollAsync, null!));
     }
 

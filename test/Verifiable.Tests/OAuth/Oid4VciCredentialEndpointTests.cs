@@ -1,11 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -70,7 +69,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
         string? seenSubject = null;
@@ -107,11 +106,11 @@ internal sealed class Oid4VciCredentialEndpointTests
         Assert.AreEqual(OfferSubject, seenSubject, "The seam must receive the validated access-token subject.");
 
         Assert.IsNotNull(seenRequest);
-        Assert.AreEqual(ConfigurationId, seenRequest!.CredentialConfigurationId);
+        Assert.AreEqual(ConfigurationId, seenRequest.CredentialConfigurationId);
         Assert.IsTrue(seenRequest.Proofs.TryGetValue("jwt", out IReadOnlyList<string>? jwtProofs),
             "The parsed request must carry the jwt proofs.");
-        Assert.HasCount(1, jwtProofs!);
-        Assert.AreEqual(HolderProof, jwtProofs![0]);
+        Assert.HasCount(1, jwtProofs);
+        Assert.AreEqual(HolderProof, jwtProofs[0]);
     }
 
 
@@ -127,7 +126,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().IssueCredentialAsync =
@@ -163,7 +162,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
@@ -197,7 +196,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
         host.Server.OAuth().IssueCredentialAsync =
@@ -224,7 +223,7 @@ internal sealed class Oid4VciCredentialEndpointTests
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         Assert.IsNotNull(seenRequest);
-        Assert.HasCount(1, seenRequest!.DiVpProofs);
+        Assert.HasCount(1, seenRequest.DiVpProofs);
         Assert.IsEmpty(seenRequest.Proofs, "A di_vp proof surfaces in DiVpProofs, not the string Proofs map.");
 
         using JsonDocument doc = JsonDocument.Parse(seenRequest.DiVpProofs[0]);
@@ -245,7 +244,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
         string bearer = "Bearer " + accessToken;
 
@@ -286,7 +285,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().IssueCredentialAsync =
@@ -317,7 +316,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
@@ -343,7 +342,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().IssueCredentialAsync =
@@ -379,7 +378,7 @@ internal sealed class Oid4VciCredentialEndpointTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         bool seamCalled = false;
         host.Server.OAuth().IssueCredentialAsync =
@@ -414,7 +413,7 @@ internal sealed class Oid4VciCredentialEndpointTests
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, CredentialCapabilities);
 
         //Parse seam wired, issuance seam deliberately not.
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         string accessToken = await MintAccessTokenAsync(host, material).ConfigureAwait(false);
 
@@ -476,7 +475,7 @@ internal sealed class Oid4VciCredentialEndpointTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
@@ -509,7 +508,7 @@ internal sealed class Oid4VciCredentialEndpointTests
             new RequestFields(),
             headers,
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

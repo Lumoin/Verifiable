@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.JCose;
@@ -352,8 +350,8 @@ public static class JwtChecks
             return false;
         }
 
-        return n.Length == Rsa2048ModulusBase64UrlLength
-            || n.Length == Rsa4096ModulusBase64UrlLength;
+        return n.Length is Rsa2048ModulusBase64UrlLength
+            or Rsa4096ModulusBase64UrlLength;
     }
 
     private static bool IsExpiredCore(

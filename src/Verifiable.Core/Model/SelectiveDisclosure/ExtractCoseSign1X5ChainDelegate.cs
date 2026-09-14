@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;

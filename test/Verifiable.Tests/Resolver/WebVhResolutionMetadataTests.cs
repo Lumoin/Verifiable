@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Core.Resolvers;
 

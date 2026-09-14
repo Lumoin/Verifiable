@@ -4,8 +4,6 @@ using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
-using Verifiable.Core.Model.Mdoc;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -13,7 +11,6 @@ using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
@@ -738,13 +735,13 @@ public static class HaipOid4VpVerifierExecutor
             //carry several entries; single-credential is the trivial case
             //with one entry. The handler extracts and verifies each in turn
             //and aggregates the verified credentials keyed by credential query id.
-            Dictionary<CredentialQueryId, VpCredentialClaims> aggregatedCredentials = new();
+            Dictionary<CredentialQueryId, VpCredentialClaims> aggregatedCredentials = [];
 
             //IETF Token Status List outcomes per credential, keyed by DCQL credential query id.
             //Populated only when a status resolver was wired AND the credential carried a
             //status.status_list reference; surfaced on VerificationSucceeded so the relying party
             //can act on revocation/suspension without re-parsing the verified vp_token.
-            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = new();
+            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = [];
 
             //OID4VP 1.0 Appendix B.2.6.1: an mso_mdoc presentation's SessionTranscript
             //binds the wallet's fresh mdoc_generated_nonce, which the wallet carries in
@@ -1066,10 +1063,10 @@ public static class HaipOid4VpVerifierExecutor
             //once into a byte[] and re-scanned per credential query id.
             byte[] vpTokenBytes = Encoding.UTF8.GetBytes(action.VpTokenJson);
 
-            Dictionary<CredentialQueryId, VpCredentialClaims> aggregatedCredentials = new();
+            Dictionary<CredentialQueryId, VpCredentialClaims> aggregatedCredentials = [];
 
             //IETF Token Status List outcomes per credential (see the encrypted-path handler above).
-            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = new();
+            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = [];
 
             foreach(CredentialQuery credentialQuery in action.CredentialQueries)
             {

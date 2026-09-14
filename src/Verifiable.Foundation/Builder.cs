@@ -140,7 +140,7 @@ namespace Verifiable.Foundation
     /// <strong>Extensibility</strong>
     /// </para>
     /// <para>
-    /// Users extend builders by calling <see cref="With"/> to add transformations. The builder does not
+    /// Users extend builders by calling <see cref="With(Func{TResult, TBuilder, TState?, CancellationToken, ValueTask{TResult}})"/> to add transformations. The builder does not
     /// need advance knowledge of what transformations will be added - it applies them in sequence. This
     /// follows the open/closed principle: open for extension (add transformations), closed for modification
     /// (the fold mechanism is fixed). Complex domain-specific construction logic can be captured once and
@@ -193,7 +193,7 @@ namespace Verifiable.Foundation
         /// Each action transforms the current state of the object being built.
         /// </summary>
         /// <remarks>
-        /// Actions are applied in the order they were added using <see cref="With"/>.
+        /// Actions are applied in the order they were added using <see cref="With(Func{TResult, TBuilder, TState?, CancellationToken, ValueTask{TResult}})"/>.
         /// Each action receives the current object state, the builder instance, optional state information,
         /// and a cancellation token.
         /// </remarks>

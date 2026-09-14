@@ -444,7 +444,7 @@ namespace Verifiable.Tests.Did
             var jwk2 = new PublicKeyJwk
             {
                 Header = new Dictionary<string, object> { [WellKnownJwkMemberNames.Kty] = WellKnownKeyTypeValues.Ec },
-                Payload = new Dictionary<string, object>(complexPayload)
+                Payload = new(complexPayload)
             };
 
             Assert.IsTrue(jwk1.Equals(jwk2));

@@ -1,4 +1,3 @@
-using System;
 using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;

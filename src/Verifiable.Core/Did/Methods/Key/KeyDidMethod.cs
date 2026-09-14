@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods.Key
 {
     /// <summary>
@@ -63,7 +61,7 @@ namespace Verifiable.Core.Did.Methods.Key
         /// <param name="didString">The DID string to associate with this instance. The string must start <see cref="WellKnownDidMethodPrefixes.KeyDidMethodPrefix"/>.</param>
         /// <exception cref="ArgumentNullException">Thrown if <paramref name="didString"/> is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">Thrown if <paramref name="didString"/> does not start with <see cref="WellKnownDidMethodPrefixes.KeyDidMethodPrefix"/>.</exception>
-        public KeyDidMethod(string didString): base(didString)
+        public KeyDidMethod(string didString) : base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
             if(!didString.StartsWith(Prefix, StringComparison.Ordinal))

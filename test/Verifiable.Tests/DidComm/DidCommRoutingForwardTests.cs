@@ -1,26 +1,20 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Routing;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
@@ -44,7 +38,7 @@ internal sealed class DidCommRoutingForwardTests
 
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -89,7 +83,7 @@ internal sealed class DidCommRoutingForwardTests
         Assert.IsNotNull(outer, "Two routing keys MUST produce a wrapped forward.");
 
         //The outermost forward is encrypted for m1: only m1's key unpacks it, m2's must fail closed.
-        DidCommEncryptedUnpackResult wrongHop = await outer!.UnpackAnoncryptAsync(
+        DidCommEncryptedUnpackResult wrongHop = await outer.UnpackAnoncryptAsync(
             m2.Kid, m2.Private, resolver, Context, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(wrongHop.IsUnpacked, "The outermost forward MUST be encrypted for the first routing key only.");
@@ -104,7 +98,7 @@ internal sealed class DidCommRoutingForwardTests
         Assert.IsNotNull(hop1.ForwardedMessage);
 
         //Hop 2: m2 unpacks N1 → next=recipient + the inner JWE.
-        using ForwardUnpackResult hop2 = await hop1.ForwardedMessage!.UnpackForwardAsync(
+        using ForwardUnpackResult hop2 = await hop1.ForwardedMessage.UnpackForwardAsync(
             m2.Kid, m2.Private, resolver, Context, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -114,11 +108,11 @@ internal sealed class DidCommRoutingForwardTests
 
         //data.base64 is byte-faithful: the inner JWE recovered after the last hop equals the original bytes.
         Assert.IsTrue(
-            hop2.ForwardedMessage!.AsReadOnlySpan().SequenceEqual(inner.AsReadOnlySpan()),
+            hop2.ForwardedMessage.AsReadOnlySpan().SequenceEqual(inner.AsReadOnlySpan()),
             "The recovered forwarded message MUST equal the original inner JWE byte-for-byte.");
 
         //The recipient decrypts the innermost JWE recovered after the last hop.
-        DidCommEncryptedUnpackResult final = await hop2.ForwardedMessage!.UnpackAuthcryptAsync(
+        DidCommEncryptedUnpackResult final = await hop2.ForwardedMessage.UnpackAuthcryptAsync(
             bob.Kid, bob.Private, resolver, Context, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -244,7 +238,7 @@ internal sealed class DidCommRoutingForwardTests
     {
         using DidCommEncryptedMessage jwe = ForwardedMessageOf("{\"protected\":\"abc\"}"u8);
 
-        Assert.ThrowsExactly<ArgumentException>(() => RoutingForwardExtensions.CreateForward("not-a-did", ForwardId, jwe, TestSetup.Base64UrlEncoder));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => RoutingForwardExtensions.CreateForward("not-a-did", ForwardId, jwe, TestSetup.Base64UrlEncoder));
     }
 
 
@@ -280,7 +274,7 @@ internal sealed class DidCommRoutingForwardTests
         Assert.IsNotNull(outer, "The recipient advertises routing keys, so a forward MUST be produced.");
 
         //The outermost is for m1: m1 unpacks it to a forward whose next is the second mediator.
-        using ForwardUnpackResult hop = await outer!.UnpackForwardAsync(
+        using ForwardUnpackResult hop = await outer.UnpackForwardAsync(
             m1.Kid, m1.Private, resolver, Context, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -458,7 +452,7 @@ internal sealed class DidCommRoutingForwardTests
         using DidCommEncryptedMessage envelope = await PackAnoncryptAsync(forward, m1Kid, m1Key).ConfigureAwait(false);
 
         ForwardTransport transport = new(new() { [Url] = (200, innerJwe) });
-        ExchangeContext fetchContext = new();
+        ExchangeContext fetchContext = [];
         fetchContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         using ForwardUnpackResult result = await envelope.UnpackForwardAsync(
@@ -525,7 +519,7 @@ internal sealed class DidCommRoutingForwardTests
         Span<byte> multihash = stackalloc byte[1 + 1 + 32];
         multihash[0] = 0x12;
         multihash[1] = 0x20;
-        SHA256.HashData(content, multihash[2..]);
+        _ = SHA256.HashData(content, multihash[2..]);
 
         return "z" + TestSetup.Base58Encoder(multihash);
     }
@@ -536,7 +530,7 @@ internal sealed class DidCommRoutingForwardTests
     {
         private Dictionary<string, (int Status, byte[] Body)> Routes { get; }
 
-        public ForwardTransport() : this(new Dictionary<string, (int, byte[])>(StringComparer.Ordinal)) { }
+        public ForwardTransport() : this(new(StringComparer.Ordinal)) { }
 
         public ForwardTransport(Dictionary<string, (int Status, byte[] Body)> routes)
         {
@@ -633,11 +627,11 @@ internal sealed class DidCommRoutingForwardTests
         Assert.AreEqual(DidCommEncryptedMessage.MediaType, receivedContentType, "The receiver MUST see the encrypted media type as Content-Type.");
         Assert.IsNotNull(receivedBody);
         Assert.IsTrue(
-            Encoding.UTF8.GetBytes(receivedBody!).AsSpan().SequenceEqual(packed.AsReadOnlySpan()),
+            Encoding.UTF8.GetBytes(receivedBody).AsSpan().SequenceEqual(packed.AsReadOnlySpan()),
             "The bytes that crossed the socket MUST equal the packed encrypted message byte-for-byte.");
 
         //Bob decrypts exactly what arrived over the wire.
-        using DidCommEncryptedMessage received = DidCommEncryptedMessage.Create(Encoding.UTF8.GetBytes(receivedBody!), BufferTags.Json, Pool);
+        using DidCommEncryptedMessage received = DidCommEncryptedMessage.Create(Encoding.UTF8.GetBytes(receivedBody), BufferTags.Json, Pool);
         DidCommEncryptedUnpackResult unpacked = await received.UnpackAuthcryptAsync(
             bob.Kid, bob.Private, resolver, Context, DidCommMessageJson.Parser, DidCommSignedMessageJson.Parser,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -827,7 +821,7 @@ internal sealed class DidCommRoutingForwardTests
         Assert.IsTrue(resolution.IsSuccessful, $"'{did}' MUST resolve.");
         Assert.IsNotNull(resolution.Document);
 
-        return resolution.Document!;
+        return resolution.Document;
     }
 
 
@@ -839,7 +833,7 @@ internal sealed class DidCommRoutingForwardTests
         VerificationMethod method = methods[0];
         Assert.IsNotNull(method.Id);
 
-        string kid = method.Id!.StartsWith('#') ? did + method.Id : method.Id;
+        string kid = method.Id.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id;
 
         return (kid, method);
     }
@@ -861,19 +855,19 @@ internal sealed class DidCommRoutingForwardTests
     private static void AssertRecovered(DidCommMessage? recovered, string expectedFrom, IList<string> expectedTo)
     {
         Assert.IsNotNull(recovered);
-        Assert.AreEqual(MessageId, recovered!.Id);
+        Assert.AreEqual(MessageId, recovered.Id);
         Assert.AreEqual(MessageType, recovered.Type);
         Assert.AreEqual(expectedFrom, recovered.From);
 
         Assert.IsNotNull(recovered.To);
-        Assert.HasCount(expectedTo.Count, recovered.To!);
+        Assert.HasCount(expectedTo.Count, recovered.To);
         for(int i = 0; i < expectedTo.Count; ++i)
         {
-            Assert.AreEqual(expectedTo[i], recovered.To![i]);
+            Assert.AreEqual(expectedTo[i], recovered.To[i]);
         }
 
         Assert.IsNotNull(recovered.Body);
-        Assert.IsTrue(recovered.Body!.TryGetValue(BodyAttribute, out object? value));
+        Assert.IsTrue(recovered.Body.TryGetValue(BodyAttribute, out object? value));
         Assert.AreEqual(BodyValue, value as string);
     }
 

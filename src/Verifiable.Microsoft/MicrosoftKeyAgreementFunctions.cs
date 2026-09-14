@@ -1,11 +1,8 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -83,8 +80,8 @@ public static class MicrosoftKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(ECCurve.NamedCurves.nistP256));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(ECCurve.NamedCurves.nistP256));
         }
 
         byte[] recipientUncompressed = UncompressedPoint(recipientPublicKey);
@@ -127,7 +124,7 @@ public static class MicrosoftKeyAgreementFunctions
             xBytes.CopyTo(epkOwner.Memory.Span[1..]);
             yBytes.CopyTo(epkOwner.Memory.Span[(1 + xBytes.Length)..]);
 
-            PublicKeyMemory epk = new PublicKeyMemory(epkOwner, CryptoTags.P256ExchangePublicKey);
+            PublicKeyMemory epk = new(epkOwner, CryptoTags.P256ExchangePublicKey);
 
             return new EphemeralKeyAgreementResult(z, epk);
         }
@@ -168,8 +165,8 @@ public static class MicrosoftKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(ECCurve.NamedCurves.nistP256));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(ECCurve.NamedCurves.nistP256));
         }
 
         //Normalize to an uncompressed point (decompressing a compressed epk via the tag's curve), then
@@ -247,8 +244,8 @@ public static class MicrosoftKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(namedCurve));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(namedCurve));
         }
 
         byte[] recipientUncompressed = UncompressedPoint(recipientPublicKey);
@@ -322,8 +319,8 @@ public static class MicrosoftKeyAgreementFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
-            activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(namedCurve));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, "ECDH");
+            _ = activity.SetTag(CryptoTelemetry.Key.Curve, MapCurveDisplay(namedCurve));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -779,9 +776,9 @@ public static class MicrosoftKeyAgreementFunctions
                     //B = AES(K, A | R[i]); A = MSB(B) ^ t where t = n*j + i; R[i] = LSB(B).
                     wrapped[..8].CopyTo(block);
                     wrapped.Slice(8 * i, 8).CopyTo(block[8..]);
-                    aes.EncryptEcb(block, block, PaddingMode.None);
+                    _ = aes.EncryptEcb(block, block, PaddingMode.None);
 
-                    ulong t = (ulong)(n * j + i);
+                    ulong t = (ulong)((n * j) + i);
                     ulong a = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(block) ^ t;
                     System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(wrapped, a);
                     block[8..].CopyTo(wrapped.Slice(8 * i, 8));
@@ -823,7 +820,7 @@ public static class MicrosoftKeyAgreementFunctions
         await Task.CompletedTask.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 
-        int n = wrappedKey.Length / 8 - 1;
+        int n = (wrappedKey.Length / 8) - 1;
         IMemoryOwner<byte> keyOwner = pool.Rent(8 * n, AllocationKind.Pinned);
         Span<byte> keyData = keyOwner.Memory.Span[..(8 * n)];
         wrappedKey.Span[8..].CopyTo(keyData);
@@ -844,10 +841,10 @@ public static class MicrosoftKeyAgreementFunctions
                 for(int i = n; i >= 1; --i)
                 {
                     //B = AES-1(K, (A ^ t) | R[i]); A = MSB(B); R[i] = LSB(B).
-                    ulong t = (ulong)(n * j + i);
+                    ulong t = (ulong)((n * j) + i);
                     System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(block, a ^ t);
                     keyData.Slice(8 * (i - 1), 8).CopyTo(block[8..]);
-                    aes.DecryptEcb(block, block, PaddingMode.None);
+                    _ = aes.DecryptEcb(block, block, PaddingMode.None);
 
                     a = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(block);
                     block[8..].CopyTo(keyData.Slice(8 * (i - 1), 8));
@@ -989,7 +986,7 @@ public static class MicrosoftKeyAgreementFunctions
             //instance's own key schedule — encKey is already a span slice of the composite key, so no
             //array copy exists to zero.
             aes.SetKey(encKey);
-            aes.EncryptCbc(
+            _ = aes.EncryptCbc(
                 plaintext.Span,
                 ivOwner.Memory.Span[..AesCbcIvLength],
                 ciphertextOwner.Memory.Span[..ciphertextLength],

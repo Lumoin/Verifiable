@@ -1,8 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Did.Methods.Web
 {
@@ -67,7 +65,7 @@ namespace Verifiable.Core.Did.Methods.Web
         /// <summary>
         /// Determines whether the specified <see cref="WebDidBuildState"/> is equal to the current instance.
         /// </summary>
-        public bool Equals(WebDidBuildState other)
+        public readonly bool Equals(WebDidBuildState other)
         {
             return WebDomain == other.WebDomain
                 && KeyInputs?.Count == other.KeyInputs?.Count
@@ -81,7 +79,7 @@ namespace Verifiable.Core.Did.Methods.Web
         /// <summary>
         /// Determines whether the specified object is equal to the current instance.
         /// </summary>
-        public override bool Equals(object? obj)
+        public override readonly bool Equals(object? obj)
         {
             return obj is WebDidBuildState other && Equals(other);
         }
@@ -90,7 +88,7 @@ namespace Verifiable.Core.Did.Methods.Web
         /// <summary>
         /// Returns the hash code for this instance.
         /// </summary>
-        public override int GetHashCode()
+        public override readonly int GetHashCode()
         {
             var hash = new HashCode();
             hash.Add(WebDomain);

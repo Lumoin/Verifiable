@@ -1,11 +1,8 @@
 using System.Buffers;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Federation;
 using Verifiable.Tests.TestInfrastructure;
@@ -43,7 +40,7 @@ internal static class FederationHttpClientTransport
         //The HttpClient is the single-hop transport: a bare custom HttpMessageHandler
         //does not auto-redirect, and a real handler would set AllowAutoRedirect=false.
         //OutboundFetch owns the redirect loop and re-checks every hop against the policy.
-        OutboundTransportDelegate transport = async (request, context, cancellationToken) =>
+        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             using HttpRequestMessage httpRequest = new(new HttpMethod(request.Method), request.Target);
 
@@ -83,7 +80,7 @@ internal static class FederationHttpClientTransport
                 Headers = headers,
                 Body = new TaggedMemory<byte>(body, Tag.Empty),
             };
-        };
+        }
 
         return async (subject, fetchEndpoint, context, cancellationToken) =>
         {
@@ -185,6 +182,7 @@ internal static class FederationHttpClientTransport
         JsonValueKind.Null => null,
         JsonValueKind.Array => ConvertArray(element),
         JsonValueKind.Object => ConvertObject(element),
+        JsonValueKind.Undefined => null,
         _ => null,
     };
 

@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -22,7 +21,7 @@ namespace Verifiable.Apdu;
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class SelectResponse : SensitiveMemory, IApduWireType
+public sealed class SelectResponse: SensitiveMemory, IApduWireType
 {
     internal SelectResponse(IMemoryOwner<byte> storage, int length)
         : base(storage, ApduTags.Response)

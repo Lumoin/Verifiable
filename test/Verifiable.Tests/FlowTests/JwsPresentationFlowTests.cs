@@ -1,16 +1,13 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
-using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Web;
-using Verifiable.Cryptography;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.FlowTests;
 
@@ -63,7 +60,7 @@ internal sealed class JwsPresentationFlowTests
         JsonSerializerExtensions.SerializeToUtf8Bytes(header, JsonOptions);
 
     private static JwtHeaderDeserializer HeaderDeserializer => headerBytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
 
 
     /// <summary>

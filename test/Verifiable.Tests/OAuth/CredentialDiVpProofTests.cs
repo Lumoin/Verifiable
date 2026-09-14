@@ -1,24 +1,21 @@
-using System.Buffers;
-using System.Collections.Immutable;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using System.Net;
-using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
-using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
@@ -81,7 +78,7 @@ internal sealed class CredentialDiVpProofTests
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -401,7 +398,7 @@ internal sealed class CredentialDiVpProofTests
             holderDidDocument, holderPrivate, CredentialNonce, issuerIdentifier).ConfigureAwait(false);
 
         //No expectation seam at all — the §F.4 / §F.2 check is entirely the issuance seam's job.
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         CredentialRequest? seenRequest = null;
         host.Server.OAuth().IssueCredentialAsync =
@@ -585,7 +582,7 @@ internal sealed class CredentialDiVpProofTests
         //Assertion A — SSRF blocks. SecureDefault refuses the loopback holder fetch at the chokepoint
         //before any socket contact, so §F.2 verification fails invalid_proof (holder unresolved) and
         //the issuance seam is never consulted. The issuer cannot be made to fetch a loopback URL.
-        ExchangeContext blockedContext = new();
+        ExchangeContext blockedContext = [];
         blockedContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         ServerHttpResponse blockedResponse = await DispatchDiVpAsync(
@@ -599,7 +596,7 @@ internal sealed class CredentialDiVpProofTests
 
         //Direct check of the SAME blocked path: the refusal surfaces specifically as HolderUnresolved
         //(the §F.2 binding cannot be anchored), not some other failure reason.
-        ExchangeContext blockedDirectContext = new();
+        ExchangeContext blockedDirectContext = [];
         blockedDirectContext.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
         DiVpProofValidationResult blockedResult = await CredentialProofValidator.ValidateDiVpAsync(
             SerializePresentation(signedPresentation),
@@ -617,7 +614,7 @@ internal sealed class CredentialDiVpProofTests
         //Assertion B — explicit permit succeeds. Relaxing BlockPrivateAndLoopback lets the chokepoint
         //permit the loopback dereference; the real socket fetch returns the holder did.json and the
         //§F.2 proof verifies over the real remote path, so issuance proceeds bound to the holder key.
-        ExchangeContext permittedContext = new();
+        ExchangeContext permittedContext = [];
         permittedContext.SetOutboundFetchPolicy(new OutboundFetchPolicy { BlockPrivateAndLoopback = false });
 
         ServerHttpResponse permittedResponse = await DispatchDiVpAsync(
@@ -633,7 +630,7 @@ internal sealed class CredentialDiVpProofTests
 
         //Direct check of the SAME permitted path: the real loopback resolution authenticates the
         //did:web holder verification method the issued Credential binds to (Appendix F.2).
-        ExchangeContext permittedDirectContext = new();
+        ExchangeContext permittedDirectContext = [];
         permittedDirectContext.SetOutboundFetchPolicy(new OutboundFetchPolicy { BlockPrivateAndLoopback = false });
         DiVpProofValidationResult permittedResult = await CredentialProofValidator.ValidateDiVpAsync(
             SerializePresentation(signedPresentation),
@@ -653,7 +650,7 @@ internal sealed class CredentialDiVpProofTests
     //Wires the opt-in di_vp expectation seam: the expected c_nonce plus the DI verification seams.
     private static void WireDiVpExpectationSeam(TestHostShell host, DidResolver resolver)
     {
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().ResolveCredentialProofExpectationAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult<CredentialProofExpectation?>(new CredentialProofExpectation
@@ -721,7 +718,7 @@ internal sealed class CredentialDiVpProofTests
     private static DidResolver BuildCannedKeyDidResolver(DidDocument document) =>
         new(DidMethodSelectors.FromResolvers(
             (WellKnownDidMethodPrefixes.KeyDidMethodPrefix,
-             (string did, DidResolutionOptions options, ExchangeContext context, CancellationToken ct) =>
+             (did, options, context, ct) =>
                  ValueTask.FromResult(DidResolutionResult.Success(document, DidDocumentMetadata.Empty, "application/did+json")))));
 
 
@@ -829,7 +826,7 @@ internal sealed class CredentialDiVpProofTests
         //under the explicit permit it passes. The scheme rebind below is now a no-op (both sides are
         //https) but stays, since the chokepoint evaluates the resolved URL's scheme independently of
         //whatever the transport ultimately dials.
-        OutboundTransportDelegate transport = async (request, context, ct) =>
+        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken ct)
         {
             _ = await SsrfHardenedTransport.ResolveAndPinAsync(
                 request.Target.Host, context.OutboundFetchPolicy, ResolveHostAsync, ct).ConfigureAwait(false);
@@ -838,7 +835,7 @@ internal sealed class CredentialDiVpProofTests
             OutboundRequest rebasedRequest = request with { Target = rebased.Uri };
 
             return await singleHop(rebasedRequest, context, ct).ConfigureAwait(false);
-        };
+        }
 
         async ValueTask<DidResolutionResult> ResolveWebDidAsync(
             string did, DidResolutionOptions options, ExchangeContext context, CancellationToken ct)
@@ -949,7 +946,7 @@ internal sealed class CredentialDiVpProofTests
     //Request carrying the di_vp presentation to the Credential Endpoint with a fresh context.
     private async Task<ServerHttpResponse> DispatchDiVpAsync(
         TestHostShell host, VerifierKeyMaterial material, DataIntegritySecuredPresentation presentation) =>
-        await DispatchDiVpAsync(host, material, presentation, new ExchangeContext()).ConfigureAwait(false);
+        await DispatchDiVpAsync(host, material, presentation, []).ConfigureAwait(false);
 
 
     //Mints the access token via the Pre-Authorized Code grant and dispatches a §8.2 Credential
@@ -981,7 +978,7 @@ internal sealed class CredentialDiVpProofTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);

@@ -92,8 +92,8 @@ internal sealed class VerifierClientMetadataSerializationTests
         Assert.IsNotNull(back);
         Assert.AreEqual(original, back,
             "client_id, jwks, and the encrypted_response_* arrays must survive the snake wire round-trip.");
-        Assert.IsNotNull(back!.VpFormatsSupported);
-        Assert.IsTrue(back.VpFormatsSupported!.Formats.ContainsKey(WellKnownMediaTypes.Jwt.DcSdJwt),
+        Assert.IsNotNull(back.VpFormatsSupported);
+        Assert.IsTrue(back.VpFormatsSupported.Formats.ContainsKey(WellKnownMediaTypes.Jwt.DcSdJwt),
             "vp_formats_supported must round-trip the format map.");
     }
 }

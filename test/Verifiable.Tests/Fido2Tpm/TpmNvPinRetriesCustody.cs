@@ -1,14 +1,9 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
-using Automata = Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Extensions.Pin;
-using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
+using Automata = Verifiable.Fido2.Ctap.Authenticator.Automata;
 
 namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 

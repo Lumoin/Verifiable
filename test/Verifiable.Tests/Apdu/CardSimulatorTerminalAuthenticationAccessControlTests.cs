@@ -1,10 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -13,7 +11,6 @@ using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;
@@ -102,10 +99,10 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
         using ECDsa documentVerifierKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         using CardVerifiableCertificate trustAnchor = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, cvcaKey, CvcaReference, CvcaReference, (byte)(CvcaRole | ReadDataGroup3 | ReadDataGroup4), includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
+            cvcaKey, cvcaKey, CvcaReference, CvcaReference, CvcaRole | ReadDataGroup3 | ReadDataGroup4, includeDomainParameters: true, Effective, Expiration, inheritedCurve: null, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
         Tag certificateCurve = trustAnchor.PublicKey.EllipticCurvePoint!.Tag;
         using CardVerifiableCertificate documentVerifier = CardVerifiableCertificateMinter.Mint(
-            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, (byte)(DocumentVerifierRole | ReadDataGroup3 | ReadDataGroup4), includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
+            cvcaKey, documentVerifierKey, CvcaReference, DocumentVerifierReference, DocumentVerifierRole | ReadDataGroup3 | ReadDataGroup4, includeDomainParameters: false, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
 
         //The terminal key is created through the library on the cross-platform BouncyCastle backend (framework
         //ECDSA private-key export is unreliable on macOS) and never as a raw ECDsa: BouncyCastle mints the scalar,
@@ -119,7 +116,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
             (Generator: multiplyGenerator, Curve: CryptoTags.P256ExchangePublicKey, Pool: BaseMemoryPool.Shared, Token: TestContext.CancellationToken));
         using PrivateKey terminalKey = CryptographicKeyFactory.CreatePrivateKey(terminalKeys.PrivateKey, "terminal-p256", terminalKeys.PrivateKey.Tag);
         using CardVerifiableCertificate terminal = CardVerifiableCertificateMinter.Mint(
-            documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, (byte)(TerminalRole | ReadDataGroup3 | ReadDataGroup4), Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
+            documentVerifierKey, terminalPublicPoint.AsReadOnlyMemory(), DocumentVerifierReference, TerminalReference, TerminalRole | ReadDataGroup3 | ReadDataGroup4, Effective, Expiration, certificateCurve, BaseMemoryPool.Shared, TerminalType.InspectionSystem);
 
         using EncodedEcPoint chipStaticPublicKey = await multiplyGenerator(Convert.FromHexString(ChipStaticPrivateKey), chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
         using EncodedEcPoint terminalEphemeralPublicKey = await multiplyGenerator(terminalEphemeralPrivateKey, chipCurve, BaseMemoryPool.Shared, TestContext.CancellationToken);
@@ -398,7 +395,7 @@ internal sealed class CardSimulatorTerminalAuthenticationAccessControlTests
     }
 
 
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 

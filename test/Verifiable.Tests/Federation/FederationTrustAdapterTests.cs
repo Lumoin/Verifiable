@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Trust;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Federation;

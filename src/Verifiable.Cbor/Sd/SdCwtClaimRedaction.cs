@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -175,7 +173,7 @@ public static class SdCwtClaimRedaction
         Dictionary<CredentialPath, List<byte[]>> digestsByParent)
     {
         //Check if this level has disclosable claims.
-        groupedPaths.TryGetValue(currentPath, out IReadOnlySet<string>? disclosableAtThisLevel);
+        _ = groupedPaths.TryGetValue(currentPath, out IReadOnlySet<string>? disclosableAtThisLevel);
 
         int? mapCount = reader.ReadStartMap();
 

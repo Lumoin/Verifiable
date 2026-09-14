@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Resolvers;
@@ -73,7 +72,7 @@ public class DidProblemDetailsConverter: JsonConverter<DidProblemDetails>
                 JsonThrowHelper.ThrowJsonException("A DID problem details value must carry a 'type' URI.");
             }
 
-            return new DidProblemDetails(type!, title, status, detail, instance);
+            return new DidProblemDetails(type, title, status, detail, instance);
         }
     }
 

@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Tpm.EventLog;
 
 namespace Verifiable.Tpm.Extensions.EventLog;
@@ -44,7 +43,7 @@ public static class TpmEventLogExtensions
                 onTransportError: tc => TpmResult<TcgEventLog>.TransportError(tc));
         }
 
-        using TcgEventLogData data = readResult.Value!;
+        using TcgEventLogData data = readResult.Value;
         return TcgEventLogParser.Parse(data.Span);
     }
 
@@ -66,7 +65,7 @@ public static class TpmEventLogExtensions
                 onTransportError: tc => TpmResult<TcgEventLog>.TransportError(tc));
         }
 
-        using TcgEventLogData data = readResult.Value!;
+        using TcgEventLogData data = readResult.Value;
         return TcgEventLogParser.Parse(data.Span);
     }
 

@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
@@ -23,7 +22,7 @@ namespace Verifiable.Json;
 /// See <see href="https://datatracker.ietf.org/doc/html/rfc8785">RFC 8785</see> for the full specification.
 /// </para>
 /// 
-/// <h3>System.Text.Json Integration Rationale (.NET 10)</h3>
+/// <h3>System.Text.Json Integration Rationale</h3>
 /// <para>
 /// JCS requires post-serialization transformation (property sorting) that System.Text.Json (STJ)
 /// does not natively support. The STJ serialization pipeline is:
@@ -32,8 +31,11 @@ namespace Verifiable.Json;
 /// Object → JsonConverter(s) → Utf8JsonWriter → Output bytes/string
 /// </code>
 /// <para>
-/// There is no hook to intercept or transform the final output. The following .NET 10 STJ
-/// extensibility points were evaluated but do not solve the JCS requirements:
+/// There is no hook to intercept or transform the final output. The following STJ extensibility
+/// points were evaluated but do not solve the JCS requirements. None of the cited types
+/// (<see cref="System.Text.Json.Serialization.JsonConverter{T}"/>, <see cref="IJsonTypeInfoResolver"/>,
+/// <see cref="Metadata.DefaultJsonTypeInfoResolver"/>, <see cref="JsonPropertyOrderAttribute"/>) offers
+/// a document-wide transform hook:
 /// </para>
 /// <list type="bullet">
 /// <item>

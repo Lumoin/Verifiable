@@ -155,7 +155,7 @@ public sealed class SdDisclosure: IEquatable<SdDisclosure>, IDisposable
             //provenance on the copy can use the Salt(IMemoryOwner, Tag, Activity?)
             //constructor directly with a derived tag and call CreateProperty/
             //CreateArrayElement themselves.
-            Salt copy = new Salt(owner, Salt.Tag, lifetime: null);
+            Salt copy = new(owner, Salt.Tag, lifetime: null);
 
             return ClaimName is null
                 ? CreateArrayElement(copy, ClaimValue)

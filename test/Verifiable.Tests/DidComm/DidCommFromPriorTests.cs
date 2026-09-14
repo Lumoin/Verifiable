@@ -1,11 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core.Resolvers;
-using Verifiable.Cryptography;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -289,7 +283,7 @@ internal sealed class DidCommFromPriorTests
 
         DidCommMessage message = NewMessage(rotation.NewDid);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await message.PackFromPriorAsync(
                 rotation.PriorDid,
                 rotation.PriorDid,
@@ -390,7 +384,7 @@ internal sealed class DidCommFromPriorTests
     //leaving a structurally valid (64-byte) but cryptographically wrong Ed25519 signature.
     private static string TamperSignature(string compactJwt)
     {
-        int signatureStart = compactJwt.LastIndexOf('.') + 1;
+        int signatureStart = compactJwt.LastIndexOf('.', StringComparison.Ordinal) + 1;
         char first = compactJwt[signatureStart];
         char replacement = first == 'A' ? 'B' : 'A';
 

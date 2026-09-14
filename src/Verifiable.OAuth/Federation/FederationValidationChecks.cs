@@ -620,8 +620,7 @@ public static class FederationValidationChecks
     //are intentionally excluded — they are not top-level Entity Statement
     //claims, and omitting one only ever under-rejects (never a false positive,
     //since every listed name is genuinely spec-defined). Local to the check.
-    private static HashSet<string> SpecifiedEntityStatementClaimNames { get; } =
-        new(StringComparer.Ordinal)
+    private static HashSet<string> SpecifiedEntityStatementClaimNames { get; } = new(StringComparer.Ordinal)
         {
             WellKnownJwtClaimNames.Iss, WellKnownJwtClaimNames.Sub, WellKnownJwtClaimNames.Aud,
             WellKnownJwtClaimNames.Exp, WellKnownJwtClaimNames.Nbf, WellKnownJwtClaimNames.Iat,
@@ -1409,7 +1408,7 @@ public static class FederationValidationChecks
         (int value, bool isValid) = mplObj switch
         {
             int i => (i, i >= 0),
-            long l when l >= 0 && l <= int.MaxValue => ((int)l, true),
+            long l when l is >= 0 and <= int.MaxValue => ((int)l, true),
             _ => (0, false)
         };
         maxPathLength = value;

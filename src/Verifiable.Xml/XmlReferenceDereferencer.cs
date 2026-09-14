@@ -1,6 +1,6 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -286,7 +286,7 @@ internal static class XmlReferenceDereferencer
         }
 
         byte quote = inner[0];
-        bool isQuoteCharacter = quote == (byte)'\'' || quote == (byte)'"';
+        bool isQuoteCharacter = quote is ((byte)'\'') or ((byte)'"');
         if(!isQuoteCharacter || inner[^1] != quote)
         {
             return false;

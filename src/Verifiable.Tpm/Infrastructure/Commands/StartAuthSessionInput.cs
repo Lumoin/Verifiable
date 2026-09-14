@@ -1,8 +1,3 @@
-using System;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
 /// <summary>
@@ -114,8 +109,8 @@ public readonly record struct StartAuthSessionInput: ITpmCommandInput
         //Parameters: nonceCaller (size + data) + encryptedSalt (size + data) +
         //sessionType + symmetric (TPMT_SYM_DEF) + authHash.
         return sizeof(uint) + sizeof(uint) +
-               (sizeof(ushort) + NonceCaller.Length) +
-               (sizeof(ushort) + EncryptedSalt.Length) +
+               sizeof(ushort) + NonceCaller.Length +
+               sizeof(ushort) + EncryptedSalt.Length +
                sizeof(byte) + Symmetric.SerializedSize + sizeof(ushort);
     }
 

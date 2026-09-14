@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
@@ -168,7 +167,7 @@ internal sealed class DcqlPresentationFlowTests
         };
 
         Assert.IsTrue(vpToken.ContainsKey(EudiPid.DefaultCredentialQueryId));
-        Assert.IsInstanceOfType<SdToken<string>>(vpToken[EudiPid.DefaultCredentialQueryId]);
+        _ = Assert.IsInstanceOfType<SdToken<string>>(vpToken[EudiPid.DefaultCredentialQueryId]);
 
         //Verifier validates the presented issuer JWT signature.
         bool isPresentationValid = await Jws.VerifyAsync(
@@ -198,7 +197,7 @@ internal sealed class DcqlPresentationFlowTests
         SdToken<string> issuedToken = await IssueSignedPidTokenAsync(privateKey, TestContext.CancellationToken)
             .ConfigureAwait(false);
 
-        await new DcqlQueryBuilder()
+        _ = await new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
                 [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.GivenName]),
@@ -248,7 +247,7 @@ internal sealed class DcqlPresentationFlowTests
         var decision = graph.Decisions[0];
         Assert.IsFalse(decision.SatisfiesRequirements, "Verifier requirements are not fully met due to user exclusion.");
         Assert.IsNotNull(decision.ConflictingPaths, "Conflicting paths must be reported.");
-        Assert.Contains(emailPath, decision.ConflictingPaths!);
+        Assert.Contains(emailPath, decision.ConflictingPaths);
 
         //Issuer JWT signature is still valid even with reduced disclosures.
         bool signatureValid = await Jws.VerifyAsync(
@@ -420,7 +419,7 @@ internal sealed class DcqlPresentationFlowTests
         var organizationPolicy = new PolicyAssessorDelegate<SdToken<string>>((context, ct) =>
         {
             var approved = new HashSet<CredentialPath>(context.ProposedPaths);
-            approved.Remove(familyNamePath);
+            _ = approved.Remove(familyNamePath);
 
             return Task.FromResult(new PolicyAssessmentOutcome
             {
@@ -581,7 +580,7 @@ internal sealed class DcqlPresentationFlowTests
             publicKey, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(signatureValid, "Ed25519 issuer JWT signature must be valid.");
 
-        await new DcqlQueryBuilder()
+        _ = await new DcqlQueryBuilder()
             .WithSdJwtCredential(EudiPid.DefaultCredentialQueryId,
                 [EudiPid.SdJwtVct],
                 [ClaimsQuery.ForPath([EudiPid.SdJwt.Birthdate])])

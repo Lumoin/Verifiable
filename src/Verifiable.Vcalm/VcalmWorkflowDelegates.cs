@@ -1,5 +1,4 @@
 using Verifiable.Core;
-using Verifiable.JsonPointer.Jsonata;
 
 namespace Verifiable.Vcalm;
 
@@ -107,19 +106,3 @@ public delegate ValueTask DeliverVcalmCallbackDelegate(
     string callbackBody,
     ExchangeContext context,
     CancellationToken cancellationToken);
-
-
-/// <summary>
-/// Parses a verbatim JSON fragment into the neutral <see cref="JsonataValue"/> model the §3.6 exchange
-/// engine feeds to the credential-template evaluation — the exchange's <c>variables.results</c> (a
-/// step's recorded presentation) and an issue request's per-request <c>variables</c>. The default
-/// <c>System.Text.Json</c> implementation lives in <c>Verifiable.Json</c> and is wired by the
-/// application — the <c>Verifiable.Vcalm</c> serialization firewall keeps STJ out of the library, so
-/// the JSON → model adaptation crosses the boundary through this seam, exactly as the template
-/// evaluation crosses through <see cref="VcalmTemplateEvaluatorRegistry"/>. Optional — when unwired, a
-/// step's template is evaluated against an empty variable context (a constant credential body still
-/// renders; a template that references a variable navigates it to nothing).
-/// </summary>
-/// <param name="json">The verbatim JSON fragment to adapt to the model.</param>
-/// <returns>The adapted value, or <see cref="JsonataValue.Null"/> when the fragment is not parseable.</returns>
-public delegate JsonataValue ParseVcalmTemplateInputDelegate(string json);

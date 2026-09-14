@@ -1,6 +1,4 @@
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -41,7 +39,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesSimulatorOverRealApduTransportAndDerivesSharedSecret()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-authenticator",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-authenticator", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
@@ -95,7 +93,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesFullPinEstablishmentAndTokenIssuanceJourneyOverRealApduTransport()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-capstone",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-flow-capstone", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
@@ -192,7 +190,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
     [TestMethod]
     public async Task RpClientDrivesMakeCredentialAndGetAssertionWithPinUvAuthTokenOverRealApduTransport()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("pinuv-mcga-capstone",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("pinuv-mcga-capstone", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, TestContext.CancellationToken);
 
@@ -204,7 +202,7 @@ internal sealed class CtapAuthenticatorClientPinFlowTests
         using CtapPlatformPinSession establishSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
             harness.Transceive, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
         (byte[] newPinEnc, byte[] setPinUvAuthParam) = await establishSession.BuildSetPinMessagesAsync("1234", TestContext.CancellationToken);
-        await SendClientPinAsync(harness.Transceive, new CtapClientPinRequest(
+        _ = await SendClientPinAsync(harness.Transceive, new CtapClientPinRequest(
             SubCommand: WellKnownCtapClientPinSubCommands.SetPin, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two,
             KeyAgreement: establishSession.PlatformPublicKeyCose, PinUvAuthParam: setPinUvAuthParam, NewPinEnc: newPinEnc), pool);
 

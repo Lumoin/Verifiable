@@ -1,28 +1,23 @@
-using System.Buffers;
-using System.Collections.Concurrent;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.Server;
-using Verifiable.Vcalm;
-using Verifiable.Vcalm.Exchange;
-using Verifiable.Tests.DataIntegrity;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
+using Verifiable.Vcalm;
+using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -87,7 +82,7 @@ internal sealed class VcalmExchangeEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
     private List<IDisposable> OwnedKeys { get; } = [];
@@ -152,7 +147,7 @@ internal sealed class VcalmExchangeEndpointTests
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeProtocolsAsync(
-            segment, exchangeId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, exchangeId, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
         using JsonDocument doc = JsonDocument.Parse(response.Body);
@@ -174,7 +169,7 @@ internal sealed class VcalmExchangeEndpointTests
         string segment = RegisterExchange(app);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeProtocolsAsync(
-            segment, "urn:uuid:never-created", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "urn:uuid:never-created", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode, "An unknown exchange id is 404.");
     }
@@ -198,7 +193,7 @@ internal sealed class VcalmExchangeEndpointTests
 
         //Step 1: client initiates with the empty message; the engine requests a presentation.
         ServerHttpResponse initiate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, initiate.StatusCode, initiate.Body);
         using JsonDocument requestDoc = JsonDocument.Parse(initiate.Body);
@@ -223,7 +218,7 @@ internal sealed class VcalmExchangeEndpointTests
 
         //Step 2: holder POSTs the presentation; the engine verifies it and completes.
         ServerHttpResponse complete = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, complete.StatusCode, complete.Body);
         using JsonDocument completeDoc = JsonDocument.Parse(complete.Body);
@@ -270,7 +265,7 @@ internal sealed class VcalmExchangeEndpointTests
 
         //Step 1: initiate — the engine requests a presentation and binds a challenge.
         ServerHttpResponse initiate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
         using JsonDocument initiateDoc = JsonDocument.Parse(initiate.Body);
         JsonElement firstVpr = initiateDoc.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
         string firstChallenge = firstVpr.GetProperty(VcalmParameterNames.Challenge).GetString()!;
@@ -278,7 +273,7 @@ internal sealed class VcalmExchangeEndpointTests
 
         //Step 2: re-poll with another empty body — the engine RE-SENDS the same active request.
         ServerHttpResponse repoll = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, repoll.StatusCode, repoll.Body);
         using JsonDocument repollDoc = JsonDocument.Parse(repoll.Body);
         JsonElement repollVpr = repollDoc.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
@@ -297,7 +292,7 @@ internal sealed class VcalmExchangeEndpointTests
         string presentMessage = "{\"verifiablePresentation\":" + securedPresentationJson + "}";
 
         ServerHttpResponse complete = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, complete.StatusCode, complete.Body);
         using JsonDocument completeDoc = JsonDocument.Parse(complete.Body);
         Assert.IsFalse(completeDoc.RootElement.TryGetProperty(VcalmParameterNames.VerifiablePresentationRequest, out _),
@@ -324,7 +319,7 @@ internal sealed class VcalmExchangeEndpointTests
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
         ServerHttpResponse initiate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
         using JsonDocument requestDoc = JsonDocument.Parse(initiate.Body);
         JsonElement vpr = requestDoc.RootElement.GetProperty(VcalmParameterNames.VerifiablePresentationRequest);
         string domain = vpr.GetProperty(VcalmParameterNames.Domain).GetString()!;
@@ -334,7 +329,7 @@ internal sealed class VcalmExchangeEndpointTests
         string presentMessage = "{\"verifiablePresentation\":" + securedPresentationJson + "}";
 
         ServerHttpResponse rejected = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, rejected.StatusCode, rejected.Body);
         using JsonDocument problem = JsonDocument.Parse(rejected.Body);
@@ -372,7 +367,7 @@ internal sealed class VcalmExchangeEndpointTests
         string presentMessage = "{\"verifiablePresentation\":" + securedPresentationJson + "}";
 
         ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, refused.StatusCode, refused.Body);
         using JsonDocument problem = JsonDocument.Parse(refused.Body);
@@ -398,7 +393,7 @@ internal sealed class VcalmExchangeEndpointTests
         string segment = RegisterExchange(app);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "GET", "urn:uuid:never-created", jsonBody: null, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", "urn:uuid:never-created", jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode, "An unknown exchange id is 404.");
     }
@@ -418,7 +413,7 @@ internal sealed class VcalmExchangeEndpointTests
         string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{\"notARealProperty\":true}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{\"notARealProperty\":true}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "§3.6: an unrecognized custom vcapi property triggers an error.");
@@ -438,7 +433,7 @@ internal sealed class VcalmExchangeEndpointTests
         byte[] bytes = Encoding.UTF8.GetBytes("{}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            bytes, "text/plain", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            bytes, "text/plain", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "A non-application/json body is rejected before parsing (§2.4 content-serialization MUST).");
@@ -465,7 +460,7 @@ internal sealed class VcalmExchangeEndpointTests
         TimeProvider.Advance(TimeSpan.FromMinutes(2));
 
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "A participate POST after the exchange expires is rejected by the flow-expiry gate.");
@@ -498,7 +493,7 @@ internal sealed class VcalmExchangeEndpointTests
 
     private static void WireExchangeSeams(TestHostShell app, HolderSigningContext? holder)
     {
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         //§3.6.4 / §3.6.6: resolve the exchange id to its flow id by scanning the host's flow store for
         //the exchange flow state carrying the id (the production deployment keys a secondary index; the
@@ -641,7 +636,7 @@ internal sealed class VcalmExchangeEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
 
@@ -660,7 +655,7 @@ internal sealed class VcalmExchangeEndpointTests
     private async Task<JsonDocument> GetExchangeStateAsync(TestHostShell app, string segment, string exchangeId)
     {
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "GET", exchangeId, jsonBody: null, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", exchangeId, jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 

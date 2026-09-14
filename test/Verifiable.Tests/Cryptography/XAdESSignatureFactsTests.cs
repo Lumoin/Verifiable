@@ -280,7 +280,7 @@ internal sealed class XAdESSignatureFactsTests
         string document = Document("""<SignaturePolicyIdentifier><SignaturePolicyImplied/></SignaturePolicyIdentifier>""", string.Empty);
         using XAdESQualifyingPropertiesFacts facts = ParseFacts(document, BaseMemoryPool.Shared);
         Assert.IsNotNull(facts.SignaturePolicy);
-        Assert.IsTrue(facts.SignaturePolicy!.IsImplied);
+        Assert.IsTrue(facts.SignaturePolicy.IsImplied);
         Assert.IsNull(facts.SignaturePolicy.Id);
         Assert.IsNull(facts.SignaturePolicy.Hash);
     }
@@ -311,7 +311,7 @@ internal sealed class XAdESSignatureFactsTests
     {
         using XAdESQualifyingPropertiesFacts facts = ParseFacts(ComprehensiveDocument(), BaseMemoryPool.Shared);
         Assert.IsNotNull(facts.SignerRole);
-        Assert.AreEqual(1, facts.SignerRole!.Certified?.Count);
+        Assert.AreEqual(1, facts.SignerRole.Certified?.Count);
         Assert.AreEqual(1, facts.SignerRole.Claimed?.Count);
         Assert.AreEqual(1, facts.SignerRole.SignedAssertions?.Count);
     }
@@ -371,7 +371,7 @@ internal sealed class XAdESSignatureFactsTests
     public void SignatureTimeStampSurfacesAsSignatureTimestampClass()
     {
         using XAdESQualifyingPropertiesFacts facts = ParseFacts(ComprehensiveDocument(), BaseMemoryPool.Shared);
-        Assert.ContainsSingle(t => t.Class == SignatureTimestampClass.SignatureTimestamp && t.Identifier == "SignatureTimeStamp", facts.Timestamps);
+        _ = Assert.ContainsSingle(t => t.Class == SignatureTimestampClass.SignatureTimestamp && t.Identifier == "SignatureTimeStamp", facts.Timestamps);
     }
 
 
@@ -431,7 +431,7 @@ internal sealed class XAdESSignatureFactsTests
         Assert.AreSequenceEqual(new byte[] { 0x30, 0x03, 0x02, 0x01, 0x02 }, facts.CompleteCertificateRefs[0].IssuerSerialV2!.AsReadOnlySpan().ToArray());
 
         Assert.HasCount(1, facts.AttributeCertificateRefs);
-        Assert.AreSequenceEqual(new byte[] { 0x0D, 0x0D }, facts.AttributeCertificateRefs[0].Digest.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual("\r\r"u8.ToArray(), facts.AttributeCertificateRefs[0].Digest.AsReadOnlySpan().ToArray());
         Assert.IsNull(facts.AttributeCertificateRefs[0].IssuerSerialV2);
     }
 
@@ -451,7 +451,7 @@ internal sealed class XAdESSignatureFactsTests
 
         Assert.HasCount(1, facts.CompleteRevocationCrlRefs);
         XAdESCrlReferenceFact crlRef = facts.CompleteRevocationCrlRefs[0];
-        Assert.AreSequenceEqual(new byte[] { 0x09, 0x09 }, crlRef.Digest.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual("\t\t"u8.ToArray(), crlRef.Digest.AsReadOnlySpan().ToArray());
         Assert.IsTrue(crlRef.HasCrlIdentifier);
         Assert.AreEqual("CN=Test CA", crlRef.Issuer);
         Assert.AreEqual("2024-01-01T00:00:00Z", crlRef.IssueTimeLexical);
@@ -464,7 +464,7 @@ internal sealed class XAdESSignatureFactsTests
         Assert.HasCount(1, facts.CompleteRevocationOcspRefs);
         XAdESOcspReferenceFact ocspRef = facts.CompleteRevocationOcspRefs[0];
         Assert.IsTrue(ocspRef.HasDigestAlgAndValue);
-        Assert.AreSequenceEqual(new byte[] { 0x0A, 0x0A }, ocspRef.Digest!.AsReadOnlySpan().ToArray());
+        Assert.AreSequenceEqual("\n\n"u8.ToArray(), ocspRef.Digest!.AsReadOnlySpan().ToArray());
         Assert.AreEqual(XAdESOcspResponderIdKind.ByName, ocspRef.ResponderKind);
         Assert.AreEqual("CN=Test Responder", ocspRef.ResponderByName);
         Assert.IsNull(ocspRef.ResponderByKeyOctets);
@@ -579,7 +579,7 @@ internal sealed class XAdESSignatureFactsTests
         string document = Document("<SigningTime>2024-01-15T10:30:00Z</SigningTime>", string.Empty, unsigned);
         using XAdESQualifyingPropertiesFacts facts = ParseFacts(document, BaseMemoryPool.Shared);
 
-        Assert.ContainsSingle(t => t.Class == SignatureTimestampClass.ArchiveTimestamp, facts.Timestamps);
+        _ = Assert.ContainsSingle(t => t.Class == SignatureTimestampClass.ArchiveTimestamp, facts.Timestamps);
         Assert.AreEqual(2, facts.Timestamps.Count(t => t.Class == SignatureTimestampClass.ValidationDataTimestamp));
         Assert.AreEqual(1, facts.SignedPropertyOccurrenceCounts[XAdESBaselineLevelTable.SigningTime.Name]);
         Assert.AreEqual(1, facts.UnsignedPropertyOccurrenceCounts[XAdESBaselineLevelTable.ArchiveTimeStamp.Name]);
@@ -774,7 +774,7 @@ internal sealed class XAdESSignatureFactsTests
 
         Assert.AreEqual(SignatureFactsStatus.Extracted, facts.Status);
         Assert.AreEqual(SignatureFormatIdentifier.XAdES, facts.Format);
-        Assert.ContainsSingle(a => a.Identifier == XAdESBaselineLevelTable.SigningTime.Name && a.Scope == SignatureAttributeScope.Signed, facts.Attributes);
+        _ = Assert.ContainsSingle(a => a.Identifier == XAdESBaselineLevelTable.SigningTime.Name && a.Scope == SignatureAttributeScope.Signed, facts.Attributes);
         Assert.AreEqual(2, facts.Attributes.Count(a => a.Identifier == XAdESBaselineLevelTable.CertificateValues.Name || a.Identifier == XAdESBaselineLevelTable.AttrAuthoritiesCertValues.Name));
         Assert.HasCount(2, facts.SigningCertificateReferences);
         Assert.IsNotEmpty(facts.Timestamps);
@@ -822,7 +822,7 @@ internal sealed class XAdESSignatureFactsTests
         signedXml.ComputeSignature();
 
         XmlDocument outputDocument = new();
-        outputDocument.AppendChild(outputDocument.ImportNode(signedXml.GetXml(), deep: true));
+        _ = outputDocument.AppendChild(outputDocument.ImportNode(signedXml.GetXml(), deep: true));
         byte[] signedBytes = Encoding.UTF8.GetBytes(outputDocument.OuterXml);
 
         IMemoryOwner<byte> certificateOwner = BaseMemoryPool.Shared.Rent(certificate.RawData.Length);

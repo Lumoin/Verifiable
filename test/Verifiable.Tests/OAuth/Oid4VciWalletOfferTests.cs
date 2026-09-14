@@ -1,9 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Net.Http;
-using Verifiable.Cryptography;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vci.Wallet;
 using Verifiable.OAuth.Server;
@@ -156,9 +153,9 @@ internal sealed class Oid4VciWalletOfferTests
         Assert.AreEqual(OfferIssuer.OriginalString, parsed.CredentialIssuer.OriginalString);
         Assert.AreEqual(ConfigurationId, parsed.CredentialConfigurationIds[0]);
         Assert.IsNotNull(parsed.PreAuthorizedCodeGrant);
-        Assert.AreEqual(PreAuthorizedCode, parsed.PreAuthorizedCodeGrant!.PreAuthorizedCode);
+        Assert.AreEqual(PreAuthorizedCode, parsed.PreAuthorizedCodeGrant.PreAuthorizedCode);
         Assert.IsNotNull(parsed.PreAuthorizedCodeGrant.TxCode);
-        Assert.AreEqual(6, parsed.PreAuthorizedCodeGrant.TxCode!.Length);
+        Assert.AreEqual(6, parsed.PreAuthorizedCodeGrant.TxCode.Length);
         Assert.AreEqual("numeric", parsed.PreAuthorizedCodeGrant.TxCode.InputMode);
     }
 
@@ -185,7 +182,7 @@ internal sealed class Oid4VciWalletOfferTests
 
         Assert.IsNull(parsed.PreAuthorizedCodeGrant, "An authorization_code-only offer carries no pre-authorized grant.");
         Assert.IsNotNull(parsed.AuthorizationCodeGrant);
-        Assert.AreEqual("eyJhbGciOiJSU0Et...FYUaBy", parsed.AuthorizationCodeGrant!.IssuerState);
+        Assert.AreEqual("eyJhbGciOiJSU0Et...FYUaBy", parsed.AuthorizationCodeGrant.IssuerState);
         Assert.AreEqual("https://as.example.com", parsed.AuthorizationCodeGrant.AuthorizationServer);
     }
 

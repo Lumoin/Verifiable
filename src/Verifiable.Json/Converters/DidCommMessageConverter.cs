@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.DidComm;
@@ -272,7 +270,7 @@ public sealed class DidCommMessageConverter: JsonConverter<DidCommMessage>
             }
             else
             {
-                additionalHeaders ??= new Dictionary<string, object>(StringComparer.Ordinal);
+                additionalHeaders ??= new(StringComparer.Ordinal);
                 object? headerValue = JsonElementConversion.Convert(property.Value);
                 if(headerValue is not null)
                 {

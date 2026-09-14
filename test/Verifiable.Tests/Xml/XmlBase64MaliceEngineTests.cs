@@ -37,7 +37,7 @@ internal sealed class XmlBase64MaliceEngineTests
 
     private static XmlReferenceResolver CreateFixedResolver(byte[] octets)
     {
-        return (ReadOnlySpan<byte> uri, BaseMemoryPool pool, out PooledMemory? result) =>
+        return (uri, pool, out result) =>
         {
             result = PooledMemory.FromBytes(octets, pool, BufferTags.XmlDigestInput);
 

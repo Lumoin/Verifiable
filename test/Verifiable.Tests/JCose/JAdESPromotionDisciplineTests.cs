@@ -1,15 +1,11 @@
 using System.Buffers;
-using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -247,7 +243,7 @@ internal sealed class JAdESPromotionDisciplineTests
         Verified<JAdESVerifiedSignatureFacts> defaultInstance = default;
 
         Assert.IsFalse(defaultInstance.IsVerified, "The struct's own default must never report itself as verified.");
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = defaultInstance.Value);
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => _ = defaultInstance.Value);
     }
 
 

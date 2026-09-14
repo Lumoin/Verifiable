@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 using Verifiable.Keri;
 
@@ -41,8 +40,8 @@ internal sealed class KeriDelegationTests
     {
         KeriKeyEvent read = KeriEventReader.Read(DelegatedInceptionFields());
 
-        Assert.IsInstanceOfType<KeriDelegatedInceptionEvent>(read);
-        Assert.IsInstanceOfType<KeriInceptionEvent>(read, "A delegated inception is an inception for key-state folding.");
+        _ = Assert.IsInstanceOfType<KeriDelegatedInceptionEvent>(read);
+        _ = Assert.IsInstanceOfType<KeriInceptionEvent>(read, "A delegated inception is an inception for key-state folding.");
         var dip = (KeriDelegatedInceptionEvent)read;
         Assert.AreEqual(DelegateeAid, dip.Prefix);
         Assert.AreEqual(DelegatorAid, dip.DelegatorPrefix);
@@ -57,8 +56,8 @@ internal sealed class KeriDelegationTests
     {
         KeriKeyEvent read = KeriEventReader.Read(DelegatedRotationFields());
 
-        Assert.IsInstanceOfType<KeriDelegatedRotationEvent>(read);
-        Assert.IsInstanceOfType<KeriRotationEvent>(read, "A delegated rotation is a rotation for key-state folding.");
+        _ = Assert.IsInstanceOfType<KeriDelegatedRotationEvent>(read);
+        _ = Assert.IsInstanceOfType<KeriRotationEvent>(read, "A delegated rotation is a rotation for key-state folding.");
         Assert.AreEqual(1, read.SequenceNumber);
     }
 
@@ -70,9 +69,9 @@ internal sealed class KeriDelegationTests
     public void RejectsDelegatedInceptionMissingDelegator()
     {
         MessageFieldMap fields = DelegatedInceptionFields();
-        fields.Remove(KeriMessageFields.DelegatorPrefix);
+        _ = fields.Remove(KeriMessageFields.DelegatorPrefix);
 
-        Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriEventReader.Read(fields));
     }
 
 

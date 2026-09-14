@@ -179,7 +179,7 @@ public readonly struct XAdESDateTime: IEquatable<XAdESDateTime>
             return false;
         }
 
-        if(month < 1 || month > 12)
+        if(month is < 1 or > 12)
         {
             return false;
         }
@@ -248,7 +248,7 @@ public readonly struct XAdESDateTime: IEquatable<XAdESDateTime>
                 hasTimezone = true;
                 isUtcTimezone = true;
             }
-            else if(value[pos] == (byte)'+' || value[pos] == (byte)'-')
+            else if(value[pos] is ((byte)'+') or ((byte)'-'))
             {
                 isTimezoneNegative = value[pos] == (byte)'-';
                 ++pos;
@@ -286,7 +286,7 @@ public readonly struct XAdESDateTime: IEquatable<XAdESDateTime>
     }
 
 
-    private static bool IsAsciiDigit(byte value) => value >= (byte)'0' && value <= (byte)'9';
+    private static bool IsAsciiDigit(byte value) => value is >= ((byte)'0') and <= ((byte)'9');
 
 
     private static bool TryConsume(ReadOnlySpan<byte> value, ref int pos, byte expected)
@@ -339,7 +339,7 @@ public readonly struct XAdESDateTime: IEquatable<XAdESDateTime>
         }
 
         int digitCount = pos - start;
-        if(digitCount < 4 || digitCount > MaximumYearDigits)
+        if(digitCount is < 4 or > MaximumYearDigits)
         {
             return false;
         }

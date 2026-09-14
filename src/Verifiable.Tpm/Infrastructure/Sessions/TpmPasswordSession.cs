@@ -1,11 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Infrastructure.Sessions;
 
 /// <summary>
@@ -117,7 +109,7 @@ public sealed class TpmPasswordSession: TpmSessionBase, IDisposable
         return sizeof(uint) +          // sessionHandle
                sizeof(ushort) +        // nonceCaller.size (always 0)
                sizeof(byte) +          // sessionAttributes
-               Password.               SerializedSize; // hmac (TPM2B_AUTH)
+               Password.SerializedSize; // hmac (TPM2B_AUTH)
     }
 
     /// <inheritdoc/>

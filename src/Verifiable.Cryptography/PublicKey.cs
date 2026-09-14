@@ -53,7 +53,7 @@ namespace Verifiable.Cryptography
         /// <param name="id">The key identifier.</param>
         /// <param name="verificationDelegate">The delegate that verifies the signature against data using this key.</param>
         /// <param name="context">Optional default context for verification operations.</param>
-        public PublicKey(PublicKeyMemory sensitiveMemory, string id, VerificationDelegate verificationDelegate, FrozenDictionary<string, object>? context = null): base(sensitiveMemory, id)
+        public PublicKey(PublicKeyMemory sensitiveMemory, string id, VerificationDelegate verificationDelegate, FrozenDictionary<string, object>? context = null) : base(sensitiveMemory, id)
         {
             this.VerificationDelegate = verificationDelegate;
             this.DefaultContext = context;

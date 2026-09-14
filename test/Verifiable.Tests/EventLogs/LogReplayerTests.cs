@@ -1,13 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Microsoft.Extensions.Time.Testing;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -36,7 +30,7 @@ internal sealed class LogReplayerTests
 
         Assert.HasCount(1, results);
         Assert.IsTrue(results[0].IsSuccess);
-        Assert.IsInstanceOfType<ActiveLogState<string>>(results[0].State);
+        _ = Assert.IsInstanceOfType<ActiveLogState<string>>(results[0].State);
         Assert.AreEqual("state:create", ((ActiveLogState<string>)results[0].State).Value);
         Assert.AreEqual(LogEntryClassification.Genesis, results[0].Classification);
     }
@@ -53,7 +47,7 @@ internal sealed class LogReplayerTests
 
         Assert.HasCount(2, results);
         Assert.IsTrue(results[1].IsSuccess);
-        Assert.IsInstanceOfType<ActiveLogState<string>>(results[1].State);
+        _ = Assert.IsInstanceOfType<ActiveLogState<string>>(results[1].State);
         Assert.AreEqual("state:update-1", ((ActiveLogState<string>)results[1].State).Value);
         Assert.AreEqual(LogEntryClassification.Update, results[1].Classification);
     }
@@ -70,7 +64,7 @@ internal sealed class LogReplayerTests
 
         Assert.HasCount(2, results);
         Assert.IsTrue(results[1].IsSuccess);
-        Assert.IsInstanceOfType<DeactivatedLogState<string>>(results[1].State);
+        _ = Assert.IsInstanceOfType<DeactivatedLogState<string>>(results[1].State);
         Assert.AreEqual("deactivated:state:create", ((DeactivatedLogState<string>)results[1].State).Value);
         Assert.AreEqual(LogEntryClassification.Deactivate, results[1].Classification);
     }
@@ -141,7 +135,7 @@ internal sealed class LogReplayerTests
                 return ValueTask.CompletedTask;
             });
 
-        await CollectAsync(source, context, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await CollectAsync(source, context, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(2, observed);
     }
@@ -161,7 +155,7 @@ internal sealed class LogReplayerTests
                 return ValueTask.CompletedTask;
             });
 
-        await CollectAsync(source, context, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await CollectAsync(source, context, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, observed);
     }
@@ -183,7 +177,7 @@ internal sealed class LogReplayerTests
 
         Assert.HasCount(1, results);
         Assert.IsTrue(results[0].IsSuccess);
-        Assert.IsInstanceOfType<ActiveLogState<string>>(results[0].State);
+        _ = Assert.IsInstanceOfType<ActiveLogState<string>>(results[0].State);
         Assert.AreEqual("state:update-5", ((ActiveLogState<string>)results[0].State).Value);
     }
 
@@ -196,7 +190,7 @@ internal sealed class LogReplayerTests
 
         IAsyncEnumerable<LogEntry<string, string>> source = BlockingStreamAsync(streamBlocked, cts.Token);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(
             async () => await CollectAsync(source, BuildContext(), cts.Token).ConfigureAwait(false))
             .ConfigureAwait(false);
     }
@@ -232,19 +226,18 @@ internal sealed class LogReplayerTests
             [genesis, snapshotEntry], TestContext.CancellationToken);
 
         ApplyDelegate<string, string, string> baseApply = BuildBaseApply();
-        ApplyDelegate<string, string, string> composedApply =
-            async (classification, state, entry, ct) =>
+        async ValueTask<(LogState<string> State, string? Error)> composedApply(LogEntryClassification classification, LogState<string> state, LogEntry<string, string> entry, CancellationToken ct)
+        {
+            if(classification == snapshot)
             {
-                if(classification == snapshot)
-                {
-                    //Snapshot entries carry state forward unchanged as a no-op.
-                    return (state, null);
-                }
+                //Snapshot entries carry state forward unchanged as a no-op.
+                return (state, null);
+            }
 
-                return await baseApply(classification, state, entry, ct).ConfigureAwait(false);
-            };
+            return await baseApply(classification, state, entry, ct).ConfigureAwait(false);
+        }
 
-        ClassifyOperationDelegate<string, string> classify = entry =>
+        LogEntryClassification classify(LogEntry<string, string> entry) =>
             entry.Operation is "snap" ? snapshot
             : entry.Operation is null ? LogEntryClassification.Heartbeat
             : entry.Operation is "deactivate" ? LogEntryClassification.Deactivate
@@ -341,7 +334,7 @@ internal sealed class LogReplayerTests
 
             ValidateProof = (entry, _, _, _) =>
             {
-                bool valid = entry.Proofs.All(p => string.Equals(p, "invalid", StringComparison.Ordinal) is false);
+                bool valid = entry.Proofs.All(p => !string.Equals(p, "invalid", StringComparison.Ordinal));
                 return ValueTask.FromResult<string?>(valid ? null : "Proof validation failed: invalid.");
             },
 

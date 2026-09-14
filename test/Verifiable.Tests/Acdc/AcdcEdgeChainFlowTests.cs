@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -87,8 +81,8 @@ internal sealed class AcdcEdgeChainFlowTests
             //Verify the near credential and read its edge section.
             AcdcMessage? nearMessage = await VerifyAcdcAsync(httpClient, BaseOf(nearIssuer, "/acdc"), BaseOf(nearIssuer, "/kel"), disposables, cancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(nearMessage, "The near credential MUST verify (Proof of Disclosure and Proof of Issuance).");
-            Assert.IsInstanceOfType<ExpandedAcdcSection>(nearMessage.Edge, "The near credential discloses its edge section.");
-            AcdcEdgeGroup edgeSection = AcdcEdgeReader.Read(((ExpandedAcdcSection)nearMessage.Edge!).Detail);
+            _ = Assert.IsInstanceOfType<ExpandedAcdcSection>(nearMessage.Edge, "The near credential discloses its edge section.");
+            AcdcEdgeGroup edgeSection = AcdcEdgeReader.Read(((ExpandedAcdcSection)nearMessage.Edge).Detail);
 
             //Resolve the far node over the far Issuer's socket and verify it the same way.
             AcdcMessage? farMessage = await VerifyAcdcAsync(httpClient, BaseOf(farIssuer, "/acdc"), BaseOf(farIssuer, "/kel"), disposables, cancellationToken).ConfigureAwait(false);

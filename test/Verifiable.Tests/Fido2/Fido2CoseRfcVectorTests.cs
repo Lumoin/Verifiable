@@ -1,16 +1,14 @@
-using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
-using Verifiable.BouncyCastle;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
-
 using static Verifiable.Tests.Fido2.Fido2TestVectors;
 
 namespace Verifiable.Tests.Fido2;
@@ -228,7 +226,7 @@ internal sealed class Fido2CoseRfcVectorTests
         CancellationToken cancellationToken)
     {
         byte[] rpIdHash = CreateRpIdHash();
-        const byte userPresentAndVerifiedFlags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit);
+        const byte userPresentAndVerifiedFlags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit;
         byte[] authenticatorData = BuildAuthenticatorData(rpIdHash, userPresentAndVerifiedFlags, signCount: 1);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, ValidChallenge, ValidOrigin, crossOrigin: null, topOrigin: null);
 

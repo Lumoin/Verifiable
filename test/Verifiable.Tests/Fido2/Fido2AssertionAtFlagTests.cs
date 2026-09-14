@@ -1,8 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -64,7 +63,7 @@ internal sealed class Fido2AssertionAtFlagTests
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(
             Guid.NewGuid(), credentialId, Fido2TestVectors.EncodeP256CoseKey());
 
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorDataBytes = Fido2TestVectors.BuildAuthenticatorData(
             rpIdHash, flags, signCount: 1, attestedCredentialData: attestedCredentialData);
 

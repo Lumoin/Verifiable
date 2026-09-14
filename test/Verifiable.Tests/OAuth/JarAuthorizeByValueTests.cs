@@ -1,15 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Net;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
-using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -29,8 +25,6 @@ internal sealed class JarAuthorizeByValueTests
     public TestContext TestContext { get; set; } = null!;
 
     private FakeTimeProvider TimeProvider { get; } = new FakeTimeProvider(TestClock.CanonicalEpoch);
-
-    private static DecodeDelegate Decoder => TestSetup.Base64UrlDecoder;
 
     private const string ClientId = "https://client.example.com";
     private const string TestSubject = "test-subject-001";
@@ -79,7 +73,7 @@ internal sealed class JarAuthorizeByValueTests
         Assert.AreEqual(302, response.StatusCode,
             $"JAR-by-value direct authorize must redirect on success. Body: {response.Body}");
         Assert.IsNotNull(response.Location);
-        Assert.Contains("code=", response.Location!, StringComparison.Ordinal,
+        Assert.Contains("code=", response.Location, StringComparison.Ordinal,
             $"Redirect Location must include the authorization code. Got: {response.Location}");
         Assert.StartsWith(
             RegisteredRedirectUri.ToString(),
@@ -193,7 +187,7 @@ internal sealed class JarAuthorizeByValueTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
             material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
-        claims.Remove(WellKnownJwtClaimNames.ClientId);
+        _ = claims.Remove(WellKnownJwtClaimNames.ClientId);
 
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
             material, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -217,7 +211,7 @@ internal sealed class JarAuthorizeByValueTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
             material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
-        claims.Remove(WellKnownJwtClaimNames.Exp);
+        _ = claims.Remove(WellKnownJwtClaimNames.Exp);
 
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
             material, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -370,7 +364,7 @@ internal sealed class JarAuthorizeByValueTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, DirectOnlyCapabilities);
 
-        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, new ExchangeContext()).ConfigureAwait(false);
+        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, []).ConfigureAwait(false);
 
         bool hasJarAuthorize = chain.Any(e => string.Equals(
             e.Name, "AuthCode.AuthorizeJarByValue", StringComparison.Ordinal));
@@ -386,7 +380,7 @@ internal sealed class JarAuthorizeByValueTests
         using VerifierKeyMaterial material = host.RegisterClient(
             ClientId, ClientBaseUri, JarOnlyCapabilities);
 
-        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, new ExchangeContext()).ConfigureAwait(false);
+        EndpointChain chain = await host.GetEndpointsAsync(material.Registration, []).ConfigureAwait(false);
 
         bool hasJarAuthorize = chain.Any(e => string.Equals(
             e.Name, "AuthCode.AuthorizeJarByValue", StringComparison.Ordinal));
@@ -415,7 +409,7 @@ internal sealed class JarAuthorizeByValueTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -428,7 +422,7 @@ internal sealed class JarAuthorizeByValueTests
         Assert.AreEqual(302, response.StatusCode,
             $"Pure PKCE direct authorize must still redirect. Body: {response.Body}");
         Assert.IsNotNull(response.Location);
-        Assert.Contains("code=", response.Location!, StringComparison.Ordinal,
+        Assert.Contains("code=", response.Location, StringComparison.Ordinal,
             $"Redirect Location must include the authorization code. Got: {response.Location}");
     }
 
@@ -454,7 +448,7 @@ internal sealed class JarAuthorizeByValueTests
             [OAuthRequestParameterNames.MaxAge] = "300"
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
         context.SetAuthTime(now - TimeSpan.FromSeconds(600));
 
@@ -495,7 +489,7 @@ internal sealed class JarAuthorizeByValueTests
             [OAuthRequestParameterNames.Request] = compactJar,
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
         context.SetAuthTime(now - TimeSpan.FromSeconds(600));
 
@@ -532,7 +526,7 @@ internal sealed class JarAuthorizeByValueTests
             [OAuthRequestParameterNames.State] = "direct-state-xyz"
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -591,7 +585,7 @@ internal sealed class JarAuthorizeByValueTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -603,9 +597,9 @@ internal sealed class JarAuthorizeByValueTests
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
             $"PAR-mandating profile must refuse direct authorize. Body: {response.Body}");
-        Assert.Contains(OAuthErrors.InvalidRequest, response.Body!, StringComparison.Ordinal,
+        Assert.Contains(OAuthErrors.InvalidRequest, response.Body, StringComparison.Ordinal,
             $"Refusal must carry invalid_request. Got: {response.Body}");
-        Assert.Contains("Pushed Authorization Requests", response.Body!, StringComparison.Ordinal,
+        Assert.Contains("Pushed Authorization Requests", response.Body, StringComparison.Ordinal,
             $"Refusal must name the PAR requirement. Got: {response.Body}");
     }
 
@@ -637,7 +631,7 @@ internal sealed class JarAuthorizeByValueTests
             [OAuthRequestParameterNames.ClientId] = ClientId
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -654,9 +648,9 @@ internal sealed class JarAuthorizeByValueTests
             $"Got {response.StatusCode}: {response.Body}");
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode,
             $"Both-present must be an explicit invalid_request. Got {response.StatusCode}: {response.Body}");
-        Assert.Contains(OAuthErrors.InvalidRequest, response.Body!, StringComparison.Ordinal,
+        Assert.Contains(OAuthErrors.InvalidRequest, response.Body, StringComparison.Ordinal,
             $"Both-present rejection must carry the invalid_request error code. Got: {response.Body}");
-        Assert.Contains("request_uri", response.Body!, StringComparison.Ordinal,
+        Assert.Contains("request_uri", response.Body, StringComparison.Ordinal,
             $"Both-present rejection must name the RFC 9101 §5 conflict. Got: {response.Body}");
     }
 
@@ -695,7 +689,7 @@ internal sealed class JarAuthorizeByValueTests
         DateTimeOffset now = TimeProvider.GetUtcNow();
         Dictionary<string, object> claims = OAuthJarFixtures.BuildBaseClaims(
             material, now, ClientId, RegisteredRedirectUri, JarState, JarNonce);
-        claims.Remove(WellKnownJwtClaimNames.Aud);
+        _ = claims.Remove(WellKnownJwtClaimNames.Aud);
 
         string compactJar = await OAuthJarFixtures.BuildSignedJarAsync(
             material, claims, TestContext.CancellationToken).ConfigureAwait(false);
@@ -750,7 +744,7 @@ internal sealed class JarAuthorizeByValueTests
             fields[OAuthRequestParameterNames.ClientId] = outerClientId;
         }
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(TestSubject);
 
         return await host.DispatchAtEndpointAsync(

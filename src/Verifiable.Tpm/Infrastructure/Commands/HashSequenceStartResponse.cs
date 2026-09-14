@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 

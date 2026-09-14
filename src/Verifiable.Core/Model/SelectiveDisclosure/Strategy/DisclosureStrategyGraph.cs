@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 
@@ -644,7 +641,7 @@ public sealed class DisclosureStrategyGraph<TCredential>
         var distinctCredentials = new HashSet<TCredential?>();
         for(int i = 0; i < contributionList.Length; i++)
         {
-            distinctCredentials.Add(contributionList[i].Credential);
+            _ = distinctCredentials.Add(contributionList[i].Credential);
             predicateCount += contributionList[i].Predicates.Count;
         }
 

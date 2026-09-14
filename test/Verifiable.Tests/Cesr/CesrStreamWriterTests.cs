@@ -1,9 +1,6 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Text;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Cesr;
 using Verifiable.Cesr.Streaming;
 
@@ -42,7 +39,7 @@ internal sealed class CesrStreamWriterTests
         var pipe = new Pipe();
         CesrStreamWriter.WriteGenusVersion(pipe.Writer, "-_AAA", 2, 0);
         CesrStreamWriter.WriteGroup(pipe.Writer, "-V", body);
-        await pipe.Writer.FlushAsync(TestContext.CancellationToken);
+        _ = await pipe.Writer.FlushAsync(TestContext.CancellationToken);
         await pipe.Writer.CompleteAsync();
 
         var tokens = new List<(CesrTokenKind Kind, string Code, int Count, (int, int)? Version, byte[] Body)>();
@@ -78,7 +75,7 @@ internal sealed class CesrStreamWriterTests
         var pipe = new Pipe();
         CesrStreamWriter.WriteTextGenusVersion(pipe.Writer, "-_AAA", 2, 0);
         CesrStreamWriter.WriteTextGroup(pipe.Writer, "-V", body);
-        await pipe.Writer.FlushAsync(TestContext.CancellationToken);
+        _ = await pipe.Writer.FlushAsync(TestContext.CancellationToken);
         await pipe.Writer.CompleteAsync();
 
         var tokens = new List<(CesrTokenKind Kind, CesrDomain Domain, string Code, int Count, (int, int)? Version, byte[] Body)>();
@@ -111,7 +108,7 @@ internal sealed class CesrStreamWriterTests
     {
         var pipe = new Pipe();
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrStreamWriter.WriteGroup(pipe.Writer, "-V", new byte[5]));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrStreamWriter.WriteGroup(pipe.Writer, "-V", new byte[5]));
     }
 
 
@@ -123,7 +120,7 @@ internal sealed class CesrStreamWriterTests
     {
         var pipe = new Pipe();
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrStreamWriter.WriteTextGroup(pipe.Writer, "-V", new byte[6]));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrStreamWriter.WriteTextGroup(pipe.Writer, "-V", new byte[6]));
     }
 
 

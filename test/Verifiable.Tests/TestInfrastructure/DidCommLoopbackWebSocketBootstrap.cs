@@ -1,19 +1,14 @@
-using System;
-using System.Buffers;
-using System.Linq;
-using System.Net.Security;
-using System.Net.WebSockets;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using System.Buffers;
+using System.Net.Security;
+using System.Net.WebSockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -46,11 +41,11 @@ internal static class DidCommLoopbackWebSocketBootstrap
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
-        builder.WebHost.ConfigureKestrel(options =>
+        _ = builder.WebHost.ConfigureKestrel(options =>
             LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
-        app.UseWebSockets();
+        _ = app.UseWebSockets();
 
         return (app, certificate);
     }

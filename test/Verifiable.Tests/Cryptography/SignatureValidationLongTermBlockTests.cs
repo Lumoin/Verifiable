@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Security;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -313,7 +308,7 @@ internal sealed class SignatureValidationLongTermBlockTests
 
             Assert.AreEqual(BuildingBlockIndication.Indeterminate, result.Conclusion.Indication, "Step 4): the chain slid successfully in step 3) but does not carry the required policy.");
             Assert.Contains(SignatureValidationSubIndication.ChainConstraintsFailure, result.Conclusion.SubIndications);
-            Assert.IsInstanceOfType<ChainConstraintsFailureReportData>(result.Conclusion.ReportData[0]);
+            _ = Assert.IsInstanceOfType<ChainConstraintsFailureReportData>(result.Conclusion.ReportData[0]);
         }
         finally
         {

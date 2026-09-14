@@ -1,9 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 using Verifiable.Tests.TestInfrastructure;
-
-using static Verifiable.Tests.Fido2.Fido2TestVectors;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -146,7 +144,7 @@ internal sealed class Fido2ExtensionProcessingTests
     [TestMethod]
     public void FromIdentifiersDuplicateIdentifierThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => Fido2ExtensionSelectors.FromIdentifiers(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Fido2ExtensionSelectors.FromIdentifiers(
             ("credProps", StubProcessorAsync),
             ("credProps", StubProcessorAsync)));
     }

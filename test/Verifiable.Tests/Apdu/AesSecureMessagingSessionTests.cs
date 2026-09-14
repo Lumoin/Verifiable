@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -70,10 +68,10 @@ internal sealed class AesSecureMessagingSessionTests
 
         //Recompute the MAC over SSC || padded-header || DO'87', method-2 padded to the AES block.
         byte[] paddedHeader = new byte[AesBlockSize];
-        Iso9797Padding.Pad([0x0C, 0xA4, 0x02, 0x0C], AesBlockSize, paddedHeader);
+        _ = Iso9797Padding.Pad([0x0C, 0xA4, 0x02, 0x0C], AesBlockSize, paddedHeader);
         byte[] macSource = Concatenate(sequenceCounter, paddedHeader, cryptogramObject);
         byte[] paddedMacSource = new byte[Iso9797Padding.PaddedLength(macSource.Length, AesBlockSize)];
-        Iso9797Padding.Pad(macSource, AesBlockSize, paddedMacSource);
+        _ = Iso9797Padding.Pad(macSource, AesBlockSize, paddedMacSource);
         byte[] expectedMac = await ComputeMacAsync(paddedMacSource, Ksmac).ConfigureAwait(false);
 
         Assert.AreEqual(Convert.ToHexString(expectedMac), Convert.ToHexString(mac),
@@ -163,7 +161,7 @@ internal sealed class AesSecureMessagingSessionTests
     }
 
 
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

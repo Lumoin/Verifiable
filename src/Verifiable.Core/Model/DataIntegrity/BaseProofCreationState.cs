@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Cryptography;

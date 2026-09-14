@@ -24,7 +24,7 @@ public sealed class Fido2FormatException: Exception
     /// Initializes a new instance of the <see cref="Fido2FormatException"/> class, classified
     /// <see cref="Fido2FormatFailureKind.MalformedCbor"/>.
     /// </summary>
-    public Fido2FormatException(): this(Fido2FormatFailureKind.MalformedCbor)
+    public Fido2FormatException() : this(Fido2FormatFailureKind.MalformedCbor)
     {
     }
 
@@ -45,7 +45,7 @@ public sealed class Fido2FormatException: Exception
     /// classified <see cref="Fido2FormatFailureKind.MalformedCbor"/>.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    public Fido2FormatException(string message): this(Fido2FormatFailureKind.MalformedCbor, message)
+    public Fido2FormatException(string message) : this(Fido2FormatFailureKind.MalformedCbor, message)
     {
     }
 
@@ -56,7 +56,7 @@ public sealed class Fido2FormatException: Exception
     /// </summary>
     /// <param name="failureKind">The failure classification.</param>
     /// <param name="message">The message that describes the error.</param>
-    public Fido2FormatException(Fido2FormatFailureKind failureKind, string message): base(message)
+    public Fido2FormatException(Fido2FormatFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -68,7 +68,7 @@ public sealed class Fido2FormatException: Exception
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of this exception.</param>
-    public Fido2FormatException(string message, Exception innerException): this(Fido2FormatFailureKind.MalformedCbor, message, innerException)
+    public Fido2FormatException(string message, Exception innerException) : this(Fido2FormatFailureKind.MalformedCbor, message, innerException)
     {
     }
 
@@ -80,7 +80,7 @@ public sealed class Fido2FormatException: Exception
     /// <param name="failureKind">The failure classification.</param>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of this exception.</param>
-    public Fido2FormatException(Fido2FormatFailureKind failureKind, string message, Exception innerException): base(message, innerException)
+    public Fido2FormatException(Fido2FormatFailureKind failureKind, string message, Exception innerException) : base(message, innerException)
     {
         FailureKind = failureKind;
     }

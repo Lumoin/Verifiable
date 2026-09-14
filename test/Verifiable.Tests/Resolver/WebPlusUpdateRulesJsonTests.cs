@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Did.Methods.WebPlus;
@@ -34,7 +33,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void ParsesEmptyObjectAsDisallow()
     {
-        Assert.IsInstanceOfType<DisallowUpdateRule>(Parse("{}"));
+        _ = Assert.IsInstanceOfType<DisallowUpdateRule>(Parse("{}"));
     }
 
 
@@ -77,8 +76,8 @@ internal sealed class WebPlusUpdateRulesJsonTests
         var rule = (AllUpdateRule)Parse("""{"all":[{"key":"uA"},{"hashedKey":"uH"}]}""");
 
         Assert.HasCount(2, rule.Rules);
-        Assert.IsInstanceOfType<KeyUpdateRule>(rule.Rules[0]);
-        Assert.IsInstanceOfType<HashedKeyUpdateRule>(rule.Rules[1]);
+        _ = Assert.IsInstanceOfType<KeyUpdateRule>(rule.Rules[0]);
+        _ = Assert.IsInstanceOfType<HashedKeyUpdateRule>(rule.Rules[1]);
     }
 
 
@@ -117,7 +116,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
         var rule = (AtLeastUpdateRule)Parse("""{"atLeast":3,"of":[{"weight":3,"all":[{"key":"uA"},{"key":"uB"}]}]}""");
 
         Assert.AreEqual(3, rule.Of[0].Weight);
-        Assert.IsInstanceOfType<AllUpdateRule>(rule.Of[0].Rule);
+        _ = Assert.IsInstanceOfType<AllUpdateRule>(rule.Of[0].Rule);
     }
 
 
@@ -137,7 +136,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsNonStringKey()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"key":123}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"key":123}"""));
     }
 
 
@@ -145,7 +144,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsNonArrayAny()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":{}}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":{}}"""));
     }
 
 
@@ -153,7 +152,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsDisallowAsSubRule()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":[{}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":[{}]}"""));
     }
 
 
@@ -161,7 +160,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsNonIntegerThreshold()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":"two","of":[{"key":"uA"}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":"two","of":[{"key":"uA"}]}"""));
     }
 
 
@@ -169,7 +168,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsEmptyAllArray()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"all":[]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"all":[]}"""));
     }
 
 
@@ -177,7 +176,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsEmptyAnyArray()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":[]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":[]}"""));
     }
 
 
@@ -185,7 +184,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsEmptyOfArray()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":1,"of":[]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":1,"of":[]}"""));
     }
 
 
@@ -193,7 +192,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsZeroAtLeastThreshold()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":0,"of":[{"key":"uA"}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":0,"of":[{"key":"uA"}]}"""));
     }
 
 
@@ -201,7 +200,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsNegativeAtLeastThreshold()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":-1,"of":[{"key":"uA"}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":-1,"of":[{"key":"uA"}]}"""));
     }
 
 
@@ -209,7 +208,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsZeroWeight()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":1,"of":[{"weight":0,"key":"uA"}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":1,"of":[{"weight":0,"key":"uA"}]}"""));
     }
 
 
@@ -217,7 +216,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsNegativeWeight()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":1,"of":[{"weight":-5,"key":"uA"}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"atLeast":1,"of":[{"weight":-5,"key":"uA"}]}"""));
     }
 
 
@@ -229,7 +228,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsMultipleDiscriminatorsInComposite()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":[{"key":"uA"}],"all":[{"key":"uB"}]}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"any":[{"key":"uA"}],"all":[{"key":"uB"}]}"""));
     }
 
 
@@ -237,7 +236,7 @@ internal sealed class WebPlusUpdateRulesJsonTests
     [TestMethod]
     public void RejectsMultipleDiscriminatorsInLeaf()
     {
-        Assert.ThrowsExactly<JsonException>(() => Parse("""{"key":"uA","hashedKey":"uH"}"""));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parse("""{"key":"uA","hashedKey":"uH"}"""));
     }
 
 
@@ -251,6 +250,6 @@ internal sealed class WebPlusUpdateRulesJsonTests
     {
         byte[] document = Encoding.UTF8.GetBytes("""{"updateRules":{"key":"uA"},"updateRules":{"key":"uB"}}""");
 
-        Assert.ThrowsExactly<JsonException>(() => Parser(document));
+        _ = Assert.ThrowsExactly<JsonException>(() => Parser(document));
     }
 }

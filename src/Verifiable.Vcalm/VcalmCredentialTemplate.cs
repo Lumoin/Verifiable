@@ -10,18 +10,14 @@ namespace Verifiable.Vcalm;
 /// credential body.
 /// </summary>
 /// <remarks>
-/// <para>
 /// This is the neutral shape the template-evaluation seam consumes — the <see cref="VcalmTemplateEvaluator"/>
-/// reads <see cref="TemplateType"/> to select an evaluator and feeds it <see cref="Template"/> with the
-/// exchange variables. <c>Verifiable.Vcalm</c> stays free of <c>System.Text.Json</c>: the template
-/// body is the verbatim source string and the variables / result are the neutral
-/// <see cref="Verifiable.JsonPointer.Jsonata.JsonataValue"/> model, not an STJ document.
-/// </para>
-/// <para>
-/// VCALM's only registered template type is <c>jsonata</c> (Appendix D). The minimal in-repo
-/// evaluator handles the §3.6 credential-template subset; a deployment registers the full JSONata
-/// engine from <c>Lumoin.Veritas</c> to supersede it.
-/// </para>
+/// reads <see cref="TemplateType"/> to select an evaluator and feeds it <see cref="Template"/> (UTF-8
+/// encoded by the evaluator) alongside the exchange variables, themselves UTF-8 JSON.
+/// <c>Verifiable.Vcalm</c> stays free of <c>System.Text.Json</c>: the template body is the verbatim
+/// source string; the variables and the rendered result cross the seam as raw bytes, not an STJ
+/// document. VCALM's only registered template type is <c>jsonata</c> (Appendix D); this library ships
+/// no evaluator for it — a deployment registers a real JSONata engine through
+/// <see cref="VcalmTemplateEvaluatorRegistry.Register"/>.
 /// </remarks>
 [DebuggerDisplay("VcalmCredentialTemplate Id={Id} Type={TemplateType}")]
 public sealed record VcalmCredentialTemplate

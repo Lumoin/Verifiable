@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
@@ -223,7 +222,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         try
         {
             Assert.IsNotNull(decoded.MinPinLength);
-            Assert.IsFalse(decoded.MinPinLength!.Value);
+            Assert.IsFalse(decoded.MinPinLength.Value);
         }
         finally
         {
@@ -357,7 +356,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         try
         {
             Assert.IsNotNull(decoded.HmacSecret);
-            Assert.IsFalse(decoded.HmacSecret!.Value);
+            Assert.IsFalse(decoded.HmacSecret.Value);
         }
         finally
         {
@@ -388,7 +387,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
         var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriterBuffer.WrittenSpan.ToArray());
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared));
     }
 
@@ -458,7 +457,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
         var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriterBuffer.WrittenSpan.ToArray());
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared));
     }
 
@@ -483,7 +482,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
 
         var written = BuildRequestWithExtensions(clientDataHash, userHandle, wrongTypeWriterBuffer.WrittenSpan.ToArray());
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(CtapMakeCredentialRequestCborWriter.Write(written).Memory, BaseMemoryPool.Shared));
     }
 
@@ -565,7 +564,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared));
     }
 
@@ -580,7 +579,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         //composes it.
         byte[] duplicateKeyMap = [0xA2, 0x01, 0x40, 0x01, 0x40];
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(duplicateKeyMap, BaseMemoryPool.Shared));
     }
 
@@ -592,7 +591,7 @@ internal sealed class CtapMakeCredentialRequestCborReaderTests
         //Major type 5 (map) with additional info 31 (indefinite length), one entry, then the break byte.
         byte[] indefiniteLengthMap = [0xBF, 0x01, 0x40, 0xFF];
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapMakeCredentialRequestCborReader.Read(indefiniteLengthMap, BaseMemoryPool.Shared));
     }
 

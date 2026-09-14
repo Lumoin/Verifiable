@@ -1,6 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
-using Verifiable.Tests.TestInfrastructure;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cbor;
@@ -11,6 +10,7 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Mdoc;
@@ -64,7 +64,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Test IACA Root", rootKey);
-        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Test mDL Issuer", leafKey, rootCert, rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Test mDL Issuer", leafKey, rootCert);
 
         //Wrap the leaf's private key into the project's PrivateKeyMemory shape.
         using PrivateKeyMemory leafPrivateKey = LoadP256PrivateKey(leafKey);
@@ -124,7 +124,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Verbose IACA Root", rootKey);
-        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Verbose mDL Issuer", leafKey, rootCert, rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Verbose mDL Issuer", leafKey, rootCert);
 
         using PrivateKeyMemory leafPrivateKey = LoadP256PrivateKey(leafKey);
 
@@ -179,7 +179,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Real IACA Root", rootKey);
-        using X509Certificate2 leafCert = CreateLeafCertificate("CN=mDL Issuer", leafKey, rootCert, rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=mDL Issuer", leafKey, rootCert);
 
         //A second, unrelated self-signed CA the trust delegate must reject.
         using ECDsa imposterRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -282,7 +282,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Real IACA Root", rootKey);
-        using X509Certificate2 leafCert = CreateLeafCertificate("CN=mDL Issuer", leafKey, rootCert, rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=mDL Issuer", leafKey, rootCert);
 
         //A second, unrelated self-signed CA the chain must not resolve to.
         using ECDsa imposterRootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -384,7 +384,7 @@ internal sealed class MdocIacaTrustEndToEndTests
         using ECDsa rootKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using ECDsa leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         using X509Certificate2 rootCert = CreateSelfSignedCa("CN=Root", rootKey);
-        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Leaf", leafKey, rootCert, rootKey);
+        using X509Certificate2 leafCert = CreateLeafCertificate("CN=Leaf", leafKey, rootCert);
 
         //Construct a COSE_Sign1 with x5chain manually rather than going
         //through full signing — keeps the extractor test focused.
@@ -443,8 +443,7 @@ internal sealed class MdocIacaTrustEndToEndTests
     private static X509Certificate2 CreateLeafCertificate(
         string subjectName,
         ECDsa leafKey,
-        X509Certificate2 issuerCert,
-        ECDsa issuerKey)
+        X509Certificate2 issuerCert)
     {
         var request = new CertificateRequest(subjectName, leafKey, HashAlgorithmName.SHA256);
 

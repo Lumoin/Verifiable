@@ -1,16 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Fido2;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructure;
 

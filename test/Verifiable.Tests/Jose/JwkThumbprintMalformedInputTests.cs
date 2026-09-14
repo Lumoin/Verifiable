@@ -14,92 +14,92 @@ internal class JwkThumbprintMalformedInputTests
     [TestMethod]
     public void ComputeRsaThumbprintNullExponentThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared,null!, "RSA", "validModulus"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared, null!, "RSA", "validModulus"));
     }
 
     [TestMethod]
     public void ComputeRsaThumbprintNullKeyTypeThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared,"AQAB", null!, "validModulus"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared, "AQAB", null!, "validModulus"));
     }
 
     [TestMethod]
     public void ComputeRsaThumbprintNullModulusThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared,"AQAB", "RSA", null!));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared, "AQAB", "RSA", null!));
     }
 
     [TestMethod]
     public void ComputeECThumbprintNullCurveThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,null!, "EC", "validX", "validY"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, null!, "EC", "validX", "validY"));
     }
 
     [TestMethod]
     public void ComputeECThumbprintNullKeyTypeThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,"P-256", null!, "validX", "validY"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, "P-256", null!, "validX", "validY"));
     }
 
     [TestMethod]
     public void ComputeECThumbprintNullXCoordinateThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,"P-256", "EC", null!, "validY"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, "P-256", "EC", null!, "validY"));
     }
 
     [TestMethod]
     public void ComputeECThumbprintNullYCoordinateThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,"P-256", "EC", "validX", null!));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, "P-256", "EC", "validX", null!));
     }
 
     [TestMethod]
     public void ComputeEdDsaThumbprintNullCurveThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeEdDsaThumbprint(BaseMemoryPool.Shared,null!, "OKP", "validX"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeEdDsaThumbprint(BaseMemoryPool.Shared, null!, "OKP", "validX"));
     }
 
     [TestMethod]
     public void ComputeEcdhThumbprintNullPublicKeyThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeEcdhThumbprint(BaseMemoryPool.Shared,"X25519", "OKP", null!));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeEcdhThumbprint(BaseMemoryPool.Shared, "X25519", "OKP", null!));
     }
 
     [TestMethod]
     public void ComputeOctThumbprintNullKeyValueThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeOctThumbprint(BaseMemoryPool.Shared,null!, "oct"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeOctThumbprint(BaseMemoryPool.Shared, null!, "oct"));
     }
 
     [TestMethod]
     public void ComputeMlDsaThumbprintNullAlgorithmThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared,null!, "MLDSA", "validX"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared, null!, "MLDSA", "validX"));
     }
 
     [TestMethod]
     public void ComputeMlKemThumbprintNullAlgorithmThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeMlKemThumbprint(BaseMemoryPool.Shared,null!, "MLKEM", "validX"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeMlKemThumbprint(BaseMemoryPool.Shared, null!, "MLKEM", "validX"));
     }
 
     [TestMethod]
     public void ComputeSlhDsaThumbprintNullAlgorithmThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeSlhDsaThumbprint(BaseMemoryPool.Shared,null!, "SLHDSA", "validX"));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeSlhDsaThumbprint(BaseMemoryPool.Shared, null!, "SLHDSA", "validX"));
     }
 
     [TestMethod]
     public void ComputeGenericThumbprintNullParametersThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,null!));
+        _ = Assert.Throws<ArgumentNullException>(() => JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, null!));
     }
 
     [TestMethod]
     public void ComputeGenericThumbprintEmptyParametersThrowsArgumentException()
     {
         var emptyParams = new Dictionary<string, string>();
-        Assert.Throws<ArgumentException>(() => JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,emptyParams));
+        _ = Assert.Throws<ArgumentException>(() => JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, emptyParams));
     }
 
     [TestMethod]
@@ -111,9 +111,9 @@ internal class JwkThumbprintMalformedInputTests
         var ktyCorrect = "RSA";
         var n = "0vx7agoebGcQSuuPiLJXZptN9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtVT86zwu1RK7aPFFxuhDR1L6tSoc_BJECPebWKRXjBZCiFV4n3oknjhMstn64tZ_2W-5JsGY4Hc5n9yBXArwl93lqt7_RN5w6Cf0h4QyQ5v-65YGjQR0_FDW2QvzqY368QQMicAtaSqzs8KJZgnYb9c7d0zgdAZHzu6qMQvRL5hajrn1n91CbOpbISD08qNLyrdkt-bFTWhAI4vMQFh6WeZu0fM4lFd2NcRwr3XPksINHaQ-G_xBniIqbw0Ls1jF44-csFCur-kEgU8awapJzKnqDKgw";
 
-        using var thumbprintWrong = JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared,e, ktyWrong, n);
-        using var thumbprintCorrect = JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared,e, ktyCorrect, n);
-        
+        using var thumbprintWrong = JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared, e, ktyWrong, n);
+        using var thumbprintCorrect = JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared, e, ktyCorrect, n);
+
         Assert.IsFalse(thumbprintWrong.Memory.Span.SequenceEqual(thumbprintCorrect.Memory.Span), "Wrong key type should produce different thumbprint.");
     }
 
@@ -126,8 +126,8 @@ internal class JwkThumbprintMalformedInputTests
         var x = "Invalid@#$%Base64Url";
         var y = "Invalid@#$%Base64Url";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,crv, kty, x, y);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, crv, kty, x, y);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Should compute thumbprint even with invalid encoding since we hash the string as-is per RFC 7638.");
     }
 
@@ -143,8 +143,8 @@ internal class JwkThumbprintMalformedInputTests
             ["e"] = largeValue
         };
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Should handle very large parameter values without overflow.");
     }
 
@@ -160,8 +160,8 @@ internal class JwkThumbprintMalformedInputTests
             ["symbols"] = "!@#$%^&*()"
         };
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Should handle UTF-8 special characters correctly per RFC 7638.");
     }
 
@@ -173,8 +173,8 @@ internal class JwkThumbprintMalformedInputTests
         var kty = "MLDSA";
         var x = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared,alg, kty, x);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared, alg, kty, x);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Thumbprint should compute even with mismatched parameters (garbage in, deterministic garbage out per RFC 7638).");
     }
 
@@ -186,8 +186,8 @@ internal class JwkThumbprintMalformedInputTests
         var kty = "MLDSA";
         var x = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared,alg, kty, x);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared, alg, kty, x);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "ML-DSA-44 thumbprint must be 32 bytes per RFC 7638.");
     }
 
@@ -199,8 +199,8 @@ internal class JwkThumbprintMalformedInputTests
         var kty = "MLKEM";
         var x = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4v";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeMlKemThumbprint(BaseMemoryPool.Shared,alg, kty, x);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeMlKemThumbprint(BaseMemoryPool.Shared, alg, kty, x);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "ML-KEM-768 thumbprint must be 32 bytes per RFC 7638.");
     }
 
@@ -212,8 +212,8 @@ internal class JwkThumbprintMalformedInputTests
         var kty = "SLHDSA";
         var x = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeSlhDsaThumbprint(BaseMemoryPool.Shared,alg, kty, x);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeSlhDsaThumbprint(BaseMemoryPool.Shared, alg, kty, x);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "SLH-DSA-128f thumbprint must be 32 bytes per RFC 7638.");
     }
 
@@ -226,8 +226,8 @@ internal class JwkThumbprintMalformedInputTests
         var x = "";
         var y = "";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,crv, kty, x, y);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, crv, kty, x, y);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Empty strings should produce valid thumbprint per RFC 7638.");
     }
 
@@ -237,8 +237,8 @@ internal class JwkThumbprintMalformedInputTests
         //Single parameter dictionary.
         var jwkParams = new Dictionary<string, string> { ["kty"] = "RSA" };
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Single parameter should produce valid thumbprint.");
     }
 
@@ -248,8 +248,8 @@ internal class JwkThumbprintMalformedInputTests
         //Dictionary keys are case-sensitive in C#, but this tests behavior.
         var jwkParams = new Dictionary<string, string> { ["kty"] = "RSA", ["Kty"] = "EC" };
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Different casing should be treated as different keys.");
     }
 
@@ -261,8 +261,8 @@ internal class JwkThumbprintMalformedInputTests
         var kty = " RSA ";
         var n = " modulus ";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared,e, kty, n);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeRsaThumbprint(BaseMemoryPool.Shared, e, kty, n);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Whitespace should be preserved in thumbprint calculation per RFC 7638.");
     }
 
@@ -275,8 +275,8 @@ internal class JwkThumbprintMalformedInputTests
         var x = "слава_україні";
         var y = "座標ワンピース";
 
-        using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared,crv, kty, x, y);
-        
+        using var thumbprint = JwkThumbprintUtilities.ComputeECThumbprint(BaseMemoryPool.Shared, crv, kty, x, y);
+
         Assert.HasCount(JwkTemplateConstants.Sha256HashSizeInBytes, thumbprint.Memory, "Non-ASCII characters should be UTF-8 encoded per RFC 7638.");
     }
 
@@ -286,9 +286,9 @@ internal class JwkThumbprintMalformedInputTests
         //Verify deterministic behavior with multiple calls.
         var jwkParams = new Dictionary<string, string> { ["kty"] = "RSA", ["e"] = "AQAB", ["n"] = "modulus" };
 
-        using var thumbprint1 = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
-        using var thumbprint2 = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
-        using var thumbprint3 = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared,jwkParams);
+        using var thumbprint1 = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
+        using var thumbprint2 = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
+        using var thumbprint3 = JwkThumbprintUtilities.ComputeGenericThumbprint(BaseMemoryPool.Shared, jwkParams);
 
         Assert.IsTrue(thumbprint1.Memory.Span.SequenceEqual(thumbprint2.Memory.Span), "Identical inputs must produce identical thumbprints.");
         Assert.IsTrue(thumbprint2.Memory.Span.SequenceEqual(thumbprint3.Memory.Span), "Thumbprint computation must be deterministic per RFC 7638.");
@@ -302,8 +302,8 @@ internal class JwkThumbprintMalformedInputTests
         var kty = "MLDSA";
         var x = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
 
-        using var thumbprint1 = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared,alg, kty, x);
-        using var thumbprint2 = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared,alg, kty, x);
+        using var thumbprint1 = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared, alg, kty, x);
+        using var thumbprint2 = JwkThumbprintUtilities.ComputeMlDsaThumbprint(BaseMemoryPool.Shared, alg, kty, x);
 
         Assert.IsTrue(thumbprint1.Memory.Span.SequenceEqual(thumbprint2.Memory.Span), "PQC thumbprints must be deterministic per RFC 7638.");
     }

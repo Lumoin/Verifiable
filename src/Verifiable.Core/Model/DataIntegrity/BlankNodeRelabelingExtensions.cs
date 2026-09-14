@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -193,7 +191,7 @@ public static partial class BlankNodeRelabelingExtensions
                 {
                     var canonicalKey = originalId[2..]; //Strip "_:" prefix for bare format.
                     var hmacValue = relabeledId[2..]; //Strip "_:" prefix for bare format.
-                    labelMap.TryAdd(canonicalKey, hmacValue);
+                    _ = labelMap.TryAdd(canonicalKey, hmacValue);
                 }
             }
         }

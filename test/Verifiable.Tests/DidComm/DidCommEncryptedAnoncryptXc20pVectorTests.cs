@@ -1,13 +1,10 @@
 using System.Buffers;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -33,7 +30,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //A non-nested anoncrypt message never triggers nested-signature resolution, so this resolver is never
     //invoked; it satisfies the unpack overload's resolver parameter.
@@ -232,7 +229,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
         Assert.IsNull(result.SenderKeyId, "Anoncrypt carries no sender key id.");
 
         Assert.IsNotNull(result.Message);
-        DidCommMessage message = result.Message!;
+        DidCommMessage message = result.Message;
         Assert.AreEqual(ExpectedId, message.Id);
         Assert.AreEqual(ExpectedType, message.Type);
         Assert.AreEqual(ExpectedFrom, message.From);
@@ -240,11 +237,11 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
         Assert.AreEqual<long?>(ExpectedExpiresTime, message.ExpiresTime);
 
         Assert.IsNotNull(message.To);
-        Assert.HasCount(1, message.To!);
-        Assert.AreEqual(ExpectedTo, message.To![0]);
+        Assert.HasCount(1, message.To);
+        Assert.AreEqual(ExpectedTo, message.To[0]);
 
         Assert.IsNotNull(message.Body);
-        Assert.IsTrue(message.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(message.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 
@@ -263,7 +260,7 @@ internal sealed class DidCommEncryptedAnoncryptXc20pVectorTests
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(wire, "protected"u8);
         Assert.IsNotNull(protectedEncoded, "The vector MUST carry a 'protected' member.");
 
-        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded!, Pool);
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);
 
         return JwkJsonReader.ExtractStringValue(headerOwner.Memory.Span, "apv"u8);
     }

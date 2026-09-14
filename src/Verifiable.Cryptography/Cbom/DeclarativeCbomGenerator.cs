@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
-using Lumoin.Base;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Cbom;
@@ -165,11 +161,11 @@ public static class DeclarativeCbomGenerator
         //describe related-crypto-material whose algorithmRef points back at that algorithm.
         return purpose switch
         {
-            var x when x == Purpose.Signature => MapRelatedMaterial(descriptor, "signature", purpose),
-            var x when x == Purpose.Nonce => MapRelatedMaterial(descriptor, "nonce", purpose),
-            var x when x == Purpose.Salt => MapRelatedMaterial(descriptor, "salt", purpose),
-            var x when x == Purpose.Mac => MapRelatedMaterial(descriptor, "tag", purpose),
-            var x when x == Purpose.Digest => MapRelatedMaterial(descriptor, "digest", purpose),
+            var x when x == Purpose.Signature => MapRelatedMaterial(descriptor, "signature"),
+            var x when x == Purpose.Nonce => MapRelatedMaterial(descriptor, "nonce"),
+            var x when x == Purpose.Salt => MapRelatedMaterial(descriptor, "salt"),
+            var x when x == Purpose.Mac => MapRelatedMaterial(descriptor, "tag"),
+            var x when x == Purpose.Digest => MapRelatedMaterial(descriptor, "digest"),
             _ => MapAlgorithmAsset(descriptor)
         };
     }
@@ -196,8 +192,7 @@ public static class DeclarativeCbomGenerator
 
     private static CbomComponent MapRelatedMaterial(
         AlgorithmDescriptor descriptor,
-        string materialType,
-        Purpose purpose)
+        string materialType)
     {
         string materialRef = string.Create(
             CultureInfo.InvariantCulture,

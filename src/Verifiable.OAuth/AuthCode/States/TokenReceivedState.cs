@@ -1,6 +1,3 @@
-using System;
-using Verifiable.OAuth;
-
 namespace Verifiable.OAuth.AuthCode.States;
 
 /// <summary>

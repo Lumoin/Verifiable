@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Core;
@@ -91,13 +89,13 @@ public static class WebFingerClient
         }
 
         StringBuilder builder = new();
-        builder.Append(Uri.UriSchemeHttps).Append("://").Append(host).Append(WellKnownWebFingerValues.WellKnownPath);
-        builder.Append('?').Append(WellKnownWebFingerValues.ResourceParameterName).Append('=').Append(Uri.EscapeDataString(resource));
+        _ = builder.Append(Uri.UriSchemeHttps).Append("://").Append(host).Append(WellKnownWebFingerValues.WellKnownPath);
+        _ = builder.Append('?').Append(WellKnownWebFingerValues.ResourceParameterName).Append('=').Append(Uri.EscapeDataString(resource));
 
         foreach(string relation in relFilters)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(relation);
-            builder.Append('&').Append(WellKnownWebFingerValues.RelParameterName).Append('=').Append(Uri.EscapeDataString(relation));
+            _ = builder.Append('&').Append(WellKnownWebFingerValues.RelParameterName).Append('=').Append(Uri.EscapeDataString(relation));
         }
 
         Uri queryUri;

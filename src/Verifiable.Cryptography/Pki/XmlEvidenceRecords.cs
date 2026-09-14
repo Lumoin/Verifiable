@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -201,9 +197,9 @@ public static class XmlEvidenceRecords
 
                     if(memberIndex == 0)
                     {
-                        coversDataObjects = member.Status != XmlEvidenceRecordVerificationStatus.DataObjectNotCovered
-                            && member.Status != XmlEvidenceRecordVerificationStatus.RootMismatch
-                            && member.Status != XmlEvidenceRecordVerificationStatus.Malformed;
+                        coversDataObjects = member.Status is not XmlEvidenceRecordVerificationStatus.DataObjectNotCovered
+                            and not XmlEvidenceRecordVerificationStatus.RootMismatch
+                            and not XmlEvidenceRecordVerificationStatus.Malformed;
                     }
 
                     initialArchiveTime ??= member.GenerationTime;

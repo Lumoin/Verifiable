@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Common;

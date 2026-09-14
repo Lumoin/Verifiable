@@ -1,20 +1,12 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1292,7 +1284,7 @@ internal sealed class TpmInHouseSimulatorHmacKeyTests
     private static Tpm2bPrivate BareSensitive(BaseMemoryPool pool, int seedSize, ReadOnlySpan<byte> bits)
     {
         const int PaddedAuthSize = 64;
-        int interior = sizeof(ushort) + (sizeof(ushort) + PaddedAuthSize) + (sizeof(ushort) + seedSize) + (sizeof(ushort) + bits.Length);
+        int interior = sizeof(ushort) + sizeof(ushort) + PaddedAuthSize + sizeof(ushort) + seedSize + sizeof(ushort) + bits.Length;
         int length = sizeof(ushort) + interior;
 
         using IMemoryOwner<byte> zerosOwner = pool.Rent(PaddedAuthSize);

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -95,13 +94,13 @@ internal sealed class AdESLevelRuleEngineTests
     public void LabelFindingThrowingDefaultPropagatesOutOfCheckRow()
     {
         var violations = new List<string>();
-        AdESRowFinding<string> throwingDefault = (row, level, kind, cardinalityExpected, actualCount) => row.RequirementId switch
+        static string throwingDefault(AdESTableRow row, AdESBaselineLevel level, AdESRowCheckKind kind, AdESCardinality? cardinalityExpected, int actualCount) => row.RequirementId switch
         {
             "XA-6.3-t05" => "SigningTime",
             _ => throw new InvalidOperationException($"Unrecognized row '{row.RequirementId}'.")
         };
 
-        Assert.ThrowsExactly<InvalidOperationException>(() =>
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() =>
             AdESLevelRuleEngine.CheckRow(XAdESBaselineLevelTable.SigningCertificateV2, occurrenceCount: 0, AdESBaselineLevel.BB, includeCardinality: true, throwingDefault, violations));
     }
 }

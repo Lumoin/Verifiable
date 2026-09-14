@@ -1,10 +1,7 @@
-using System;
-using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.TestDataProviders;
 
 namespace Verifiable.Tests.EventLogs;
@@ -36,7 +33,7 @@ internal sealed class CryptoProofLogReplayTests
         byte[] digest = SHA256.HashData(canonical);
 
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        (Signature signature, CryptoEvent? _) = await sign(
+        (Signature signature, _) = await sign(
             privateKey.AsReadOnlyMemory(), canonical, pool, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         using var disposableSignature = signature;
 
@@ -55,7 +52,7 @@ internal sealed class CryptoProofLogReplayTests
             await CryptoProofLogReplayHarness.ReplayGenesisAsync(entry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"A valid crypto proof must replay successfully; error: '{result.Error}'.");
-        Assert.IsInstanceOfType<ActiveLogState<int>>(result.State);
+        _ = Assert.IsInstanceOfType<ActiveLogState<int>>(result.State);
     }
 
     [TestMethod]
@@ -70,7 +67,7 @@ internal sealed class CryptoProofLogReplayTests
         byte[] tamperedBytes = "the bytes that were NOT the signed ones"u8.ToArray();
 
         var sign = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveSigning(CryptoAlgorithm.P256, Purpose.Signing);
-        (Signature signature, CryptoEvent? _) = await sign(
+        (Signature signature, _) = await sign(
             privateKey.AsReadOnlyMemory(), signedBytes, pool, context: null, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         using var disposableSignature = signature;
 
@@ -91,7 +88,7 @@ internal sealed class CryptoProofLogReplayTests
             await CryptoProofLogReplayHarness.ReplayGenesisAsync(entry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccess, "A proof produced over different bytes must not verify.");
-        Assert.IsInstanceOfType<EmptyLogState<int>>(result.State, "Genesis state must not be applied when proof validation fails.");
+        _ = Assert.IsInstanceOfType<EmptyLogState<int>>(result.State, "Genesis state must not be applied when proof validation fails.");
         Assert.IsTrue(
             result.Error is not null && result.Error.Contains("does not verify", StringComparison.Ordinal),
             $"The error must report the failed proof; got '{result.Error}'.");

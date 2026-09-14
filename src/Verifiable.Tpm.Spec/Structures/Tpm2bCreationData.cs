@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -54,7 +53,7 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     public ReadOnlySpan<byte> GetRawBytes()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        return RawStorage.Memory.Span.Slice(0, RawLength);
+        return RawStorage.Memory.Span[..RawLength];
     }
 
     /// <summary>
@@ -66,7 +65,7 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
     public ReadOnlyMemory<byte> GetRawMemory()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        return RawStorage.Memory.Slice(0, RawLength);
+        return RawStorage.Memory[..RawLength];
     }
 
     /// <summary>
@@ -125,7 +124,7 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
             ArgumentOutOfRangeException.ThrowIfGreaterThan(length, marshaled.Memory.Length);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(length, ushort.MaxValue);
 
-            var innerReader = new TpmReader(marshaled.Memory.Span.Slice(0, length));
+            var innerReader = new TpmReader(marshaled.Memory.Span[..length]);
             TpmsCreationData creationData = TpmsCreationData.Parse(ref innerReader, pool);
 
             return new Tpm2bCreationData(creationData, marshaled, length);
@@ -172,9 +171,9 @@ public sealed class Tpm2bCreationData: IDisposable, ITpmWireType
         try
         {
             ReadOnlySpan<byte> source = reader.ReadBytes(size);
-            source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
+            source.CopyTo(rawStorage.Memory.Span[..size]);
 
-            var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
+            var innerReader = new TpmReader(rawStorage.Memory.Span[..size]);
             var creationData = TpmsCreationData.Parse(ref innerReader, pool);
 
             return new Tpm2bCreationData(creationData, rawStorage, size);

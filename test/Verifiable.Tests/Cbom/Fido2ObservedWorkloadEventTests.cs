@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -41,12 +37,12 @@ internal sealed class Fido2ObservedWorkloadEventTests
             await VerifiableOperations.RunFido2ObservedWorkloadAsync(BaseMemoryPool.Shared, new FakeTimeProvider(TestClock.CanonicalEpoch), CancellationToken.None).ConfigureAwait(false);
 
             Assert.Contains(
-                (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.P256,
+                e => e.Algorithm == CryptoAlgorithm.P256,
                 observed.OfType<SignatureProducedEvent>(),
                 "The observed FIDO2 workload must emit a SignatureProducedEvent for its P-256 assertion signature.");
 
             Assert.Contains(
-                (VerificationCompletedEvent e) => e.Algorithm == CryptoAlgorithm.P256 && e.Outcome == VerificationOutcome.Valid,
+                e => e.Algorithm == CryptoAlgorithm.P256 && e.Outcome == VerificationOutcome.Valid,
                 observed.OfType<VerificationCompletedEvent>(),
                 "The observed FIDO2 workload must emit a VerificationCompletedEvent with a Valid outcome for its assertion verification.");
         }

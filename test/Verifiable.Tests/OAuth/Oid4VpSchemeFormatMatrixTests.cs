@@ -1,11 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Reflection;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;
@@ -127,7 +124,7 @@ internal sealed class Oid4VpSchemeFormatMatrixTests
             oauthClient.Infrastructure,
             TestHostShell.BuildSlimOid4VpWalletConfiguration(run.Produce, schemeMaterial.Resolver));
 
-        ExchangeContext exchangeContext = new();
+        ExchangeContext exchangeContext = [];
         schemeMaterial.PlaceTrustMaterial(exchangeContext);
 
         PresentationResult result = await walletClient.PresentJarAsync(
@@ -141,7 +138,7 @@ internal sealed class Oid4VpSchemeFormatMatrixTests
             exchangeContext,
             cancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             $"Wallet client must reach ResponseSent after resolving the '{schemeMaterial.ClientId}' JAR key.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;

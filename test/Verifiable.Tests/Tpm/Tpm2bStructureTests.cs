@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -121,7 +116,7 @@ internal class Tpm2bStructureTests
     {
         byte[] data = new byte[sizeof(ushort) + Tpm2bDigest.MaxSize + 1];
         data[0] = 0x00;
-        data[1] = (byte)(Tpm2bDigest.MaxSize + 1);
+        data[1] = Tpm2bDigest.MaxSize + 1;
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = Assert.ThrowsExactly<InvalidOperationException>(
@@ -161,7 +156,7 @@ internal class Tpm2bStructureTests
     {
         byte[] wire = new byte[sizeof(ushort) + Tpm2bNonce.MaxSize + 1];
         wire[0] = 0x00;
-        wire[1] = (byte)(Tpm2bNonce.MaxSize + 1);
+        wire[1] = Tpm2bNonce.MaxSize + 1;
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = Assert.ThrowsExactly<InvalidOperationException>(
@@ -217,7 +212,7 @@ internal class Tpm2bStructureTests
     {
         byte[] wire = new byte[sizeof(ushort) + Tpm2bSensitiveData.MaxSize + 1];
         wire[0] = 0x00;
-        wire[1] = (byte)(Tpm2bSensitiveData.MaxSize + 1);
+        wire[1] = Tpm2bSensitiveData.MaxSize + 1;
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = Assert.ThrowsExactly<InvalidOperationException>(
@@ -327,7 +322,7 @@ internal class Tpm2bStructureTests
     {
         byte[] wire = new byte[sizeof(ushort) + Tpm2bAuth.MaxSize + 1];
         wire[0] = 0x00;
-        wire[1] = (byte)(Tpm2bAuth.MaxSize + 1);
+        wire[1] = Tpm2bAuth.MaxSize + 1;
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = Assert.ThrowsExactly<InvalidOperationException>(

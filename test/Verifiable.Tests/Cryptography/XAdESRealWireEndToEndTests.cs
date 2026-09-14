@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -540,7 +540,7 @@ internal sealed class XAdESRealWireEndToEndTests
             SignerReferences(facts), cryptographicVerification, facts, pool, cancellationToken).ConfigureAwait(false);
         Assert.IsNotNull(binding, "The gate must bind the genuinely-signed wire's own signer reference against the certificate its crypto outcome carries.");
 
-        return binding!;
+        return binding;
     }
 
 
@@ -665,7 +665,7 @@ internal sealed class XAdESRealWireEndToEndTests
         BoundProvenance bclBinding = await BindSignerAsync(facts, bcl, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Verified<XAdESQualifyingPropertiesFacts>? promotedFromBcl = XAdESLevelRules.Promote(context, bcl, bclBinding);
         Assert.IsNotNull(promotedFromBcl, "Promote must mint a Verified<T> when the BCL delegate reports Verified, zero Table 2 violations hold, and the gate binds the signer reference.");
-        Assert.AreSame(facts, promotedFromBcl!.Value.Value, "The minted Verified<T> must wrap the SAME facts instance, never a copy.");
+        Assert.AreSame(facts, promotedFromBcl.Value.Value, "The minted Verified<T> must wrap the SAME facts instance, never a copy.");
 
         BoundProvenance houseBinding = await BindSignerAsync(facts, house, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Verified<XAdESQualifyingPropertiesFacts>? promotedFromHouse = XAdESLevelRules.Promote(context, house, houseBinding);
@@ -887,7 +887,7 @@ internal sealed class XAdESRealWireEndToEndTests
 
         using XAdESQualifyingPropertiesFacts facts = await ParseFactsAsync(document, pool, TestContext.CancellationToken).ConfigureAwait(false);
         IReadOnlyList<XAdESRuleViolation> violations = XAdESLevelRules.Check(new XAdESLevelRuleContext { Level = AdESBaselineLevel.BB, Facts = facts });
-        Assert.ContainsSingle(
+        _ = Assert.ContainsSingle(
             v => v is XAdESRowPresenceViolation presence && presence.Row.RequirementId == "XA-6.3-t06" && presence.IsMissing,
             violations,
             "Removing SigningCertificateV2 must be reported as its own Table 2 XA-6.3-t06 presence violation.");

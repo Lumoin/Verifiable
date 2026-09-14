@@ -150,7 +150,7 @@ public static class ClientIdMetadataDocuments
             }
 
             //Step 4 (CIMD-019): application/json or an application/<AS-defined>+json suffix.
-            response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+            _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
             if(!IsAcceptableContentType(contentType))
             {
                 return new ClientIdMetadataResolution
@@ -265,7 +265,7 @@ public static class ClientIdMetadataDocuments
             }
             else
             {
-                cache.TryRemove(cacheKey, out _);
+                _ = cache.TryRemove(cacheKey, out _);
             }
 
             return resolution;
@@ -305,7 +305,7 @@ public static class ClientIdMetadataDocuments
         {
             //A transport-level failure prefetching the logo is fail-soft: the caller treats a null result
             //as "logo unavailable", cancellation excepted above; recorded via the observability seam.
-            Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName)));
 
             return (null, null);
         }
@@ -313,12 +313,12 @@ public static class ClientIdMetadataDocuments
         if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200
             || fetch.Response.Body.Length > options.MaximumLogoBytes)
         {
-            Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(LogoPrefetchFailedEventName)));
 
             return (null, null);
         }
 
-        fetch.Response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+        _ = fetch.Response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
 
         return (fetch.Response.Body.Memory, contentType);
     }
@@ -357,7 +357,7 @@ public static class ClientIdMetadataDocuments
         {
             //A transport-level failure discovering the JWKS is fail-soft: the caller treats a null result
             //as "keys unavailable", cancellation excepted above; recorded via the observability seam.
-            Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName)));
 
             return null;
         }
@@ -365,17 +365,17 @@ public static class ClientIdMetadataDocuments
         if(!fetch.IsFetched || fetch.Response is null || fetch.Response.StatusCode != 200
             || fetch.Response.Body.Length > options.MaximumDocumentBytes)
         {
-            Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName)));
 
             return null;
         }
 
         OutboundResponse jwksResponse = fetch.Response;
-        jwksResponse.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+        _ = jwksResponse.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
         if(!IsAcceptableContentType(contentType)
             || JwkJsonReader.IndexOfKey(jwksResponse.Body.Span, WellKnownJwkMemberNames.KeysUtf8) < 0)
         {
-            Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(JwksDiscoveryFailedEventName)));
 
             return null;
         }

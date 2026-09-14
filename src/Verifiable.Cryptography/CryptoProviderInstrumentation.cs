@@ -104,11 +104,11 @@ public static class CryptoProviderInstrumentation
         ArgumentNullException.ThrowIfNull(providerClass);
         ArgumentNullException.ThrowIfNull(operation);
 
-        activity.SetTag(CryptoTelemetry.Provider.Library, providerLibrary.Name);
-        activity.SetTag(CryptoTelemetry.Provider.Version, providerLibrary.Version);
-        activity.SetTag(CryptoTelemetry.Provider.Class, providerClass.Name);
-        activity.SetTag(CryptoTelemetry.Provider.Operation, operation.Name);
-        activity.SetTag(CryptoTelemetry.Library.Name, cryptoLibrary.Name);
-        activity.SetTag(CryptoTelemetry.Library.Version, cryptoLibrary.Version);
+        _ = activity.SetTag(CryptoTelemetry.Provider.Library, providerLibrary.Name);
+        _ = activity.SetTag(CryptoTelemetry.Provider.Version, providerLibrary.Version);
+        _ = activity.SetTag(CryptoTelemetry.Provider.Class, providerClass.Name);
+        _ = activity.SetTag(CryptoTelemetry.Provider.Operation, operation.Name);
+        _ = activity.SetTag(CryptoTelemetry.Library.Name, cryptoLibrary.Name);
+        _ = activity.SetTag(CryptoTelemetry.Library.Version, cryptoLibrary.Version);
     }
 }

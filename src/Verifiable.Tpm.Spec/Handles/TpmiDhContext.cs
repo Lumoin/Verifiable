@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Spec.Handles;
@@ -62,9 +61,9 @@ public readonly record struct TpmiDhContext
     /// <param name="value">The raw handle value.</param>
     /// <returns><see langword="true"/> when <paramref name="value"/> is a context handle this type admits.</returns>
     public static bool IsContext(uint value) =>
-        value is >= TpmHandleRanges.HMAC_SESSION_FIRST and <= TpmHandleRanges.HMAC_SESSION_LAST
-            or >= TpmHandleRanges.POLICY_SESSION_FIRST and <= TpmHandleRanges.POLICY_SESSION_LAST
-            or >= TpmHandleRanges.TRANSIENT_FIRST and <= TpmHandleRanges.TRANSIENT_LAST;
+        value is (>= TpmHandleRanges.HMAC_SESSION_FIRST and <= TpmHandleRanges.HMAC_SESSION_LAST)
+            or (>= TpmHandleRanges.POLICY_SESSION_FIRST and <= TpmHandleRanges.POLICY_SESSION_LAST)
+            or (>= TpmHandleRanges.TRANSIENT_FIRST and <= TpmHandleRanges.TRANSIENT_LAST);
 
     /// <summary>
     /// Parses a context handle from a TPM reader, validating that it names a session or a transient object.

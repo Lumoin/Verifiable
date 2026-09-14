@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Spec.Structures;
@@ -136,7 +135,7 @@ public static class TpmsTaggedPropertyExtensions
     /// <returns><c>true</c> if this is a fixed property; otherwise, <c>false</c>.</returns>
     public static bool IsFixedProperty(this TpmsTaggedProperty property)
     {
-        return property.Property >= TpmPtConstants.PT_FIXED && property.Property < TpmPtConstants.PT_VAR;
+        return property.Property is >= TpmPtConstants.PT_FIXED and < TpmPtConstants.PT_VAR;
     }
 
     /// <summary>
@@ -146,6 +145,6 @@ public static class TpmsTaggedPropertyExtensions
     /// <returns><c>true</c> if this is a variable property; otherwise, <c>false</c>.</returns>
     public static bool IsVariableProperty(this TpmsTaggedProperty property)
     {
-        return property.Property >= TpmPtConstants.PT_VAR && property.Property < TpmPtConstants.PT_VAR + TpmPtConstants.PT_GROUP;
+        return property.Property is >= TpmPtConstants.PT_VAR and < (TpmPtConstants.PT_VAR + TpmPtConstants.PT_GROUP);
     }
 }

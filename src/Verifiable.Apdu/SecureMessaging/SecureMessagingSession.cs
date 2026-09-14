@@ -1,7 +1,4 @@
-using System;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 
@@ -171,7 +168,7 @@ public sealed class SecureMessagingSession: IDisposable
             int mLength = paddedHeaderLength + cryptogramObjectLength + expectedLengthObjectLength;
             using IMemoryOwner<byte> message = pool.Rent(mLength);
             Span<byte> m = message.Memory.Span;
-            Iso9797Padding.Pad([protectedCla, ins, p1, p2], blockSize, m[..paddedHeaderLength]);
+            _ = Iso9797Padding.Pad([protectedCla, ins, p1, p2], blockSize, m[..paddedHeaderLength]);
             int offset = paddedHeaderLength;
             if(cryptogramObject is not null)
             {
@@ -271,7 +268,7 @@ public sealed class SecureMessagingSession: IDisposable
     {
         using IMemoryOwner<byte> paddedData = pool.Rent(
             Iso9797Padding.PaddedLength(commandData.Length, blockSize), AllocationKind.Pinned);
-        Iso9797Padding.Pad(commandData.Span, blockSize, paddedData.Memory.Span);
+        _ = Iso9797Padding.Pad(commandData.Span, blockSize, paddedData.Memory.Span);
 
         using IMemoryOwner<byte> iv = await ComputeInitializationVectorAsync(pool, cancellationToken).ConfigureAwait(false);
         (Ciphertext cryptogram, _) = await Encrypt(
@@ -505,7 +502,7 @@ public sealed class SecureMessagingSession: IDisposable
 
             switch(tag)
             {
-                case(CryptogramTag):
+                case CryptogramTag:
                 {
                     encryptedObjectStart = start;
                     encryptedObjectLength = reader.Consumed - start;
@@ -515,14 +512,14 @@ public sealed class SecureMessagingSession: IDisposable
 
                     break;
                 }
-                case(StatusTag):
+                case StatusTag:
                 {
                     statusObjectStart = start;
                     statusObjectLength = reader.Consumed - start;
 
                     break;
                 }
-                case(MacTag):
+                case MacTag:
                 {
                     //Pin the MAC length to the profile. Taking it from the wire lets an attacker present a short
                     //or empty DO'8E': the verifier computes the real MAC truncated to that length and compares
@@ -539,7 +536,7 @@ public sealed class SecureMessagingSession: IDisposable
 
                     break;
                 }
-                case(ExpectedLengthTag):
+                case ExpectedLengthTag:
                 {
                     //DO'97' is echoed in some responses; it is not part of the response MAC.
                     break;

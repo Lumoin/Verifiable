@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core.Did.Methods.WebVh;
-using Verifiable.Foundation;
 
 namespace Verifiable.Json;
 
@@ -110,7 +107,7 @@ public static class WebVhLogEntryJson
         ArgumentNullException.ThrowIfNull(predecessorVersionId);
 
         JsonObject entry = ParseObject(rawEntryLine.Span);
-        entry.Remove(ProofProperty);
+        _ = entry.Remove(ProofProperty);
         entry[VersionIdProperty] = predecessorVersionId;
 
         return Canonicalize(entry.ToJsonString());
@@ -121,7 +118,7 @@ public static class WebVhLogEntryJson
     private static TaggedMemory<byte> ComputeDocumentInput(ReadOnlyMemory<byte> rawEntryLine)
     {
         JsonObject entry = ParseObject(rawEntryLine.Span);
-        entry.Remove(ProofProperty);
+        _ = entry.Remove(ProofProperty);
 
         return Canonicalize(entry.ToJsonString());
     }
@@ -134,7 +131,7 @@ public static class WebVhLogEntryJson
         ArgumentNullException.ThrowIfNull(scid);
 
         JsonObject entry = ParseObject(rawEntryLine.Span);
-        entry.Remove(ProofProperty);
+        _ = entry.Remove(ProofProperty);
         entry[VersionIdProperty] = ScidPlaceholder;
 
         string canonical = Jcs.Canonicalize(entry.ToJsonString());
@@ -156,7 +153,7 @@ public static class WebVhLogEntryJson
             throw new JsonException($"The did:webvh log entry has no proof at index {proofIndex}.");
         }
 
-        proof.Remove(ProofValueProperty);
+        _ = proof.Remove(ProofValueProperty);
 
         return Canonicalize(proof.ToJsonString());
     }
@@ -232,7 +229,7 @@ public static class WebVhLogEntryJson
             throw new JsonException($"The did:webvh did-witness.json has no proof at record {entryIndex}, proof {proofIndex}.");
         }
 
-        proof.Remove(ProofValueProperty);
+        _ = proof.Remove(ProofValueProperty);
 
         return Canonicalize(proof.ToJsonString());
     }

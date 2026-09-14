@@ -1,11 +1,7 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;
@@ -255,20 +251,20 @@ public static class ManagedCmsVerification
     /// </summary>
     private static void VerifyAlgorithmProtectionCore(SignerInfo signer)
     {
-        (int InstanceCount, int ValueCount, ReadOnlyMemory<byte> Value) attribute = CountAlgorithmProtectionAttribute(signer.SignedAttributes);
-        if(attribute.InstanceCount == 0)
+        (int InstanceCount, int ValueCount, ReadOnlyMemory<byte> Value) = CountAlgorithmProtectionAttribute(signer.SignedAttributes);
+        if(InstanceCount == 0)
         {
             return;
         }
 
         //§2: "MUST have a single attribute value… MUST NOT be zero or multiple instances of AttributeValue
         //present"; "SignedAttributes… MUST include only one instance of the algorithm protection attribute."
-        if(attribute.InstanceCount != 1 || attribute.ValueCount != 1)
+        if(InstanceCount != 1 || ValueCount != 1)
         {
             throw new CryptographicException("The CMS CMSAlgorithmProtection attribute must be present exactly once with exactly one attribute value.");
         }
 
-        var reader = new AsnReader(attribute.Value, AsnEncodingRules.DER);
+        var reader = new AsnReader(Value, AsnEncodingRules.DER);
         AsnReader protection = reader.ReadSequence();
 
         AsnReader digestAlgorithm = protection.ReadSequence();
@@ -506,7 +502,7 @@ public static class ManagedCmsVerification
             throw new CryptographicException($"The managed CMS verifier requires an ML-DSA signature algorithm equal to the certificate key's parameter set (signature '{signer.SignatureAlgorithmOid}', key '{signerCertificate.MlDsaAlgorithmOid}').");
         }
 
-        (CryptoAlgorithm Algorithm, int PublicKeyLength) resolved = signerCertificate.MlDsaAlgorithmOid switch
+        (CryptoAlgorithm Algorithm, int PublicKeyLength) = signerCertificate.MlDsaAlgorithmOid switch
         {
             WellKnownOids.MlDsa44 => (CryptoAlgorithm.MlDsa44, MlDsa44PublicKeyLength),
             WellKnownOids.MlDsa65 => (CryptoAlgorithm.MlDsa65, MlDsa65PublicKeyLength),
@@ -517,12 +513,12 @@ public static class ManagedCmsVerification
         //An ML-DSA public key has one exact length per parameter set, so any other length is a malformed key
         //refused here rather than handed to the registered backend, whose own malformed-encoding failure would
         //surface as an undocumented exception type on attacker-controlled certificate bytes.
-        if(signerCertificate.MlDsaPublicKey.Length != resolved.PublicKeyLength)
+        if(signerCertificate.MlDsaPublicKey.Length != PublicKeyLength)
         {
-            throw new CryptographicException($"An ML-DSA public key of the parameter set '{signerCertificate.MlDsaAlgorithmOid}' is exactly {resolved.PublicKeyLength} octets (FIPS 204 Table 2).");
+            throw new CryptographicException($"An ML-DSA public key of the parameter set '{signerCertificate.MlDsaAlgorithmOid}' is exactly {PublicKeyLength} octets (FIPS 204 Table 2).");
         }
 
-        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(resolved.Algorithm, Purpose.Verification);
+        VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(Algorithm, Purpose.Verification);
 
         //The registered ML-DSA seam takes the raw FIPS 204 public key and signature as-is (no re-encoding).
         (bool isVerified, CryptoEvent? evt) = await verify(
@@ -815,8 +811,8 @@ public static class ManagedCmsVerification
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of the rented buffer transfers to the caller, which disposes it via a using declaration.")]
     private static IMemoryOwner<byte> ConvertDerSignatureToFixedWidth(ReadOnlySpan<byte> derSignature, int fieldWidth, BaseMemoryPool pool)
     {
-        ReadOnlySpan<byte> r = default;
-        ReadOnlySpan<byte> s = default;
+        ReadOnlySpan<byte> r;
+        ReadOnlySpan<byte> s;
         try
         {
             var reader = new AsnReader(derSignature.ToArray(), AsnEncodingRules.DER);
@@ -842,7 +838,7 @@ public static class ManagedCmsVerification
             Span<byte> span = owner.Memory.Span[..(fieldWidth * 2)];
             span.Clear();
             r.CopyTo(span[(fieldWidth - r.Length)..fieldWidth]);
-            s.CopyTo(span[(fieldWidth * 2 - s.Length)..]);
+            s.CopyTo(span[((fieldWidth * 2) - s.Length)..]);
 
             return owner;
         }

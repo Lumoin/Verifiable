@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Lumoin.Veritas.JsonPointer;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
-using Lumoin.Veritas.JsonPointer;
 using Rfc6901JsonPointer = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Json;

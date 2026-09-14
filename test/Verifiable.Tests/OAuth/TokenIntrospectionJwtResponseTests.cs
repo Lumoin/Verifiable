@@ -1,17 +1,13 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -291,7 +287,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "access-token-to-inspect" },
             headers,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -304,7 +300,7 @@ internal sealed class TokenIntrospectionJwtResponseTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

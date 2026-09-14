@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Attributes;
@@ -67,7 +66,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
             return ReadOnlySpan<byte>.Empty;
         }
 
-        return RawStorage.Memory.Span.Slice(0, RawLength);
+        return RawStorage.Memory.Span[..RawLength];
     }
 
     /// <summary>
@@ -85,7 +84,7 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return RawStorage.Memory.Slice(0, RawLength);
+        return RawStorage.Memory[..RawLength];
     }
 
     /// <summary>
@@ -138,10 +137,10 @@ public sealed class Tpm2bPublic: IDisposable, ITpmWireType
         try
         {
             ReadOnlySpan<byte> source = reader.ReadBytes(size);
-            source.CopyTo(rawStorage.Memory.Span.Slice(0, size));
+            source.CopyTo(rawStorage.Memory.Span[..size]);
 
             // Parse the structure from the raw bytes.
-            var innerReader = new TpmReader(rawStorage.Memory.Span.Slice(0, size));
+            var innerReader = new TpmReader(rawStorage.Memory.Span[..size]);
             var publicArea = TpmtPublic.Parse(ref innerReader, pool);
 
             //The sized buffer must hold exactly its TPMT_PUBLIC: octets the structure does not consume would

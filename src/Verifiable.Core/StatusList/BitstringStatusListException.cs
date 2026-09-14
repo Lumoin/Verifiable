@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core.StatusList;
@@ -63,7 +62,7 @@ public sealed class BitstringStatusListException: Exception
     /// </summary>
     /// <param name="errorType">The category of the failure.</param>
     /// <param name="message">A description of the failure.</param>
-    public BitstringStatusListException(BitstringStatusListErrorType errorType, string message): base(message)
+    public BitstringStatusListException(BitstringStatusListErrorType errorType, string message) : base(message)
     {
         ErrorType = errorType;
     }
@@ -74,7 +73,7 @@ public sealed class BitstringStatusListException: Exception
     /// <param name="errorType">The category of the failure.</param>
     /// <param name="message">A description of the failure.</param>
     /// <param name="innerException">The underlying exception.</param>
-    public BitstringStatusListException(BitstringStatusListErrorType errorType, string message, Exception innerException): base(message, innerException)
+    public BitstringStatusListException(BitstringStatusListErrorType errorType, string message, Exception innerException) : base(message, innerException)
     {
         ErrorType = errorType;
     }

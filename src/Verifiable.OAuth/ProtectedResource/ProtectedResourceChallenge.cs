@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -160,7 +159,7 @@ public static class ProtectedResourceChallenge
             char c = value[i];
             if(c == '\\' && i + 1 < value.Length)
             {
-                sb.Append(value[i + 1]);
+                _ = sb.Append(value[i + 1]);
                 ++i;
                 continue;
             }
@@ -170,7 +169,7 @@ public static class ProtectedResourceChallenge
                 return sb.ToString();
             }
 
-            sb.Append(c);
+            _ = sb.Append(c);
         }
 
         //Unterminated quoted string — malformed challenge.

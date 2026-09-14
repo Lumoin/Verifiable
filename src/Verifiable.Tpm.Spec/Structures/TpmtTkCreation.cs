@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Constants;
@@ -111,7 +110,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, DigestLength);
+            return Storage.Memory.Span[..DigestLength];
         }
     }
 
@@ -172,7 +171,7 @@ public sealed class TpmtTkCreation: IDisposable, ITpmWireType
         try
         {
             ReadOnlySpan<byte> source = reader.ReadBytes(digestSize);
-            source.CopyTo(storage.Memory.Span.Slice(0, digestSize));
+            source.CopyTo(storage.Memory.Span[..digestSize]);
 
             return new TpmtTkCreation((TpmStConstants)tag, hierarchy, storage, digestSize);
         }

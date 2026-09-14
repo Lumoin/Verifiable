@@ -1,13 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -16,11 +10,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -180,8 +169,8 @@ internal sealed class TpmInHouseSimulatorAuditSessionBindingTests
                 tpm, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(result.IsSuccess, $"A session claiming decrypt and audit together over TPM2_StirRandom() must succeed: '{result.ResponseCode}'.");
 
-            (TpmCcConstants Code, byte[] Command, byte[] Response) audited = wire[^1];
-            ReadOnlyMemory<byte> ciphertextParameters = ExtractZeroHandleCommandParameters(audited.Command, session.GetAuthCommandSize());
+            (TpmCcConstants Code, byte[] Command, byte[] Response) = wire[^1];
+            ReadOnlyMemory<byte> ciphertextParameters = ExtractZeroHandleCommandParameters(Command, session.GetAuthCommandSize());
 
             byte[] plaintextParameters = new byte[sizeof(ushort) + StirPlaintext.Length];
             BinaryPrimitives.WriteUInt16BigEndian(plaintextParameters, (ushort)StirPlaintext.Length);
@@ -550,24 +539,6 @@ internal sealed class TpmInHouseSimulatorAuditSessionBindingTests
         var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
         session.SetAuthValue(authValue.Span, pool);
         session.SessionAttributes = TpmaSession.CONTINUE_SESSION;
-
-        return (started.SessionHandle.Value, session);
-    }
-
-    /// <summary>Starts an unbound, unsalted HMAC session with an empty authorization value — an unauthorizing audit companion.</summary>
-    /// <param name="tpm">The TPM device.</param>
-    /// <param name="registry">The response codec registry.</param>
-    /// <param name="pool">The memory pool.</param>
-    /// <returns>The session handle and the host session.</returns>
-    private async Task<(uint Handle, TpmSession Session)> StartUnboundAuditSessionAsync(TpmDevice tpm, TpmResponseRegistry registry, BaseMemoryPool pool)
-    {
-        StartAuthSessionInput startInput = StartAuthSessionInput.CreateUnboundUnsaltedHmacSession(SessionAlg, TestEntropy.NewCounterStream(), pool);
-        TpmResult<StartAuthSessionResponse> startResult = await TpmCommandExecutor.ExecuteAsync<StartAuthSessionResponse>(
-            tpm, startInput, [], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsTrue(startResult.IsSuccess, $"StartAuthSession (unbound HMAC) failed: '{startResult.ResponseCode}'.");
-
-        StartAuthSessionResponse started = startResult.Value;
-        var session = new TpmSession(new TpmHandle(started.SessionHandle.Value), started.NonceTPM, SessionAlg, TestEntropy.NewCounterStream(), pool);
 
         return (started.SessionHandle.Value, session);
     }

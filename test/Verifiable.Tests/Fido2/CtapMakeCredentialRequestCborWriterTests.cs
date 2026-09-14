@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
@@ -160,6 +159,6 @@ internal sealed class CtapMakeCredentialRequestCborWriterTests
     [TestMethod]
     public void ThrowsArgumentNullExceptionForNullRequest()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CtapMakeCredentialRequestCborWriter.Write(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CtapMakeCredentialRequestCborWriter.Write(null!));
     }
 }

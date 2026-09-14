@@ -1,5 +1,3 @@
-using System;
-using System.Diagnostics;
 using System.Globalization;
 using Verifiable.Core;
 using Verifiable.OAuth.AuthCode;
@@ -274,8 +272,8 @@ public static class OAuthResponseParsers
         string endpoint,
         string specReference)
     {
-        TryGetStringField(body, "error_description", out ReadOnlySpan<char> descSpan);
-        TryGetStringField(body, "error_uri", out ReadOnlySpan<char> errorUriSpan);
+        _ = TryGetStringField(body, "error_description", out ReadOnlySpan<char> descSpan);
+        _ = TryGetStringField(body, "error_uri", out ReadOnlySpan<char> errorUriSpan);
 
         string errorCodeString = errorCode.ToString();
         string? description = descSpan.IsEmpty ? null : descSpan.ToString();
@@ -283,7 +281,7 @@ public static class OAuthResponseParsers
         Uri? errorUri = null;
         if(!errorUriSpan.IsEmpty)
         {
-            Uri.TryCreate(errorUriSpan.ToString(), UriKind.Absolute, out errorUri);
+            _ = Uri.TryCreate(errorUriSpan.ToString(), UriKind.Absolute, out errorUri);
         }
 
         DecisionSupport support = BuildProtocolErrorSupport(
@@ -299,15 +297,15 @@ public static class OAuthResponseParsers
         ReadOnlySpan<char> body,
         HttpResponseData response)
     {
-        TryGetStringField(body, "type", out ReadOnlySpan<char> typeSpan);
-        TryGetStringField(body, "detail", out ReadOnlySpan<char> detailSpan);
-        TryGetStringField(body, "instance", out ReadOnlySpan<char> instanceSpan);
+        _ = TryGetStringField(body, "type", out ReadOnlySpan<char> typeSpan);
+        _ = TryGetStringField(body, "detail", out ReadOnlySpan<char> detailSpan);
+        _ = TryGetStringField(body, "instance", out ReadOnlySpan<char> instanceSpan);
 
         string errorCode = typeSpan.IsEmpty ? "problem" : typeSpan.ToString();
         string? detail = detailSpan.IsEmpty ? null : detailSpan.ToString();
         string? instance = instanceSpan.IsEmpty ? null : instanceSpan.ToString();
 
-        DecisionSupport support = new DecisionSupport(
+        DecisionSupport support = new(
             $"The server returned an RFC 9457 problem+json response: {errorCode}.")
         {
             LikelyCause = detail,

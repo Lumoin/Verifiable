@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.Dcql;
+using Verifiable.Core.Model.SelectiveDisclosure;
 
 namespace Verifiable.Core.Dcql;
 
@@ -54,7 +52,7 @@ public static class DcqlPathResolver
         {
             if(pattern.TryResolve(out var credentialPath))
             {
-                result.Add(credentialPath);
+                _ = result.Add(credentialPath);
             }
             else if(availablePaths is not null)
             {
@@ -63,7 +61,7 @@ public static class DcqlPathResolver
                 {
                     if(pattern.Matches(available))
                     {
-                        result.Add(available);
+                        _ = result.Add(available);
                     }
                 }
             }

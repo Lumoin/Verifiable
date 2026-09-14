@@ -1,15 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.BouncyCastle;
-using Verifiable.Cryptography.Cbom;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.Cbom;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cbom;
@@ -102,11 +99,11 @@ internal sealed class ObservedCbomTests
                 .ToArray();
 
             Assert.Contains(
-                (string r) => r.StartsWith("crypto/algorithm/csprng-drbg", System.StringComparison.Ordinal),
+                r => r.StartsWith("crypto/algorithm/csprng-drbg", System.StringComparison.Ordinal),
                 dependsOn,
                 "Entropy material must depend on the CSPRNG/DRBG.");
             Assert.Contains(
-                (string r) => r.StartsWith("crypto/library/", System.StringComparison.Ordinal),
+                r => r.StartsWith("crypto/library/", System.StringComparison.Ordinal),
                 dependsOn,
                 "Entropy material must name the producing crypto library.");
         }
@@ -161,7 +158,7 @@ internal sealed class ObservedCbomTests
             .Select(x => x.GetString()!)
             .ToArray();
         Assert.Contains(
-            (string r) => r.StartsWith("crypto/library/", System.StringComparison.Ordinal),
+            r => r.StartsWith("crypto/library/", System.StringComparison.Ordinal),
             signatureDependsOn,
             "The signature algorithm must name the producing crypto library.");
 

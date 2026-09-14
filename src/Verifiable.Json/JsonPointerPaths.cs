@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Core.Model.SelectiveDisclosure;
 
@@ -48,7 +47,7 @@ public static class JsonPointerPaths
                 foreach(JsonProperty property in element.EnumerateObject())
                 {
                     var childPath = path.Append(property.Name);
-                    paths.Add(childPath);
+                    _ = paths.Add(childPath);
                     Collect(property.Value, childPath, paths);
                 }
 
@@ -60,7 +59,7 @@ public static class JsonPointerPaths
                 foreach(JsonElement item in element.EnumerateArray())
                 {
                     var childPath = path.Append(index);
-                    paths.Add(childPath);
+                    _ = paths.Add(childPath);
                     Collect(item, childPath, paths);
                     ++index;
                 }

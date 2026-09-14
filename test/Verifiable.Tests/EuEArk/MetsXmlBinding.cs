@@ -1,15 +1,9 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.IO;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography.Pki.Xml;
 
@@ -1205,9 +1199,9 @@ public static class MetsXmlBinding
             int time = lexical.IndexOf('T', StringComparison.Ordinal);
 
             return time >= 0
-                && (lexical.EndsWith('Z')
-                    || lexical.IndexOf('+', time) >= 0
-                    || lexical.IndexOf('-', time) >= 0);
+                && (lexical.EndsWith('Z', StringComparison.Ordinal)
+                    || lexical.IndexOf('+', time, StringComparison.Ordinal) >= 0
+                    || lexical.IndexOf('-', time, StringComparison.Ordinal) >= 0);
         }
     }
 

@@ -1,9 +1,7 @@
-using System.Text.Json;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
@@ -205,7 +203,7 @@ internal sealed class SdJwtClaimRedactionTests
             TestSalts.DefaultGenerator());
 
         Assert.HasCount(1, disclosures);
-        Assert.IsInstanceOfType<string>(disclosures[0].ClaimValue);
+        _ = Assert.IsInstanceOfType<string>(disclosures[0].ClaimValue);
         Assert.AreEqual("Erika", disclosures[0].ClaimValue);
     }
 
@@ -255,7 +253,7 @@ internal sealed class SdJwtClaimRedactionTests
             TestSalts.DefaultGenerator());
 
         Assert.HasCount(1, disclosures);
-        Assert.IsInstanceOfType<Dictionary<string, object>>(disclosures[0].ClaimValue);
+        _ = Assert.IsInstanceOfType<Dictionary<string, object>>(disclosures[0].ClaimValue);
 
         var addressValue = (Dictionary<string, object>)disclosures[0].ClaimValue!;
         Assert.AreEqual("Heidestrasse 17", addressValue["street"]);
@@ -351,15 +349,15 @@ internal sealed class SdJwtClaimRedactionTests
 
         object sentinel = new();
         object? observed = null;
-        DecoyDigestCountDelegate countReadingState = context =>
+        int countReadingState(DecoyDigestContext context)
         {
             observed = context.State;
 
             //Use the state to decide the count, proving it is usable — here, no decoys.
             return 0;
-        };
+        }
 
-        SdJwtClaimRedaction.Redact(
+        _ = SdJwtClaimRedaction.Redact(
             json, disclosablePaths, TestSalts.DefaultGenerator(),
             SdJwtWireFixtures.SerializeDisclosure, ComputeDigest, TestSetup.Base64UrlEncoder,
             WellKnownHashAlgorithms.Sha256Iana,

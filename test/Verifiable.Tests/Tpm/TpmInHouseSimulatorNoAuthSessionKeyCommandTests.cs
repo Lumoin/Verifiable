@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -13,10 +9,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1334,7 +1326,7 @@ internal sealed class TpmInHouseSimulatorNoAuthSessionKeyCommandTests
         //check fires on the declared size alone, so no content octets are needed after it.
         byte[] parameters = new byte[sizeof(ushort) + sizeof(ushort)];
         BinaryPrimitives.WriteUInt16BigEndian(parameters.AsSpan(0, sizeof(ushort)), 0);
-        BinaryPrimitives.WriteUInt16BigEndian(parameters.AsSpan(sizeof(ushort), sizeof(ushort)), (ushort)(Tpm2bDigest.MaxSize + 1));
+        BinaryPrimitives.WriteUInt16BigEndian(parameters.AsSpan(sizeof(ushort), sizeof(ushort)), Tpm2bDigest.MaxSize + 1);
 
         (uint decryptHandle, TpmSession decryptSession) = await TpmInHouseSimulatorZeroHandleSessionTests.StartUnboundSessionAsync(
             device, registry, pool, TestContext.CancellationToken, SessionSymmetric).ConfigureAwait(false);
@@ -1393,7 +1385,7 @@ internal sealed class TpmInHouseSimulatorNoAuthSessionKeyCommandTests
         const int OverBoundLength = Tpm2bData.MaxSize + 1;
         byte[] parameters = new byte[sizeof(ushort) + OverBoundLength + sizeof(ushort) + sizeof(uint)];
         var parameterWriter = new TpmWriter(parameters);
-        parameterWriter.WriteUInt16((ushort)OverBoundLength);
+        parameterWriter.WriteUInt16(OverBoundLength);
         parameterWriter.WriteBytes(new byte[OverBoundLength]);
         parameterWriter.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_NULL);
         parameterWriter.WriteUInt32(0);
@@ -2339,7 +2331,7 @@ internal sealed class TpmInHouseSimulatorNoAuthSessionKeyCommandTests
             (TpmRcConstants plainCode, byte[] plainResponse) = await Shared.SubmitPlainOverHandleAsync(simulator, pool, commandCode, mistypedHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
             Assert.AreEqual(
                 HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), plainCode,
-                $"'{commandCode}': a handle of type 0x{(mistypedHandle >> 24):X2} is TPM_RC_VALUE designated to handle 1 (Table 15/16, H1) on the plain form too — the designation is unconditional on framing.");
+                $"'{commandCode}': a handle of type 0x{mistypedHandle >> 24:X2} is TPM_RC_VALUE designated to handle 1 (Table 15/16, H1) on the plain form too — the designation is unconditional on framing.");
             Assert.AreEqual((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, TpmInHouseSimulatorNoAuthSessionTests.ReadResponseTag(plainResponse), "A failed command frames TPM_ST_NO_SESSIONS regardless of the request's own tag.");
             Assert.HasCount(10, plainResponse, "A failed command's response is exactly the 10-octet header (Part 3, clause 5.9).");
 
@@ -2358,7 +2350,7 @@ internal sealed class TpmInHouseSimulatorNoAuthSessionKeyCommandTests
                     //keyHandle (or equivalent) is this command's sole handle, Auth Index None, index 0 (its own
                     //Part 3 table, cited in this test's own doc comment) — the over-sessions form routes
                     //through the shared no-authorization wrapper, which designates it H1 (Table 15/16).
-                    Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), sessionCode, $"'{commandCode}': a handle of type 0x{(mistypedHandle >> 24):X2} is TPM_RC_VALUE designated to handle 1 on the over-sessions form, ahead of the authorization area.");
+                    Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), sessionCode, $"'{commandCode}': a handle of type 0x{mistypedHandle >> 24:X2} is TPM_RC_VALUE designated to handle 1 on the over-sessions form, ahead of the authorization area.");
                     Assert.AreEqual((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, TpmInHouseSimulatorNoAuthSessionTests.ReadResponseTag(sessionResponse), "A failed command frames TPM_ST_NO_SESSIONS regardless of the request's own tag.");
                     Assert.HasCount(10, sessionResponse, "A failed command's response is exactly the 10-octet header (Part 3, clause 5.9).");
 

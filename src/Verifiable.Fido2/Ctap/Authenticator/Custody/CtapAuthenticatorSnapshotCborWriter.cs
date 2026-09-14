@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 
@@ -59,7 +58,7 @@ public static class CtapAuthenticatorSnapshotCborWriter
         CborPrimitives.WriteHeader(writer, CborPrimitives.MajorUnsigned, CtapAuthenticatorSnapshotFormat.CurrentVersion);
 
         Span<byte> aaguidBytes = stackalloc byte[AaguidByteLength];
-        state.Aaguid.TryWriteBytes(aaguidBytes, bigEndian: true, out _);
+        _ = state.Aaguid.TryWriteBytes(aaguidBytes, bigEndian: true, out _);
         CborPrimitives.WriteByteString(writer, aaguidBytes);
 
         CborPrimitives.WriteHeader(writer, CborPrimitives.MajorUnsigned, (ulong)state.FirmwareVersion);

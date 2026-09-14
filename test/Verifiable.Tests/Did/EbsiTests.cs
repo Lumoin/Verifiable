@@ -69,7 +69,7 @@ namespace Verifiable.Tests.Did
             //OBS! And test for testing extra registry types that are not part of the core specification
             //but that can nevertheless be part of core Nuget library.
             Assert.AreEqual(1, deseserializedDidDocument?.AdditionalData?.Count);
-            Assert.IsInstanceOfType<JsonElement>(deseserializedDidDocument!.AdditionalData!["publicKey"]);
+            _ = Assert.IsInstanceOfType<JsonElement>(deseserializedDidDocument!.AdditionalData!["publicKey"]);
 
             var originalDIDDocument = JsonNode.Parse(didDocumentFileContents);
             var parsedReserializedDIDDocument = JsonNode.Parse(reserializedDidDocument);

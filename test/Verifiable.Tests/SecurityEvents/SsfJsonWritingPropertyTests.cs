@@ -1,10 +1,8 @@
-using System.Linq;
-using System.Text.Json;
 using CsCheck;
+using System.Text.Json;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth.Ssf;
-using Verifiable.Server;
 
 namespace Verifiable.Tests.SecurityEvents;
 
@@ -167,10 +165,10 @@ internal sealed class SsfJsonWritingPropertyTests
         Gen<(Uri Issuer, IReadOnlyList<KeyValuePair<string, string>> Members, SsfTransmitterMetadataContribution Contribution)> caseGen =
             from issuer in issuerGen
             from members in endpointMembersGen
-            //delivery_methods_supported is always supplied: CAEP Interoperability
-            //Profile 1.0 §2.3.2 makes it MUST-include and the writer refuses a
-            //contribution that omits it, so an omitting generator would only
-            //exercise the refusal path pinned in SsfTransmitterMetadataProfileTests.
+                //delivery_methods_supported is always supplied: CAEP Interoperability
+                //Profile 1.0 §2.3.2 makes it MUST-include and the writer refuses a
+                //contribution that omits it, so an omitting generator would only
+                //exercise the refusal path pinned in SsfTransmitterMetadataProfileTests.
             from deliveryMethods in StringListGen
             from criticalMembers in GenOption(StringListGen)
             from specUrns in GenOption(StringListGen)

@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.StatusList;
 
 namespace Verifiable.Tests.StatusList;

@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.Json.Converters;
 
 namespace Verifiable.Json;
@@ -104,7 +101,7 @@ public static class AttachmentJsonValueJson
             }
             case Dictionary<string, object> objectGraph:
             {
-                JsonSerializer.Serialize(writer, objectGraph, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<Dictionary<string, object>>)Options.GetTypeInfo(typeof(Dictionary<string, object>)));
+                JsonSerializer.Serialize(writer, objectGraph, Options.GetTypeInfo<Dictionary<string, object>>());
                 break;
             }
             case string text:

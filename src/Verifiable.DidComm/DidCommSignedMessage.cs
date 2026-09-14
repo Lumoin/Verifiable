@@ -38,7 +38,7 @@ public sealed class DidCommSignedMessage: SensitiveMemory, IEquatable<DidCommSig
     /// Optional OTel activity spanning this message's lifetime. Stopped on
     /// <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/> when no OTel listener is active.
     /// </param>
-    public DidCommSignedMessage(IMemoryOwner<byte> wireBytes, Tag tag, Activity? lifetime = null): base(wireBytes, tag, lifetime)
+    public DidCommSignedMessage(IMemoryOwner<byte> wireBytes, Tag tag, Activity? lifetime = null) : base(wireBytes, tag, lifetime)
     {
     }
 

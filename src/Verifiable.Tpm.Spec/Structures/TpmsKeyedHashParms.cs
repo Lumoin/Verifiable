@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Spec.Constants;
@@ -146,7 +145,7 @@ public readonly record struct TpmsKeyedHashParms
             return new TpmsKeyedHashParms { Scheme = scheme };
         }
 
-        if(scheme != TpmAlgIdConstants.TPM_ALG_HMAC && scheme != TpmAlgIdConstants.TPM_ALG_XOR)
+        if(scheme is not TpmAlgIdConstants.TPM_ALG_HMAC and not TpmAlgIdConstants.TPM_ALG_XOR)
         {
             throw new InvalidOperationException($"Invalid keyed-hash scheme 0x{(ushort)scheme:X4}. Expected TPM_ALG_HMAC, TPM_ALG_XOR, or TPM_ALG_NULL.");
         }

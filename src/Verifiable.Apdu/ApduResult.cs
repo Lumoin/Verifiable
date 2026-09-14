@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -37,14 +35,14 @@ namespace Verifiable.Apdu;
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
 [SuppressMessage("Design", "CA1000:Do not declare static members on generic types",
     Justification = "Intentional factory pattern matching the established convention.")]
-public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
+public readonly struct ApduResult<T>: IEquatable<ApduResult<T>>
 {
     private T? SuccessValue { get; }
     private StatusWord CardStatusWord { get; }
     private uint RawTransportErrorCode { get; }
     private ResultKind Kind { get; }
 
-    private enum ResultKind : byte
+    private enum ResultKind: byte
     {
         Success,
         CardError,
@@ -291,6 +289,7 @@ public readonly struct ApduResult<T> : IEquatable<ApduResult<T>>
     {
         ResultKind.CardError => $"Cannot access Value on CardError result. SW=0x{CardStatusWord.Value:X4}.",
         ResultKind.TransportError => $"Cannot access Value on TransportError result. Error code: 0x{RawTransportErrorCode:X8}.",
+        ResultKind.Success => "Cannot access Value on non-success result.",
         _ => "Cannot access Value on non-success result."
     };
 

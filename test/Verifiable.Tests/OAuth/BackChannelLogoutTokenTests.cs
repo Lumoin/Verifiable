@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Logout;
@@ -99,7 +94,7 @@ internal sealed class BackChannelLogoutTokenTests
         using PublicKeyMemory opPublic = keys.PublicKey;
         using PrivateKeyMemory opPrivate = keys.PrivateKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
             async () => await IssueAsync(opPrivate, subject: null, sessionId: null).ConfigureAwait(false))
             .ConfigureAwait(false);
     }

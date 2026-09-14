@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -242,6 +237,13 @@ public static class ValidationContextInitialization
                     Passed(resolution.Constraints, signature, callerSuppliedValidationData),
                 SignaturePolicyResolutionStatus.NotAvailable =>
                     Indeterminate(SignatureValidationSubIndication.SignaturePolicyNotAvailable, []),
+
+                //A resolution the resolver never attempted, a "resolved" status with no constraints attached, and
+                //an explicit processing error all report the same POLICY_PROCESSING_ERROR outcome as the discard.
+                SignaturePolicyResolutionStatus.NotResolved or SignaturePolicyResolutionStatus.Resolved
+                    or SignaturePolicyResolutionStatus.ProcessingError => Indeterminate(
+                        SignatureValidationSubIndication.PolicyProcessingError,
+                        [new PolicyProcessingErrorReportData(resolution.Problem ?? "The signature policy could not be processed.")]),
                 _ => Indeterminate(
                     SignatureValidationSubIndication.PolicyProcessingError,
                     [new PolicyProcessingErrorReportData(resolution.Problem ?? "The signature policy could not be processed.")])

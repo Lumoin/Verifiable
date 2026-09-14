@@ -1,6 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -441,6 +438,8 @@ public static class AsicContainerReading
             AsicContainerShape.Extended when signatures.Count > 0 && !hasTimeAssertionMaterial => AsicContainerProfile.ExtendedCAdES,
             AsicContainerShape.Extended when signatures.Count == 0 && hasTimeAssertionMaterial => AsicContainerProfile.ExtendedTimeAssertion,
             AsicContainerShape.Extended when signatures.Count > 0 && hasTimeAssertionMaterial => AsicContainerProfile.ExtendedGeneral,
+            AsicContainerShape.Extended => AsicContainerProfile.NotEvaluated,
+            AsicContainerShape.NotEvaluated => AsicContainerProfile.NotEvaluated,
             _ => AsicContainerProfile.NotEvaluated
         };
     }

@@ -1,8 +1,5 @@
-using System;
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Binary;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -10,11 +7,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1029,7 +1021,7 @@ internal sealed class TpmInHouseSimulatorNoAuthSessionReadCommandTests
     private async Task<TpmRcConstants> SubmitStartupAsync(TpmSimulator simulator, BaseMemoryPool pool, TpmSuConstants suType)
     {
         var input = new StartupInput(suType);
-        byte[] response = await Shared.SubmitBareAsync(simulator, pool, (TpmCcConstants)input.CommandCode, TpmInHouseSimulatorNoAuthSessionTests.SerializeParameters(input, pool)).ConfigureAwait(false);
+        byte[] response = await Shared.SubmitBareAsync(simulator, pool, input.CommandCode, TpmInHouseSimulatorNoAuthSessionTests.SerializeParameters(input, pool)).ConfigureAwait(false);
 
         return ReadResponseCode(response);
     }
@@ -1138,7 +1130,7 @@ internal sealed class TpmInHouseSimulatorNoAuthSessionReadCommandTests
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        var simulator = new TpmSimulator("tpm-in-house-no-auth-read-command",selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var simulator = new TpmSimulator("tpm-in-house-no-auth-read-command", selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(

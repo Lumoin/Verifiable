@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -284,7 +283,7 @@ public sealed class EArkRecomputableFixity: EArkFixity
     /// When <paramref name="algorithm"/> has no conformant checksum-type name, or when
     /// <paramref name="digest"/> does not hold as many octets as <paramref name="algorithm"/> produces.
     /// </exception>
-    public EArkRecomputableFixity(PkiDigestAlgorithm algorithm, DigestValue digest): base(EArkFixityStatus.Recomputable)
+    public EArkRecomputableFixity(PkiDigestAlgorithm algorithm, DigestValue digest) : base(EArkFixityStatus.Recomputable)
     {
         ArgumentNullException.ThrowIfNull(digest);
 
@@ -368,7 +367,7 @@ public sealed class EArkStatedFixity: EArkFixity, IEquatable<EArkStatedFixity>
     /// <see cref="EArkRecomputableFixity"/>'s case, or <see cref="EArkFixityStatus.NotEvaluated"/>, which states
     /// nothing at all.
     /// </exception>
-    public EArkStatedFixity(string checksumType, string checksum, EArkFixityStatus status): base(status)
+    public EArkStatedFixity(string checksumType, string checksum, EArkFixityStatus status) : base(status)
     {
         ArgumentNullException.ThrowIfNull(checksumType);
         ArgumentNullException.ThrowIfNull(checksum);

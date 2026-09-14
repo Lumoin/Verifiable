@@ -1,12 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Nv;
@@ -15,12 +13,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1159,10 +1151,10 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
             saltedFramedCommandHmac.AsSpan().SequenceEqual(saltedGuessedCommandHmac),
             "Salting the AUTHORIZING session puts a secret session key in front of the PIN term, so the correct PIN no longer reproduces the command authorization.");
 
-        (byte[] Framed, byte[] Recomputed) unsaltedResponse =
+        (byte[] Framed, byte[] Recomputed) =
             await RecomputeAuthorizingResponseHmacAsync(unsaltedPairs, newKey, pool).ConfigureAwait(false);
         Assert.IsTrue(
-            unsaltedResponse.Framed.AsSpan().SequenceEqual(unsaltedResponse.Recomputed),
+            Framed.AsSpan().SequenceEqual(Recomputed),
             "The unsalted default's response authorization is reproducible from the transcript and the REPLACEMENT PIN - the oracle that matters most, since it is keyed on the value being rotated to.");
 
         (byte[] Framed, byte[] Recomputed) saltedResponse =
@@ -1172,11 +1164,11 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
             "The same secret session key closes the response-side oracle as well, so a captured salted rotation tests neither the old nor the new value.");
 
         var startCommands = new List<byte[]>();
-        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) pair in saltedPairs)
+        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) in saltedPairs)
         {
-            if(pair.Code == TpmCcConstants.TPM_CC_StartAuthSession)
+            if(Code == TpmCcConstants.TPM_CC_StartAuthSession)
             {
-                startCommands.Add(pair.Command);
+                startCommands.Add(Command);
             }
         }
 
@@ -1771,15 +1763,15 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
         ReadOnlyMemory<byte> hmacKey,
         BaseMemoryPool pool)
     {
-        (byte[] Command, byte[] Response) exchange = FirstExchange(pairs, TpmCcConstants.TPM_CC_NV_ChangeAuth);
-        byte[] commandNonceCaller = ReadCommandSessionNonces(exchange.Command, handleCount: 1)[0];
-        (int hmacStart, int hmacLength, byte[] responseNonceTpm, byte sessionAttributes) = ReadFirstResponseSessionEntry(exchange.Response);
+        (byte[] Command, byte[] Response) = FirstExchange(pairs, TpmCcConstants.TPM_CC_NV_ChangeAuth);
+        byte[] commandNonceCaller = ReadCommandSessionNonces(Command, handleCount: 1)[0];
+        (int hmacStart, int hmacLength, byte[] responseNonceTpm, byte sessionAttributes) = ReadFirstResponseSessionEntry(Response);
 
         byte[] hmacData = await BuildResponseHmacDataAsync(
-            exchange.Response, responseNonceTpm, commandNonceCaller, sessionAttributes, pool).ConfigureAwait(false);
+            Response, responseNonceTpm, commandNonceCaller, sessionAttributes, pool).ConfigureAwait(false);
         byte[] recomputed = await ComputeSessionHmacAsync(hmacKey, hmacData, pool).ConfigureAwait(false);
 
-        return (exchange.Response.AsSpan(hmacStart, hmacLength).ToArray(), recomputed);
+        return (Response.AsSpan(hmacStart, hmacLength).ToArray(), recomputed);
     }
 
     /// <summary>
@@ -1823,9 +1815,9 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <returns>The session's initial nonceTPM.</returns>
     private static byte[] FindStartAuthSessionNonceTpm(List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, uint sessionHandle)
     {
-        (byte[] Command, byte[] NonceTpm) exchange = FindStartAuthSessionExchange(pairs, sessionHandle);
+        (_, byte[] NonceTpm) = FindStartAuthSessionExchange(pairs, sessionHandle);
 
-        return exchange.NonceTpm;
+        return NonceTpm;
     }
 
     /// <summary>
@@ -1839,14 +1831,14 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     private static (byte[] Command, byte[] NonceTpm) FindStartAuthSessionExchange(
         List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, uint sessionHandle)
     {
-        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) pair in pairs)
+        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) in pairs)
         {
-            if(pair.Code != TpmCcConstants.TPM_CC_StartAuthSession || pair.Response.Length == 0)
+            if(Code != TpmCcConstants.TPM_CC_StartAuthSession || Response.Length == 0)
             {
                 continue;
             }
 
-            var reader = new TpmReader(pair.Response);
+            var reader = new TpmReader(Response);
             _ = TpmHeader.Parse(ref reader);
             if(reader.ReadUInt32() != sessionHandle)
             {
@@ -1855,7 +1847,7 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
 
             ushort nonceSize = reader.ReadUInt16();
 
-            return (pair.Command, reader.PeekBytes(nonceSize).ToArray());
+            return (Command, reader.PeekBytes(nonceSize).ToArray());
         }
 
         throw new InvalidOperationException($"No captured TPM2_StartAuthSession created session handle 0x{sessionHandle:X8}.");
@@ -1867,9 +1859,9 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <returns>The matching command bytes.</returns>
     private static byte[] FirstCommand(List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, TpmCcConstants code)
     {
-        (byte[] Command, byte[] Response) exchange = FirstExchange(pairs, code);
+        (byte[] Command, _) = FirstExchange(pairs, code);
 
-        return exchange.Command;
+        return Command;
     }
 
     /// <summary>Returns both halves of the first recorded triple whose command code equals <paramref name="code"/>.</summary>
@@ -1879,11 +1871,11 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     private static (byte[] Command, byte[] Response) FirstExchange(
         List<(TpmCcConstants Code, byte[] Command, byte[] Response)> pairs, TpmCcConstants code)
     {
-        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) pair in pairs)
+        foreach((TpmCcConstants Code, byte[] Command, byte[] Response) in pairs)
         {
-            if(pair.Code == code)
+            if(Code == code)
             {
-                return (pair.Command, pair.Response);
+                return (Command, Response);
             }
         }
 
@@ -1937,9 +1929,9 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     private static uint[] ReadCommandSessionHandles(byte[] command, int handleCount)
     {
         var handles = new List<uint>(2);
-        foreach((uint Handle, byte[] NonceCaller, byte Attributes, int HmacStart, int HmacLength) entry in ReadCommandSessionEntries(command, handleCount))
+        foreach((uint Handle, _, _, _, _) in ReadCommandSessionEntries(command, handleCount))
         {
-            handles.Add(entry.Handle);
+            handles.Add(Handle);
         }
 
         return [.. handles];
@@ -1952,9 +1944,9 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     private static byte[][] ReadCommandSessionNonces(byte[] command, int handleCount)
     {
         var nonces = new List<byte[]>(2);
-        foreach((uint Handle, byte[] NonceCaller, byte Attributes, int HmacStart, int HmacLength) entry in ReadCommandSessionEntries(command, handleCount))
+        foreach((_, byte[] NonceCaller, _, _, _) in ReadCommandSessionEntries(command, handleCount))
         {
-            nonces.Add(entry.NonceCaller);
+            nonces.Add(NonceCaller);
         }
 
         return [.. nonces];
@@ -1967,10 +1959,10 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <returns>The authorization HMAC as sent.</returns>
     private static byte[] ReadCommandSessionHmac(byte[] command, int handleCount, int sessionIndex)
     {
-        (uint Handle, byte[] NonceCaller, byte Attributes, int HmacStart, int HmacLength) entry =
+        (_, _, _, int HmacStart, int HmacLength) =
             ReadCommandSessionEntries(command, handleCount)[sessionIndex];
 
-        return command.AsSpan(entry.HmacStart, entry.HmacLength).ToArray();
+        return command.AsSpan(HmacStart, HmacLength).ToArray();
     }
 
     /// <summary>
@@ -1983,10 +1975,10 @@ internal sealed class TpmInHouseSimulatorNvChangeAuthTests
     /// <param name="sessionIndex">The zero-based position of the session whose HMAC is spliced.</param>
     private static void FlipLastOctetOfSessionHmac(byte[] command, int handleCount, int sessionIndex)
     {
-        (uint Handle, byte[] NonceCaller, byte Attributes, int HmacStart, int HmacLength) entry =
+        (_, _, _, int HmacStart, int HmacLength) =
             ReadCommandSessionEntries(command, handleCount)[sessionIndex];
 
-        command[entry.HmacStart + entry.HmacLength - 1] ^= 0xFF;
+        command[HmacStart + HmacLength - 1] ^= 0xFF;
     }
 
     /// <summary>

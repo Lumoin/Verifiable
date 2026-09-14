@@ -1,14 +1,10 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -227,7 +223,7 @@ internal sealed class JAdESSignatureCreationTests
             unknownMechanismHandler: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JAdESHttpHeadersReference>(result.Headers.SigD);
+        _ = Assert.IsInstanceOfType<JAdESHttpHeadersReference>(result.Headers.SigD);
         Assert.Contains("sigD", result.Headers.CriticalLabels!);
         Assert.IsTrue(result.Message.IsDetachedPayload);
     }
@@ -271,7 +267,7 @@ internal sealed class JAdESSignatureCreationTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(2, counting.CallCount);
-        Assert.IsInstanceOfType<JAdESObjectIdByUriReference>(result.Headers.SigD);
+        _ = Assert.IsInstanceOfType<JAdESObjectIdByUriReference>(result.Headers.SigD);
     }
 
 
@@ -368,8 +364,8 @@ internal sealed class JAdESSignatureCreationTests
             HandleUnknownMechanismAsync,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JAdESUnknownDetachedDataObjectReference>(result.Headers.SigD);
-        Assert.AreEqual("urn:example:custom", ((JAdESUnknownDetachedDataObjectReference)result.Headers.SigD!).MechanismIdentifier);
+        _ = Assert.IsInstanceOfType<JAdESUnknownDetachedDataObjectReference>(result.Headers.SigD);
+        Assert.AreEqual("urn:example:custom", ((JAdESUnknownDetachedDataObjectReference)result.Headers.SigD).MechanismIdentifier);
     }
 
 
@@ -558,7 +554,7 @@ internal sealed class JAdESSignatureCreationTests
 
         public ObjectStore Increment()
         {
-            Interlocked.Increment(ref callCount);
+            _ = Interlocked.Increment(ref callCount);
 
             return inner;
         }

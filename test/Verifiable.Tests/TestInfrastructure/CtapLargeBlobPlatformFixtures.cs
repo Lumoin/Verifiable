@@ -1,12 +1,7 @@
-using System;
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
-using Lumoin.Veritas.Cbor;
-using System.IO;
 using System.IO.Compression;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
@@ -290,7 +285,7 @@ internal static class CtapLargeBlobPlatformFixtures
     {
         ReadOnlyMemory<byte> arrayBytes = serializedArray[..^TrailingHashLength];
         var reader = new CborReader(arrayBytes, CborOptions.Ctap2Canonical);
-        reader.ReadStartArray();
+        _ = reader.ReadStartArray();
         int? memberCount = reader.ReadStartMap();
 
         byte[]? ciphertextWithTag = null;
@@ -301,19 +296,19 @@ internal static class CtapLargeBlobPlatformFixtures
             int key = reader.ReadInt32();
             switch(key)
             {
-                case(LargeBlobMapCiphertextKey):
+                case LargeBlobMapCiphertextKey:
                 {
                     ciphertextWithTag = reader.ReadByteString();
 
                     break;
                 }
-                case(LargeBlobMapNonceKey):
+                case LargeBlobMapNonceKey:
                 {
                     nonce = reader.ReadByteString();
 
                     break;
                 }
-                case(LargeBlobMapOrigSizeKey):
+                case LargeBlobMapOrigSizeKey:
                 {
                     origSize = checked((int)reader.ReadUInt64());
 

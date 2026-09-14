@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -182,7 +179,7 @@ internal sealed class CtapAuthenticatorStateCustodyTests
 
         CtapAuthenticatorSnapshotException exception = Assert.ThrowsExactly<CtapAuthenticatorSnapshotException>(
             () => CtapAuthenticatorSnapshotCborReader.Read(malformed, pool));
-        Assert.IsInstanceOfType<OverflowException>(
+        _ = Assert.IsInstanceOfType<OverflowException>(
             exception.InnerException,
             "the lower-level parse failure must be preserved as the inner exception, proving the wrap fired rather than the value happening to parse.");
     }

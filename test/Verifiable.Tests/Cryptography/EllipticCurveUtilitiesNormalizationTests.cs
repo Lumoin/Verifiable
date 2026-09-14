@@ -1,8 +1,6 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -115,7 +113,7 @@ namespace Verifiable.Tests.Cryptography
             byte[] point = new byte[EllipticCurveConstants.P256.CompressedPointByteCount];
             point[0] = 0x05;
 
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
                 EllipticCurveUtilities.NormalizeToUncompressed(point, EllipticCurveTypes.P256));
         }
 
@@ -124,7 +122,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void NormalizeToUncompressedThrowsForEmptySpan()
         {
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
                 EllipticCurveUtilities.NormalizeToUncompressed(ReadOnlySpan<byte>.Empty, EllipticCurveTypes.P256));
         }
 
@@ -155,7 +153,7 @@ namespace Verifiable.Tests.Cryptography
         [TestMethod]
         public void CurveTypeForThrowsForNonEllipticCurveAlgorithm()
         {
-            Assert.ThrowsExactly<NotSupportedException>(() => EllipticCurveUtilities.CurveTypeFor(CryptoAlgorithm.X25519));
+            _ = Assert.ThrowsExactly<NotSupportedException>(() => EllipticCurveUtilities.CurveTypeFor(CryptoAlgorithm.X25519));
         }
 
 

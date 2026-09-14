@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.DidComm.TrustPing;
 
 /// <summary>

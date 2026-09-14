@@ -94,7 +94,7 @@ internal sealed class FidoU2fAttestationStatementCborWriterTests
         byte[] certificateDerBytes = [0x01];
         using PkiCertificateMemory certificate = Fido2AttestationTestVectors.ToPkiCertificateMemory(certificateDerBytes);
 
-        Assert.ThrowsExactly<ArgumentException>(() => FidoU2fAttestationStatementCborWriter.Write(ReadOnlySpan<byte>.Empty, [certificate]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => FidoU2fAttestationStatementCborWriter.Write(ReadOnlySpan<byte>.Empty, [certificate]));
     }
 
 
@@ -108,7 +108,7 @@ internal sealed class FidoU2fAttestationStatementCborWriterTests
         signature.Span[1] = 0x02;
         signature.Span[2] = 0x03;
 
-        Assert.ThrowsExactly<ArgumentException>(() => FidoU2fAttestationStatementCborWriter.Write(signature.Span, []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => FidoU2fAttestationStatementCborWriter.Write(signature.Span, []));
     }
 
 
@@ -124,6 +124,6 @@ internal sealed class FidoU2fAttestationStatementCborWriterTests
         using PkiCertificateMemory first = Fido2AttestationTestVectors.ToPkiCertificateMemory([0x01]);
         using PkiCertificateMemory second = Fido2AttestationTestVectors.ToPkiCertificateMemory([0x02]);
 
-        Assert.ThrowsExactly<ArgumentException>(() => FidoU2fAttestationStatementCborWriter.Write(signature.Span, [first, second]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => FidoU2fAttestationStatementCborWriter.Write(signature.Span, [first, second]));
     }
 }

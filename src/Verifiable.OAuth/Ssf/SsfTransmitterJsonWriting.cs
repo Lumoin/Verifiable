@@ -1,6 +1,5 @@
 using System.Text;
 using Verifiable.Core.SecurityEvents;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Ssf;
 
@@ -90,7 +89,7 @@ public static class SsfTransmitterJsonWriting
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
 
             bool first = true;
             JsonAppender.AppendUriField(sb, SsfMetadataParameterNames.Issuer, issuer, ref first);
@@ -118,7 +117,7 @@ public static class SsfTransmitterJsonWriting
                     sb, SsfMetadataParameterNames.DefaultSubjects, contribution.DefaultSubjects, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -163,18 +162,18 @@ public static class SsfTransmitterJsonWriting
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('[');
+            _ = sb.Append('[');
             for(int i = 0; i < streams.Count; ++i)
             {
                 if(i > 0)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
                 AppendStreamConfiguration(sb, streams[i]);
             }
 
-            sb.Append(']');
+            _ = sb.Append(']');
 
             return sb.ToString();
         }
@@ -196,7 +195,7 @@ public static class SsfTransmitterJsonWriting
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
 
             bool first = true;
             JsonAppender.AppendStringField(sb, SsfStreamStatusParameterNames.StreamId, status.StreamId, ref first);
@@ -206,7 +205,7 @@ public static class SsfTransmitterJsonWriting
                 JsonAppender.AppendStringField(sb, SsfStreamStatusParameterNames.Reason, status.Reason, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -224,28 +223,28 @@ public static class SsfTransmitterJsonWriting
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, SsfMetadataParameterNames.AuthorizationSchemes);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         for(int i = 0; i < specUrns.Count; ++i)
         {
             if(i > 0)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append("{\"");
+            _ = sb.Append("{\"");
             JsonAppender.AppendEscapedString(sb, SsfMetadataParameterNames.SpecUrn);
-            sb.Append("\":\"");
+            _ = sb.Append("\":\"");
             JsonAppender.AppendEscapedString(sb, specUrns[i]);
-            sb.Append("\"}");
+            _ = sb.Append("\"}");
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
 
         first = false;
     }
@@ -253,7 +252,7 @@ public static class SsfTransmitterJsonWriting
 
     private static void AppendStreamConfiguration(StringBuilder sb, SsfStreamConfiguration stream)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
 
         bool first = true;
         JsonAppender.AppendStringField(sb, SsfStreamConfigParameterNames.StreamId, stream.StreamId, ref first);
@@ -291,7 +290,7 @@ public static class SsfTransmitterJsonWriting
             JsonAppender.AppendInt64Field(sb, SsfStreamConfigParameterNames.InactivityTimeout, inactivity, ref first);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -299,12 +298,12 @@ public static class SsfTransmitterJsonWriting
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, SsfStreamConfigParameterNames.Delivery);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool deliveryFirst = true;
         JsonAppender.AppendStringField(sb, SsfDeliveryParameterNames.Method, delivery.Method, ref deliveryFirst);
@@ -318,7 +317,7 @@ public static class SsfTransmitterJsonWriting
             JsonAppender.AppendStringField(sb, SsfDeliveryParameterNames.AuthorizationHeader, delivery.AuthorizationHeader, ref deliveryFirst);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
 
         first = false;
     }

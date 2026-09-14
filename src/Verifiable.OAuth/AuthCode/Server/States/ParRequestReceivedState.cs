@@ -42,6 +42,15 @@ public sealed record ParRequestReceivedState: FlowState
     public required string CodeChallenge { get; init; }
 
     /// <summary>
+    /// The <c>code_challenge_method</c> bound at PAR time — <c>S256</c> or, under a deployment that
+    /// accepts it, <c>plain</c> — per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. Carried
+    /// to <see cref="ServerCodeIssuedState"/> so the token endpoint verifies <c>code_verifier</c>
+    /// against this PERSISTED method rather than a method named on the token request.
+    /// </summary>
+    public required string CodeChallengeMethod { get; init; }
+
+    /// <summary>
     /// The redirect URI from the PAR request. Exact-match validation is enforced
     /// at the authorization endpoint per
     /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1">RFC 9700 §2.1</see>.

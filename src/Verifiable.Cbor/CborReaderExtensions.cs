@@ -1,7 +1,5 @@
-using System;
-using System.Buffers.Binary;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using System.Buffers.Binary;
 using Verifiable.JCose;
 
 namespace Verifiable.Cbor;
@@ -336,7 +334,7 @@ public static class CborReaderExtensions
             CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
         }
 
-        if(length!.Value != expectedLength)
+        if(length.Value != expectedLength)
         {
             CborThrowHelper.ThrowInvalidMapLength(expectedLength, length.Value);
         }

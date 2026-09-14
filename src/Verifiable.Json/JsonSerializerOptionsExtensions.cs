@@ -26,7 +26,7 @@ public static class JsonSerializerExtensions
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        return (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        return options.GetTypeInfo<T>();
     }
 
 

@@ -1,16 +1,12 @@
-using System;
 using System.Buffers.Text;
-using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Peer;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.Did.Methods.Peer;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -36,7 +32,7 @@ internal sealed class PeerDidResolverTests
     private const string SingleAuthenticationKeyDid =
         "did:peer:2.Vz6Mkj3PUd1WjvaDhNZhhhXQdz5UnZXmS7ehtx8bsPpD47kKc";
 
-    private static ExchangeContext ResolutionContext { get; } = new();
+    private static ExchangeContext ResolutionContext { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -388,12 +384,12 @@ internal sealed class PeerDidResolverTests
         Assert.IsNotNull(document);
 
         Assert.IsNotNull(document.VerificationMethod);
-        Assert.HasCount(1, document.VerificationMethod!);
-        Assert.AreEqual("#key-1", document.VerificationMethod![0].Id);
+        Assert.HasCount(1, document.VerificationMethod);
+        Assert.AreEqual("#key-1", document.VerificationMethod[0].Id);
 
         Assert.IsNotNull(document.Authentication);
-        Assert.HasCount(1, document.Authentication!);
-        Assert.AreEqual("#key-1", document.Authentication![0].Id);
+        Assert.HasCount(1, document.Authentication);
+        Assert.AreEqual("#key-1", document.Authentication[0].Id);
 
         Assert.IsNull(document.KeyAgreement);
         Assert.IsNull(document.Service);

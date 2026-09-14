@@ -271,7 +271,7 @@ internal sealed class DcqlQuerySerializationTests
 
         //Verify boolean value constraint.
         Assert.HasCount(1, claims[0].Values!);
-        Assert.IsInstanceOfType<bool>(claims[0].Values![0]);
+        _ = Assert.IsInstanceOfType<bool>(claims[0].Values![0]);
         Assert.IsTrue((bool)claims[0].Values![0]);
 
         //Verify string value constraints.
@@ -546,7 +546,7 @@ internal sealed class DcqlQuerySerializationTests
 
         var sdJwtConstraints = meta.GetTypeConstraints("dc+sd-jwt");
         Assert.IsNotNull(sdJwtConstraints);
-        Assert.HasCount(2, sdJwtConstraints!);
+        Assert.HasCount(2, sdJwtConstraints);
 
         var mdocMeta = new CredentialQueryMeta
         {
@@ -555,8 +555,8 @@ internal sealed class DcqlQuerySerializationTests
 
         var mdocConstraints = mdocMeta.GetTypeConstraints("mso_mdoc");
         Assert.IsNotNull(mdocConstraints);
-        Assert.HasCount(1, mdocConstraints!);
-        Assert.AreEqual("org.iso.18013.5.1.mDL", mdocConstraints![0]);
+        Assert.HasCount(1, mdocConstraints);
+        Assert.AreEqual("org.iso.18013.5.1.mDL", mdocConstraints[0]);
     }
 
     [TestMethod]
@@ -569,7 +569,7 @@ internal sealed class DcqlQuerySerializationTests
             """;
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
 
@@ -587,7 +587,7 @@ internal sealed class DcqlQuerySerializationTests
             """;
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
 
@@ -611,7 +611,7 @@ internal sealed class DcqlQuerySerializationTests
             """;
 
         var options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
-        Assert.Throws<JsonException>(() =>
+        _ = Assert.Throws<JsonException>(() =>
             JsonSerializerExtensions.Deserialize<DcqlQuery>(json, options));
     }
 

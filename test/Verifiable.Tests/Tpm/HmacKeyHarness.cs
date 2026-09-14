@@ -1,21 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.BouncyCastle;
-using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -259,7 +250,7 @@ internal static class HmacKeyHarness
     /// <param name="dataLength">The sensitive data length.</param>
     /// <returns>The serialized size.</returns>
     public static int SensitiveCreateSerializedSize(int userAuthLength, int dataLength) =>
-        sizeof(ushort) + (sizeof(ushort) + userAuthLength) + (sizeof(ushort) + dataLength);
+        sizeof(ushort) + sizeof(ushort) + userAuthLength + sizeof(ushort) + dataLength;
 
     /// <summary>
     /// Marshals a <c>TPM2B_SENSITIVE_CREATE</c> straight into <paramref name="writer"/> — <c>TPM2B_AUTH(userAuth)

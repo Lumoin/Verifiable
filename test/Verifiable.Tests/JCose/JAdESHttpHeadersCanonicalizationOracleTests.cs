@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 

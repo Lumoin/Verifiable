@@ -1,8 +1,5 @@
-using System;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
@@ -75,7 +72,7 @@ internal sealed class DidResolutionHttpApplication
             return;
         }
 
-        string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
+        string path = context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty;
         if(!path.StartsWith(WellKnownDidResolutionMediaTypes.IdentifiersBasePath, StringComparison.Ordinal))
         {
             httpResponse.StatusCode = StatusCodes.Status404NotFound;
@@ -87,7 +84,7 @@ internal sealed class DidResolutionHttpApplication
         string didOrUrl = Uri.UnescapeDataString(encoded);
         string accept = context.Request.Headers.Accept.ToString();
 
-        ExchangeContext exchangeContext = new();
+        ExchangeContext exchangeContext = [];
         exchangeContext.SetOutboundFetchPolicy(FetchPolicy);
 
         BindingResponse binding = await HandleAsync(didOrUrl, accept, exchangeContext, context.RequestAborted)

@@ -6,14 +6,11 @@ using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
 using Org.BouncyCastle.Security;
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
@@ -84,7 +81,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA-ISO9796-2");
+            _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA-ISO9796-2");
         }
 
         RsaPrivateCrtKeyParameters privateKey = ParseRsaPrivateKey(privateKeyBytes.Span);
@@ -155,7 +152,7 @@ public static class BouncyCastleRecoverableSignatureFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA-ISO9796-2");
+            _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA-ISO9796-2");
         }
 
         RsaKeyParameters publicKey;

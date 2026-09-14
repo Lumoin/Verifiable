@@ -300,7 +300,7 @@ internal sealed class SelectiveDisclosureTests
         Assert.IsFalse(result.SatisfiesRequirements, "Excluding a requested claim is a conflict.");
         Assert.IsTrue(result.SelectedClaims.SetEquals(new HashSet<int> { 1, 2, 3 }), "Best effort must be (minimum ∩ maximum) ∪ mandatory.");
         Assert.IsNotNull(result.ConflictingClaims, "Conflicts must be reported.");
-        Assert.IsTrue(result.ConflictingClaims!.SetEquals(new HashSet<int> { 4 }), "Only the excluded-yet-required claim conflicts.");
+        Assert.IsTrue(result.ConflictingClaims.SetEquals(new HashSet<int> { 4 }), "Only the excluded-yet-required claim conflicts.");
     }
 
 
@@ -317,7 +317,7 @@ internal sealed class SelectiveDisclosureTests
 
         Assert.IsFalse(result.SatisfiesRequirements, "A user exclusion cannot override a regulatory mandate.");
         Assert.IsNotNull(result.ConflictingClaims, "The regulated-yet-excluded claim must surface as a conflict.");
-        Assert.Contains(4, result.ConflictingClaims!, "Claim 4 is regulatory-mandated but user-excluded.");
+        Assert.Contains(4, result.ConflictingClaims, "Claim 4 is regulatory-mandated but user-excluded.");
         Assert.IsTrue(result.SelectedClaims.SetEquals(new HashSet<int> { 1, 2 }), "Best effort drops the conflicting claim, keeping only mandatory.");
     }
 
@@ -365,7 +365,7 @@ internal sealed class SelectiveDisclosureTests
 
         Assert.IsFalse(result.SatisfiesAllRequirements, "An excluded claim cannot satisfy the requirement.");
         Assert.IsNotNull(result.UnsatisfiedRequirements, "The blocked requirement must be reported.");
-        Assert.Contains("email", result.UnsatisfiedRequirements!, "Email stays unsatisfied because the user excluded it.");
+        Assert.Contains("email", result.UnsatisfiedRequirements, "Email stays unsatisfied because the user excluded it.");
     }
 
 
@@ -397,7 +397,7 @@ internal sealed class SelectiveDisclosureTests
 
         Assert.IsFalse(result.SatisfiesAllRequirements, "Nothing can be satisfied without credentials.");
         Assert.IsNotNull(result.UnsatisfiedRequirements, "All requirements must be reported unsatisfied.");
-        Assert.Contains("email", result.UnsatisfiedRequirements!, "Email cannot be satisfied.");
+        Assert.Contains("email", result.UnsatisfiedRequirements, "Email cannot be satisfied.");
     }
 
 

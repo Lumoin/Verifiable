@@ -1,5 +1,5 @@
-using System.Text;
 using BenchmarkDotNet.Attributes;
+using System.Text;
 using Verifiable.Xml;
 
 namespace Verifiable.Benchmarks.Xml;
@@ -24,13 +24,13 @@ internal class XAdESGrowthBoundsBenchmarks
     {
         int count = XAdESUnsignedSignatureProperties.MaximumPropertyCount + 1;
         var builder = new StringBuilder(count * 24);
-        builder.Append($"""<UnsignedSignatureProperties xmlns="{V132}" xmlns:f="urn:filler">""");
+        _ = builder.Append($"""<UnsignedSignatureProperties xmlns="{V132}" xmlns:f="urn:filler">""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append("<f:Filler/>");
+            _ = builder.Append("<f:Filler/>");
         }
 
-        builder.Append("</UnsignedSignatureProperties>");
+        _ = builder.Append("</UnsignedSignatureProperties>");
         document = Encoding.UTF8.GetBytes(builder.ToString());
     }
 
@@ -39,7 +39,7 @@ internal class XAdESGrowthBoundsBenchmarks
     [Benchmark]
     public void UnsignedSignaturePropertiesFloodIsRefused()
     {
-        XmlNodeTable.TryParse(document, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
+        _ = XmlNodeTable.TryParse(document, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
         using(table)
         {
             if(table is not null)

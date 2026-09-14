@@ -67,7 +67,7 @@ internal sealed class PackedEnterpriseAttestationTests
         AttestationResult result = await VerifySernumChainRawAsync(
             serialNumber: [1, 2, 3, 4], sernumCritical: false, acceptsEnterpriseAttestation: true, useRealChainValidator: false);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -83,7 +83,7 @@ internal sealed class PackedEnterpriseAttestationTests
         AttestationResult result = await VerifySernumChainRawAsync(
             serialNumber: null, sernumCritical: false, acceptsEnterpriseAttestation: false, useRealChainValidator: true);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 

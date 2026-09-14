@@ -2,14 +2,9 @@ using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Security;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography.Pki;
 using BouncyCastleX509 = Org.BouncyCastle.X509.X509Certificate;
 
@@ -125,7 +120,7 @@ public sealed class CertificateChainCompleter
                         "that issues the last certificate in the chain, and the chain does not reach a supplied trust anchor.");
                 }
 
-                usedStoreIndices.Add(issuerIndex);
+                _ = usedStoreIndices.Add(issuerIndex);
 
                 PkiCertificateMemory clonedIssuer = ClonePkiCertificate(CaCertificates[issuerIndex], pool);
                 acquired.Add(clonedIssuer);

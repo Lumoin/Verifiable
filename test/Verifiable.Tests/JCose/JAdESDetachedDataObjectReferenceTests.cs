@@ -1,7 +1,4 @@
-using System;
 using System.Buffers;
-using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -58,7 +55,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingReferencedDataObjectWithNullReferenceThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESReferencedDataObject(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESReferencedDataObject(null!));
     }
 
 
@@ -66,7 +63,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingReferencedDataObjectWithEmptyReferenceThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESReferencedDataObject(string.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESReferencedDataObject(string.Empty));
     }
 
 
@@ -111,7 +108,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingHttpHeadersReferenceWithEmptyHeaderNamesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESHttpHeadersReference([]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESHttpHeadersReference([]));
     }
 
 
@@ -119,7 +116,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingHttpHeadersReferenceWithNullHeaderNamesThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESHttpHeadersReference(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESHttpHeadersReference(null!));
     }
 
 
@@ -164,7 +161,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
         using DigestValue digest = CreateDigest(0x01);
         using var entry = new JAdESReferencedDataObject("https://example.org/objects/1", digest: digest);
 
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriReference([entry]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriReference([entry]));
     }
 
 
@@ -176,7 +173,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingObjectIdByUriReferenceWithEmptyReferencesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriReference([]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriReference([]));
     }
 
 
@@ -184,7 +181,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingObjectIdByUriReferenceWithNullReferencesThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESObjectIdByUriReference(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESObjectIdByUriReference(null!));
     }
 
 
@@ -244,7 +241,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     {
         using var entry = new JAdESReferencedDataObject("https://example.org/objects/1");
 
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference("sha-256", [entry]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference("sha-256", [entry]));
     }
 
 
@@ -259,7 +256,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
         using DigestValue digest = CreateDigest(0x01);
         using var entry = new JAdESReferencedDataObject("https://example.org/objects/1", digest: digest);
 
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference(string.Empty, [entry]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference(string.Empty, [entry]));
     }
 
 
@@ -271,7 +268,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingObjectIdByUriHashReferenceWithEmptyReferencesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference("sha-256", []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESObjectIdByUriHashReference("sha-256", []));
     }
 
 
@@ -279,7 +276,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingObjectIdByUriHashReferenceWithNullReferencesThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESObjectIdByUriHashReference("sha-256", null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new JAdESObjectIdByUriHashReference("sha-256", null!));
     }
 
 
@@ -323,7 +320,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     {
         using var entry = new JAdESReferencedDataObject("https://example.org/objects/1");
 
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(string.Empty, [entry]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(string.Empty, [entry]));
     }
 
 
@@ -335,9 +332,9 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
         using var entryTwo = new JAdESReferencedDataObject("https://example.org/objects/2");
         using var entryThree = new JAdESReferencedDataObject("https://example.org/objects/3");
 
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(JAdESHttpHeadersReference.MechanismIdentifier, [entryOne]));
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(JAdESObjectIdByUriReference.MechanismIdentifier, [entryTwo]));
-        Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(JAdESObjectIdByUriHashReference.MechanismIdentifier, [entryThree]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(JAdESHttpHeadersReference.MechanismIdentifier, [entryOne]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(JAdESObjectIdByUriReference.MechanismIdentifier, [entryTwo]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new JAdESUnknownDetachedDataObjectReference(JAdESObjectIdByUriHashReference.MechanismIdentifier, [entryThree]));
     }
 
 
@@ -345,7 +342,7 @@ internal sealed class JAdESDetachedDataObjectReferenceTests
     [TestMethod]
     public void ConstructingUnknownDetachedDataObjectReferenceWithEmptyReferencesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new JAdESUnknownDetachedDataObjectReference("https://example.org/sigD/mechanisms/third-party-v1", []));
     }
 

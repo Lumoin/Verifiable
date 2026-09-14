@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.SecurityEvents;
@@ -137,9 +132,41 @@ public static class SecurityEventTokenReception
             Err = SsfDeliveryErrorCodes.InvalidAudience,
             Description = "The SET audience does not correspond to this Receiver."
         },
-        //Malformed, ExplicitTypeMissing, MissingIssuedAt, MissingJwtId, NoEvents —
-        //and Replayed, which callers divert to AcceptedDuplicate before mapping —
-        //are structural: the SET cannot be parsed or is otherwise invalid.
+
+        //Malformed, ExplicitTypeMissing, MissingIssuedAt, MissingJwtId, NoEvents — and
+        //Replayed, which callers divert to AcceptedDuplicate before mapping — are structural:
+        //the SET cannot be parsed or is otherwise invalid.
+        SecurityEventTokenValidationError.Malformed => new SsfSetError
+        {
+            Err = SsfDeliveryErrorCodes.InvalidRequest,
+            Description = "The SET could not be parsed or is otherwise invalid."
+        },
+        SecurityEventTokenValidationError.ExplicitTypeMissing => new SsfSetError
+        {
+            Err = SsfDeliveryErrorCodes.InvalidRequest,
+            Description = "The SET could not be parsed or is otherwise invalid."
+        },
+        SecurityEventTokenValidationError.MissingIssuedAt => new SsfSetError
+        {
+            Err = SsfDeliveryErrorCodes.InvalidRequest,
+            Description = "The SET could not be parsed or is otherwise invalid."
+        },
+        SecurityEventTokenValidationError.MissingJwtId => new SsfSetError
+        {
+            Err = SsfDeliveryErrorCodes.InvalidRequest,
+            Description = "The SET could not be parsed or is otherwise invalid."
+        },
+        SecurityEventTokenValidationError.NoEvents => new SsfSetError
+        {
+            Err = SsfDeliveryErrorCodes.InvalidRequest,
+            Description = "The SET could not be parsed or is otherwise invalid."
+        },
+        SecurityEventTokenValidationError.Replayed => new SsfSetError
+        {
+            Err = SsfDeliveryErrorCodes.InvalidRequest,
+            Description = "The SET could not be parsed or is otherwise invalid."
+        },
+
         _ => new SsfSetError
         {
             Err = SsfDeliveryErrorCodes.InvalidRequest,

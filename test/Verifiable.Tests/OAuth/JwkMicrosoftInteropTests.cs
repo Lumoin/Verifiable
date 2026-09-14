@@ -1,14 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
 using Microsoft.IdentityModel.Tokens;
 using System.Collections.Immutable;
-using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -155,7 +152,7 @@ internal sealed class JwkMicrosoftInteropTests
         CancellationToken cancellationToken)
     {
         string segment = registration.TenantId;
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(new Uri("https://issuer.example.com"));
 

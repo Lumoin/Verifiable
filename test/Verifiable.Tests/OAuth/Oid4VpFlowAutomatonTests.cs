@@ -1,13 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -67,7 +64,7 @@ internal sealed class Oid4VpFlowAutomatonTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(stepped, "Initiate must produce a transition.");
-        Assert.IsInstanceOfType<PkceGeneratedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<PkceGeneratedState>(pda.CurrentState);
         Assert.AreEqual("flow-1", pda.CurrentState.FlowId);
         Assert.AreEqual("https://as.example.com", pda.CurrentState.ExpectedIssuer);
     }
@@ -77,7 +74,7 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task ParBodyComposedTransitionsFromPkceGeneratedToParRequestReady()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-2"), TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
@@ -85,7 +82,7 @@ internal sealed class Oid4VpFlowAutomatonTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(stepped);
-        Assert.IsInstanceOfType<ParRequestReadyState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<ParRequestReadyState>(pda.CurrentState);
     }
 
 
@@ -93,9 +90,9 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task ParSucceededTransitionsToParCompletedWithCorrectExpiry()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-3"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParBodyComposed("body", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -124,7 +121,7 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task FailInputTransitionsToFlowFailedFromAnyNonTerminalState()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-4"), TestContext.CancellationToken).ConfigureAwait(false);
 
         DateTimeOffset failedAt = TimeProvider.GetUtcNow();
@@ -143,9 +140,9 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task PdaHaltsAfterFlowFailed()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-5"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new Fail("First failure.", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -162,7 +159,7 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task UndefinedInputOnWrongStateHaltsPda()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-6"), TestContext.CancellationToken).ConfigureAwait(false);
 
         bool stepped = await pda.StepAsync(
@@ -182,14 +179,14 @@ internal sealed class Oid4VpFlowAutomatonTests
         var observer = new TestObserver<TraceEntry<FlowState, FlowInput>>();
         using IDisposable subscription = pda.Subscribe(observer);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-7"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParBodyComposed("body", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
         KeyId keyId = StoreDecryptionKey();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParSucceeded(
                 new ParResponse(new Uri("urn:ietf:params:oauth:request_uri:test"), 60),
                 new TransactionNonce("nonce"),
@@ -215,9 +212,9 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task StackDepthRemainsOneOnLinearFlow()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-8"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParBodyComposed("body", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -230,9 +227,9 @@ internal sealed class Oid4VpFlowAutomatonTests
     public async Task StepCountMatchesNumberOfSuccessfulTransitions()
     {
         PushdownAutomaton<FlowState, FlowInput, Oid4VpStackSymbol> pda = CreatePda();
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             CreateInitiate("flow-9"), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParBodyComposed("body", TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -241,7 +238,7 @@ internal sealed class Oid4VpFlowAutomatonTests
 
 
     [TestMethod]
-    public async Task AcceptPredicateReturnsTrueOnlyForPresentationVerified()
+    public void AcceptPredicateReturnsTrueOnlyForPresentationVerified()
     {
         DateTimeOffset now = TimeProvider.GetUtcNow();
 
@@ -281,7 +278,7 @@ internal sealed class Oid4VpFlowAutomatonTests
 
         await RunToJarReadyFromParCompleted(pda, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JarReadyState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<JarReadyState>(pda.CurrentState);
     }
 
 
@@ -296,7 +293,7 @@ internal sealed class Oid4VpFlowAutomatonTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(stepped, "JarFetched must transition JarReady to JarServed.");
-        Assert.IsInstanceOfType<JarServedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<JarServedState>(pda.CurrentState);
     }
 
 
@@ -313,7 +310,7 @@ internal sealed class Oid4VpFlowAutomatonTests
         await RunToParCompletedWithKey(
             pda, "flow-16", keyId, TestContext.CancellationToken).ConfigureAwait(false);
         await RunToJarReadyFromParCompleted(pda, TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new JarFetched(TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -322,11 +319,11 @@ internal sealed class Oid4VpFlowAutomatonTests
         string compactJwe = await EncryptPayloadAsync(
             encryptionPublicKey, minimalPayload, TestContext.CancellationToken).ConfigureAwait(false);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ResponsePosted(compactJwe, TimeProvider.GetUtcNow()),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new VerificationSucceeded(
                 new Dictionary<CredentialQueryId, VpCredentialClaims>(),
                 TimeProvider.GetUtcNow()),
@@ -371,11 +368,11 @@ internal sealed class Oid4VpFlowAutomatonTests
         KeyId keyId,
         CancellationToken cancellationToken)
     {
-        await pda.StepAsync(CreateInitiate(flowId), cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(CreateInitiate(flowId), cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(
             new ParBodyComposed("client_id=test", TimeProvider.GetUtcNow()),
             cancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new ParSucceeded(
                 new ParResponse(new Uri("urn:ietf:params:oauth:request_uri:test"), 60),
                 new TransactionNonce("nonce-abc"),
@@ -436,7 +433,7 @@ internal sealed class Oid4VpFlowAutomatonTests
             pool: Pool,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
     }
 
 

@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Text;
@@ -132,7 +131,7 @@ internal static class CborPrimitives
     public static void WriteNull(ArrayBufferWriter<byte> writer)
     {
         Span<byte> span = writer.GetSpan(1);
-        span[0] = (byte)((MajorSimple << MajorTypeShift) | SimpleNull);
+        span[0] = (MajorSimple << MajorTypeShift) | SimpleNull;
         writer.Advance(1);
     }
 
@@ -174,7 +173,7 @@ internal static class CborPrimitives
         int byteCount = Encoding.UTF8.GetByteCount(value);
         WriteHeader(writer, MajorTextString, (ulong)byteCount);
         Span<byte> span = writer.GetSpan(byteCount);
-        Encoding.UTF8.GetBytes(value, span);
+        _ = Encoding.UTF8.GetBytes(value, span);
         writer.Advance(byteCount);
     }
 

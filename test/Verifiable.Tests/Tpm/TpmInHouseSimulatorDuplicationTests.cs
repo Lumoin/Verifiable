@@ -1,7 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -9,10 +8,6 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -450,7 +445,7 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        (uint parentHandle, byte[] _) = await CreateEccStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        (uint parentHandle, _) = await CreateEccStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
         (uint objectHandle, byte[] objectName, byte[] publicOctets) = await CreateAndLoadDuplicableObjectAsync(tpm, registry, pool, parentHandle, DuplicationPolicyDigest()).ConfigureAwait(false);
 
         using CreatePrimaryInput rsaParentInput = CreatePrimaryInput.ForRsaStorageParent(TpmRh.TPM_RH_OWNER, null, 2048, pool, noDa: true);
@@ -463,7 +458,7 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
         (byte[] duplicate, byte[] outSymSeed) = await DuplicateToAsync(
             tpm, registry, pool, objectHandle, objectName, rsaParent.ObjectHandle.Value, rsaParent.Name.Span.ToArray()).ConfigureAwait(false);
 
-        await ImportLoadAndUnsealAsync(tpm, registry, pool, rsaParent.ObjectHandle.Value, publicOctets, duplicate, outSymSeed).ConfigureAwait(false);
+        _ = await ImportLoadAndUnsealAsync(tpm, registry, pool, rsaParent.ObjectHandle.Value, publicOctets, duplicate, outSymSeed).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -479,9 +474,9 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        (uint parentHandle, byte[] _) = await CreateEccStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        (uint parentHandle, _) = await CreateEccStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
         (uint objectHandle, byte[] objectName, byte[] publicOctets) = await CreateAndLoadDuplicableObjectAsync(tpm, registry, pool, parentHandle, DuplicationPolicyDigest()).ConfigureAwait(false);
-        (uint newParentHandle, byte[] _) = await CreateEccStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
+        (uint newParentHandle, _) = await CreateEccStorageParentAsync(tpm, registry, pool).ConfigureAwait(false);
 
         //A permanent handle's Name is its own four big-endian octets (Part 1, clause 13, Table 9).
         byte[] nullParentName = new byte[sizeof(uint)];
@@ -490,7 +485,7 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
             tpm, registry, pool, objectHandle, objectName, (uint)TpmRh.TPM_RH_NULL, nullParentName).ConfigureAwait(false);
         Assert.IsEmpty(emptySeed, "No seed is transported when there is no new parent.");
 
-        await ImportLoadAndUnsealAsync(tpm, registry, pool, newParentHandle, publicOctets, bareDuplicate, emptySeed).ConfigureAwait(false);
+        _ = await ImportLoadAndUnsealAsync(tpm, registry, pool, newParentHandle, publicOctets, bareDuplicate, emptySeed).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -633,7 +628,7 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
         byte[] fabricatedData = "Independently constructed migration payload."u8.ToArray();
         byte[] obfuscation = new byte[DigestSize];
         obfuscation.AsSpan().Fill(0x5A);
-        int interiorLength = sizeof(ushort) + (sizeof(ushort) + 64) + (sizeof(ushort) + DigestSize) + (sizeof(ushort) + fabricatedData.Length);
+        int interiorLength = sizeof(ushort) + sizeof(ushort) + 64 + sizeof(ushort) + DigestSize + sizeof(ushort) + fabricatedData.Length;
         byte[] sensitive = new byte[sizeof(ushort) + interiorLength];
         var sensitiveWriter = new TpmWriter(sensitive);
         sensitiveWriter.WriteUInt16((ushort)interiorLength);
@@ -711,7 +706,7 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
         blobWriter.WriteBytes(encSensitive);
 
         //The DUPLICATE-labeled package imports, loads, and unseals the fabricated data.
-        await ImportLoadAndUnsealAsync(
+        _ = await ImportLoadAndUnsealAsync(
             tpm, registry, pool, rsaParent.ObjectHandle.Value, publicOctets, duplicateBlob, duplicateLabelSeed, fabricatedData).ConfigureAwait(false);
 
         //The SAME seed and blob under the IDENTITY label: the decode fails, the substitution defers, the outer
@@ -785,7 +780,7 @@ internal sealed class TpmInHouseSimulatorDuplicationTests
         eccBlobWriter.WriteBytes(eccOuterHmacOctets);
         eccBlobWriter.WriteBytes(eccEncSensitive);
 
-        await ImportLoadAndUnsealAsync(
+        _ = await ImportLoadAndUnsealAsync(
             tpm, registry, pool, eccDestination.ObjectHandle.Value, publicOctets, eccDuplicateBlob, marshaledEphemeralPoint, fabricatedData).ConfigureAwait(false);
     }
 

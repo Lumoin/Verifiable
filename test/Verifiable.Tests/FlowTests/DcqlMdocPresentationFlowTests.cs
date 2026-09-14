@@ -1,5 +1,4 @@
 using System.Buffers;
-using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;

@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -92,7 +90,7 @@ internal sealed class SiopRequestUriFlowTests
         Assert.IsFalse(string.IsNullOrWhiteSpace(requestHandle));
         Assert.IsTrue(requestUri.OriginalString.Contains(requestHandle, StringComparison.Ordinal),
             "The composed request_uri must carry the per-flow handle.");
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         //=== Step 2: the Wallet GETs the request_uri and receives the signed §9 Request Object. ===
         string requestObjectJws = await host.HandleSiopRequestObjectAsync(
@@ -103,7 +101,7 @@ internal sealed class SiopRequestUriFlowTests
             "The §9 Request Object must be a compact JWS with three dot-separated segments.");
 
         //The flow advanced to the served state, still resolvable by the handle for the response POST.
-        Assert.IsInstanceOfType<SiopRequestObjectServedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestObjectServedState>(host.GetFlowState(requestHandle).State);
 
         //=== Step 3: verify the JWS under the RP's signing key and assert the §9 / §9.1 claims. ===
         string expectedAudience = useStaticDiscoveryAudience
@@ -154,7 +152,7 @@ internal sealed class SiopRequestUriFlowTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //=== Step 5: 200 and the terminal verified state with the expected subject + nonce. ===

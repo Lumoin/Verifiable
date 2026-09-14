@@ -119,8 +119,8 @@ internal sealed class Fido2CredentialKeyConformanceTests
     {
         (byte[] modulus, byte[] _) = CreateRsaComponents();
         var incompleteRsaKey = new CoseKey(kty: CoseKeyTypes.Rsa, alg: WellKnownCoseAlgorithms.Rs256, n: modulus);
-        ReadCredentialPublicKeyDelegate stubReader = source =>
-            new CredentialPublicKeyReadResult(incompleteRsaKey, 1, [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.RsaN]);
+        CredentialPublicKeyReadResult stubReader(ReadOnlyMemory<byte> source) =>
+            new(incompleteRsaKey, 1, [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.RsaN]);
 
         Fido2FormatException exception = AssertRejectedAttestedCredentialData(stubReader);
 
@@ -240,12 +240,12 @@ internal sealed class Fido2CredentialKeyConformanceTests
     {
         (byte[] modulus, byte[] exponent) = CreateRsaComponents();
         var rsaKey = new CoseKey(kty: CoseKeyTypes.Rsa, alg: WellKnownCoseAlgorithms.Rs256, n: modulus, e: exponent);
-        ReadCredentialPublicKeyDelegate stubReader = source =>
-            new CredentialPublicKeyReadResult(rsaKey, 1, [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.RsaN, CoseKeyParameters.RsaE]);
+        CredentialPublicKeyReadResult stubReader(ReadOnlyMemory<byte> source) =>
+            new(rsaKey, 1, [CoseKeyParameters.Kty, CoseKeyParameters.Alg, CoseKeyParameters.RsaN, CoseKeyParameters.RsaE]);
 
         using AuthenticatorData parsed = AuthenticatorDataReader.Read(
             BuildAuthenticatorData(CreateRpIdHash(), flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit, signCount: 0, attestedCredentialData: BuildAttestedCredentialData(Guid.NewGuid(), [0x01], [0xFF])),
-            stubReader,
+stubReader,
             BaseMemoryPool.Shared);
 
         Assert.IsNotNull(parsed.AttestedCredentialData);

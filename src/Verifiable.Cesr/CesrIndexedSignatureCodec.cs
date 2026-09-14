@@ -108,7 +108,7 @@ public static class CesrIndexedSignatureCodec
             throw new CesrFormatException("Truncated CESR indexed code.");
         }
 
-        string hard = new string(qb64[..hardSize]);
+        string hard = new(qb64[..hardSize]);
         CesrIndexedCodeSizing sizing = LookupSizing(hard);
         int codeSize = sizing.CodeSize;
         int mainIndexSize = sizing.MainIndexSize;
@@ -123,7 +123,7 @@ public static class CesrIndexedSignatureCodec
         int index = (int)CesrTextCodec.Base64ToInt(qb64.Slice(hardSize, mainIndexSize));
         int? ondex = ResolveOndex(hard, sizing, qb64.Slice(hardSize + mainIndexSize, ondexSize), index);
 
-        int fullSize = sizing.FullSize ?? (index * 4 + codeSize);
+        int fullSize = sizing.FullSize ?? ((index * 4) + codeSize);
         if(qb64.Length < fullSize)
         {
             throw new CesrFormatException("Truncated CESR indexed signature.");
@@ -218,7 +218,7 @@ public static class CesrIndexedSignatureCodec
         int index = (int)CesrTextCodec.Base64ToInt(both.AsSpan(sizing.HardSize, mainIndexSize));
         int? ondex = ResolveOndex(hard, sizing, both.AsSpan(sizing.HardSize + mainIndexSize, ondexSize), index);
 
-        int fullSize = sizing.FullSize ?? (index * 4 + codeSize);
+        int fullSize = sizing.FullSize ?? ((index * 4) + codeSize);
         int fullBytes = CesrTextCodec.CodeBinaryLength(fullSize);
         if(qb2.Length < fullBytes)
         {

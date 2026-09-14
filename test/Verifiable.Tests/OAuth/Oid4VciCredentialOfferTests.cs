@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 
 namespace Verifiable.Tests.OAuth;
@@ -163,7 +162,7 @@ internal sealed class Oid4VciCredentialOfferTests
     [TestMethod]
     public void TxCodeDescriptionAtThreeHundredCharactersIsAcceptedAndOverIsRejected()
     {
-        CredentialOffer Offer(string description) => new()
+        static CredentialOffer Offer(string description) => new()
         {
             CredentialIssuer = Issuer,
             CredentialConfigurationIds = [ConfigurationId],
@@ -182,7 +181,7 @@ internal sealed class Oid4VciCredentialOfferTests
         Assert.AreEqual(300, serialized.Length, "A 300-character description is at the limit and is accepted.");
 
         string overLimit = new('x', 301);
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CredentialOfferSerializer.ToJson(Offer(overLimit)),
             "§4.1.1: tx_code.description MUST NOT exceed 300 characters.");
     }
@@ -201,7 +200,7 @@ internal sealed class Oid4VciCredentialOfferTests
             CredentialConfigurationIds = []
         };
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CredentialOfferSerializer.ToJson(empty),
             "§4.1.1: credential_configuration_ids is a non-empty array.");
 
@@ -230,7 +229,7 @@ internal sealed class Oid4VciCredentialOfferTests
             CredentialConfigurationIds = [ConfigurationId, ConfigurationId]
         };
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CredentialOfferSerializer.ToJson(duplicate),
             "§4.1.1: credential_configuration_ids entries are unique.");
     }

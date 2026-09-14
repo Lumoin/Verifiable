@@ -1,35 +1,24 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
@@ -455,7 +444,7 @@ internal sealed class DidResolutionHttpBindingTests
     {
         Uri target = new(host.BaseAddress, WellKnownDidResolutionMediaTypes.IdentifiersBasePath + Uri.EscapeDataString(didOrUrl));
         using HttpRequestMessage request = new(HttpMethod.Get, target);
-        request.Headers.TryAddWithoutValidation("Accept", rawAccept);
+        _ = request.Headers.TryAddWithoutValidation("Accept", rawAccept);
 
         return await host.Client.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
     }
@@ -606,7 +595,7 @@ internal sealed class DidResolutionHttpBindingTests
 
             //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
             //this host at all.
-            builder.WebHost.ConfigureKestrel(options =>
+            _ = builder.WebHost.ConfigureKestrel(options =>
                 LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
             WebApplication app = builder.Build();

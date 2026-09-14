@@ -31,9 +31,9 @@ internal sealed class EudiPidDomesticNamespaceTests
     [TestMethod]
     public void DomesticNamespaceRejectsNonTwoCharacterCountryCode()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => EudiPid.DomesticNamespace("FIN"));
-        Assert.ThrowsExactly<ArgumentException>(() => EudiPid.DomesticNamespace("f"));
-        Assert.ThrowsExactly<ArgumentException>(() => EudiPid.DomesticNamespace(string.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiPid.DomesticNamespace("FIN"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiPid.DomesticNamespace("f"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiPid.DomesticNamespace(string.Empty));
     }
 
 

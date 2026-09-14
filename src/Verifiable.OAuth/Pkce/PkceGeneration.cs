@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -69,7 +68,7 @@ public static class PkceGeneration
         int inputByteCount = Encoding.ASCII.GetByteCount(encodedVerifier);
         using IMemoryOwner<byte> inputOwner = pool.Rent(inputByteCount);
         Span<byte> inputBytes = inputOwner.Memory.Span[..inputByteCount];
-        Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
+        _ = Encoding.ASCII.GetBytes(encodedVerifier, inputBytes);
 
         //The PKCE S256 challenge is a SHA-256 of the local code verifier — sync by nature, no hardware-async
         //backend — so it hashes through the registered synchronous HashFunctionDelegate seam.

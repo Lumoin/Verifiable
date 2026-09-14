@@ -1,17 +1,11 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -895,7 +889,7 @@ internal sealed class TpmInHouseSimulatorTestParmsTests
     public async Task TestParmsInFailureModeReturnsFailure()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using var simulator = new TpmSimulator("tpm-in-house-test-parms-failed",selfTest: TpmSelfTestBehavior.Fails, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var simulator = new TpmSimulator("tpm-in-house-test-parms-failed", selfTest: TpmSelfTestBehavior.Fails, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
 

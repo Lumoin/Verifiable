@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -68,7 +64,7 @@ internal sealed class CtapAuthenticatorGetAssertionClientTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.NoCredentials], transceivePool, Fido2BufferTags.CtapResponseEnvelope));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -88,10 +84,10 @@ internal sealed class CtapAuthenticatorGetAssertionClientTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapGetAssertionRequest request = CtapMakeCredentialGetAssertionFixtures.BuildGetAssertionRequest(pool);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, transceivePool, Fido2BufferTags.CtapResponseEnvelope));
 
-        await Assert.ThrowsExactlyAsync<Fido2FormatException>(
+        _ = await Assert.ThrowsExactlyAsync<Fido2FormatException>(
             () => CtapAuthenticatorGetAssertionClient.GetAssertionAsync(
                 Transceive, CtapGetAssertionRequestCborWriter.Write, request, CtapGetAssertionResponseCborReader.Read, pool, TestContext.CancellationToken).AsTask());
 

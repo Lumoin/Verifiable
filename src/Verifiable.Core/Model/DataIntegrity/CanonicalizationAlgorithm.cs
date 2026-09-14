@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
@@ -52,7 +50,7 @@ namespace Verifiable.Core.Model.DataIntegrity
         public static CanonicalizationAlgorithm Jcs { get; } = new(2);
 
 
-        private static List<CanonicalizationAlgorithm> RegisteredAlgorithms { get; } = new([None, Rdfc10, Jcs]);
+        private static List<CanonicalizationAlgorithm> RegisteredAlgorithms { get; } = [None, Rdfc10, Jcs];
 
         /// <summary>
         /// Gets the collection of all registered canonicalization algorithms.

@@ -1,6 +1,5 @@
 using CsCheck;
 using System.Globalization;
-using Lumoin.Base;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.ToolTests;
@@ -59,7 +58,7 @@ internal sealed class McpServerPropertyTests
             var result = VerifiableOperations.CreateDid(id, "param", null);
 
             Assert.IsTrue(result.IsSuccess);
-            Assert.DoesNotContain("Extra parameter:", result.Value!, StringComparison.Ordinal);
+            Assert.DoesNotContain("Extra parameter:", result.Value, StringComparison.Ordinal);
         });
     }
 
@@ -72,7 +71,7 @@ internal sealed class McpServerPropertyTests
             var result = VerifiableOperations.CreateDid(1, "param", extra);
 
             Assert.IsTrue(result.IsSuccess);
-            Assert.Contains(extra, result.Value!, StringComparison.Ordinal);
+            Assert.Contains(extra, result.Value, StringComparison.Ordinal);
         });
     }
 

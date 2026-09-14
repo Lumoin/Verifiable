@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 
 namespace Verifiable.Json;

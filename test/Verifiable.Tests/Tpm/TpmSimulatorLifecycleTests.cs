@@ -1,9 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -11,9 +9,6 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -198,7 +193,7 @@ internal sealed class TpmSimulatorLifecycleTests
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
         var writer = new TpmWriter(command.Span);
-        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_MakeCredential);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_MakeCredential);
         header.WriteTo(ref writer);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);
@@ -231,7 +226,7 @@ internal sealed class TpmSimulatorLifecycleTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using IMemoryOwner<byte> owner = RentCommand(new GetTestResultInput(), pool, out int length);
         Memory<byte> command = owner.Memory[..length];
-        BinaryPrimitives.WriteUInt32BigEndian(command.Span.Slice(sizeof(ushort)), (uint)(length + 1));
+        BinaryPrimitives.WriteUInt32BigEndian(command.Span[sizeof(ushort)..], (uint)(length + 1));
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);
 
@@ -426,7 +421,7 @@ internal sealed class TpmSimulatorLifecycleTests
         using IMemoryOwner<byte> owner = pool.Rent(TpmHeader.HeaderSize);
         Memory<byte> command = owner.Memory[..TpmHeader.HeaderSize];
         var writer = new TpmWriter(command.Span);
-        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_GetRandom);
+        var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, TpmHeader.HeaderSize, (uint)TpmCcConstants.TPM_CC_GetRandom);
         header.WriteTo(ref writer);
 
         TpmRcConstants responseCode = await SubmitForCodeAsync(simulator, command).ConfigureAwait(false);
@@ -440,9 +435,9 @@ internal sealed class TpmSimulatorLifecycleTests
     public async Task FailedRandomDrawDoesNotCorruptNextCommand()
     {
         //An injected RNG backend that always throws models a hardware entropy failure.
-        void ThrowingRng(Span<byte> destination) => throw new InvalidOperationException("entropy backend failed");
+        static void ThrowingRng(Span<byte> destination) => throw new InvalidOperationException("entropy backend failed");
 
-        using var simulator = new TpmSimulator("tpm-rng-throws",selfTest: TpmSelfTestBehavior.Passes,rng: ThrowingRng, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var simulator = new TpmSimulator("tpm-rng-throws", selfTest: TpmSelfTestBehavior.Passes, rng: ThrowingRng, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(TpmRcConstants.TPM_RC_SUCCESS, await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false));
 
@@ -629,7 +624,7 @@ internal sealed class TpmSimulatorLifecycleTests
 
     private async Task<TpmSimulator> CreateOperationalAsync(TpmSelfTestBehavior selfTest = TpmSelfTestBehavior.Passes)
     {
-        var simulator = new TpmSimulator("tpm-operational",selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        var simulator = new TpmSimulator("tpm-operational", selfTest: selfTest, rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmRcConstants startupCode = await SubmitForCodeAsync(simulator, new StartupInput(TpmSuConstants.TPM_SU_CLEAR)).ConfigureAwait(false);

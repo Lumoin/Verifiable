@@ -1,15 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
-using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Siop.Wallet;
 using Verifiable.Tests.TestDataProviders;
@@ -85,7 +81,7 @@ internal sealed class SiopNonceReplayTests
             .ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, firstResponse.StatusCode, firstResponse.Body);
-        Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(
+        _ = Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(
             host.GetFlowState(firstHandle).State);
 
         //=== Second flow: SAME (client_id, nonce) token — §11.2 replay, fails closed. ===
@@ -97,7 +93,7 @@ internal sealed class SiopNonceReplayTests
             .ConfigureAwait(false);
 
         Assert.AreNotEqual((int)HttpStatusCode.OK, secondResponse.StatusCode, secondResponse.Body);
-        Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(
+        _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(
             host.GetFlowState(secondHandle).State);
     }
 
@@ -161,6 +157,6 @@ internal sealed class SiopNonceReplayTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 }

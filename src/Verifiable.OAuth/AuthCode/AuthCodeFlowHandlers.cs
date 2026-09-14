@@ -11,7 +11,6 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthCode;
 
@@ -74,7 +73,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        HandleParAsync(fields, redirectUri, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        HandleParAsync(fields, redirectUri, infrastructure, registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="HandleCallbackAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
@@ -83,7 +82,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        HandleCallbackAsync(fields, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        HandleCallbackAsync(fields, infrastructure, registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="HandleTokenAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
@@ -92,7 +91,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        HandleTokenAsync(fields, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        HandleTokenAsync(fields, infrastructure, registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="HandleRevocationAsync(IReadOnlyDictionary{string, string}, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
@@ -101,7 +100,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        HandleRevocationAsync(fields, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        HandleRevocationAsync(fields, infrastructure, registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="RefreshAsync(RefreshTokenRequest, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
@@ -110,7 +109,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        RefreshAsync(request, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        RefreshAsync(request, infrastructure, registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="HandleJarParAsync(AuthCodeStartJarParOptions, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
@@ -119,7 +118,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        HandleJarParAsync(jarOptions, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        HandleJarParAsync(jarOptions, infrastructure, registration, [], cancellationToken);
 
 
     /// <inheritdoc cref="HandleJarAuthorizeAsync(AuthCodeStartJarAuthorizeOptions, OAuthClientInfrastructure, ClientRegistration, ExchangeContext, CancellationToken)"/>
@@ -128,7 +127,7 @@ public static class AuthCodeFlowHandlers
         OAuthClientInfrastructure infrastructure,
         ClientRegistration registration,
         CancellationToken cancellationToken) =>
-        HandleJarAuthorizeAsync(jarOptions, infrastructure, registration, new ExchangeContext(), cancellationToken);
+        HandleJarAuthorizeAsync(jarOptions, infrastructure, registration, [], cancellationToken);
 
 
     /// <summary>
@@ -187,7 +186,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         AuthorizationServerMetadata metadata = metadataResult.Value;
@@ -246,7 +245,7 @@ public static class AuthCodeFlowHandlers
             //error, cancellation excepted above. The transport exception's own text is not part of an
             //OAuth error response, so the description is this fixed sentence; the exception itself is
             //recorded on the current Activity for diagnostics rather than echoed to the caller.
-            Activity.Current?.AddException(ex);
+            _ = (Activity.Current?.AddException(ex));
 
             return new AuthCodeFlowEndpointResult
             {
@@ -265,7 +264,7 @@ public static class AuthCodeFlowHandlers
         }
 
         ParResponse parResponse = parResult.Value;
-        ParCompletedState parCompleted = new ParCompletedState
+        ParCompletedState parCompleted = new()
         {
             FlowId = state,
             ExpectedIssuer = registration.AuthorizationServerIssuer.OriginalString,
@@ -322,7 +321,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         //RFC 6749 §4.1.2.1 Authorization Error Response — error is present instead of code.
@@ -367,7 +366,7 @@ public static class AuthCodeFlowHandlers
         //out-of-dispatch validators.
         ValidationContext validationContext = new()
         {
-            Context = new ExchangeContext(),
+            Context = [],
             Fields = fields,
             FlowState = parCompleted,
             TimeProvider = infrastructure.TimeProvider,
@@ -421,7 +420,7 @@ public static class AuthCodeFlowHandlers
 
         DateTimeOffset now = infrastructure.TimeProvider.GetUtcNow();
 
-        AuthorizationCodeReceivedState codeReceived = new AuthorizationCodeReceivedState
+        AuthorizationCodeReceivedState codeReceived = new()
         {
             FlowId = parCompleted.FlowId,
             ExpectedIssuer = parCompleted.ExpectedIssuer,
@@ -514,7 +513,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         AuthorizationServerMetadata metadata = metadataResult.Value;
@@ -658,7 +657,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         AuthorizationServerMetadata metadata = metadataResult.Value;
@@ -759,7 +758,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         AuthorizationServerMetadata metadata = metadataResult.Value;
@@ -835,7 +834,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         AuthorizationServerMetadata metadata = metadataResult.Value;
@@ -891,7 +890,7 @@ public static class AuthCodeFlowHandlers
             //cancellation excepted above. The transport exception's own text is not part of an OAuth error
             //response, so the description is this fixed sentence; the exception itself is recorded on the
             //current Activity for diagnostics rather than echoed to the caller.
-            Activity.Current?.AddException(ex);
+            _ = (Activity.Current?.AddException(ex));
 
             return new AuthCodeFlowEndpointResult
             {
@@ -964,7 +963,7 @@ public static class AuthCodeFlowHandlers
                 infrastructure, registration, context, cancellationToken).ConfigureAwait(false);
         if(!metadataResult.IsSuccess)
         {
-            return metadataResult.Error!;
+            return metadataResult.Error;
         }
 
         AuthorizationServerMetadata metadata = metadataResult.Value;
@@ -1040,21 +1039,21 @@ public static class AuthCodeFlowHandlers
         string state,
         string nonce,
         DateTimeOffset now) => new()
-    {
-        ClientId = registration.ClientId.Value,
-        ResponseType = WellKnownResponseTypes.Code,
-        RedirectUri = jarOptions.RedirectUri,
-        Scope = jarOptions.Scope,
-        State = state,
-        Nonce = nonce,
-        CodeChallenge = pkce.EncodedChallenge,
-        CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
-        Iat = now,
-        Nbf = now,
-        Exp = now.Add(jarOptions.JarLifetime),
-        Iss = registration.ClientId.Value,
-        Aud = registration.AuthorizationServerIssuer.OriginalString
-    };
+        {
+            ClientId = registration.ClientId.Value,
+            ResponseType = WellKnownResponseTypes.Code,
+            RedirectUri = jarOptions.RedirectUri,
+            Scope = jarOptions.Scope,
+            State = state,
+            Nonce = nonce,
+            CodeChallenge = pkce.EncodedChallenge,
+            CodeChallengeMethod = pkce.Method.ToString().ToUpperInvariant(),
+            Iat = now,
+            Nbf = now,
+            Exp = now.Add(jarOptions.JarLifetime),
+            Iss = registration.ClientId.Value,
+            Aud = registration.AuthorizationServerIssuer.OriginalString
+        };
 
 
     private static Uri BuildJarAuthorizeRedirectUri(
@@ -1064,22 +1063,22 @@ public static class AuthCodeFlowHandlers
         OAuthFormEncodedFields additionalFields)
     {
         StringBuilder builder = new();
-        builder.Append(authorizationEndpoint);
-        builder.Append('?');
-        builder.Append(OAuthRequestParameterNames.ClientId);
-        builder.Append('=');
-        builder.Append(Uri.EscapeDataString(clientId));
-        builder.Append('&');
-        builder.Append(OAuthRequestParameterNames.Request);
-        builder.Append('=');
-        builder.Append(Uri.EscapeDataString(compactJar));
+        _ = builder.Append(authorizationEndpoint);
+        _ = builder.Append('?');
+        _ = builder.Append(OAuthRequestParameterNames.ClientId);
+        _ = builder.Append('=');
+        _ = builder.Append(Uri.EscapeDataString(clientId));
+        _ = builder.Append('&');
+        _ = builder.Append(OAuthRequestParameterNames.Request);
+        _ = builder.Append('=');
+        _ = builder.Append(Uri.EscapeDataString(compactJar));
 
         foreach((string key, string value) in additionalFields.Fields)
         {
-            builder.Append('&');
-            builder.Append(Uri.EscapeDataString(key));
-            builder.Append('=');
-            builder.Append(Uri.EscapeDataString(value));
+            _ = builder.Append('&');
+            _ = builder.Append(Uri.EscapeDataString(key));
+            _ = builder.Append('=');
+            _ = builder.Append(Uri.EscapeDataString(value));
         }
 
         return new Uri(builder.ToString());
@@ -1229,7 +1228,7 @@ public static class AuthCodeFlowHandlers
         static ValueTask<OutgoingHeaders> AttachClientSecretPost(OutgoingFormFields form, ClientRegistration registration)
         {
             PrivateKeyMemory secret = RequireAuthenticationKey(registration);
-            form.WithClientSecretPost(registration.ClientId.Value, secret.AsReadOnlySpan());
+            _ = form.WithClientSecretPost(registration.ClientId.Value, secret.AsReadOnlySpan());
 
             return ValueTask.FromResult(OutgoingHeaders.Empty);
         }
@@ -1375,7 +1374,7 @@ public static class AuthCodeFlowHandlers
         string errorCode,
         CancellationToken cancellationToken)
     {
-        fields.TryGetValue(OAuthRequestParameterNames.ErrorDescription, out string? errorDescription);
+        _ = fields.TryGetValue(OAuthRequestParameterNames.ErrorDescription, out string? errorDescription);
 
         if(fields.TryGetValue(OAuthRequestParameterNames.State, out string? errorState))
         {
@@ -1386,7 +1385,7 @@ public static class AuthCodeFlowHandlers
             {
                 ValidationContext issuerCheckContext = new()
                 {
-                    Context = new ExchangeContext(),
+                    Context = [],
                     Fields = fields,
                     FlowState = errorParCompleted,
                     Now = infrastructure.TimeProvider.GetUtcNow()

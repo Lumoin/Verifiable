@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Verifiable.Cryptography;
 
 /// <summary>
@@ -73,7 +71,7 @@ namespace Verifiable.Cryptography;
 /// <seealso cref="SensitiveMemory"/>
 /// <seealso cref="PublicKeyMemory"/>
 /// <seealso cref="PrivateKeyMemory"/>
-public delegate ValueTask<TResult?> KeyMaterialResolver<TResult, TContext, TState>(TContext context, BaseMemoryPool pool, TState state, CancellationToken cancellationToken = default) where TResult: SensitiveMemory;
+public delegate ValueTask<TResult?> KeyMaterialResolver<TResult, TContext, TState>(TContext context, BaseMemoryPool pool, TState state, CancellationToken cancellationToken = default) where TResult : SensitiveMemory;
 
 
 /// <summary>
@@ -152,4 +150,4 @@ public delegate ValueTask<TResult?> KeyMaterialResolver<TResult, TContext, TStat
 /// <seealso cref="KeyMaterialResolver{TResult, TContext, TState}"/>
 /// <seealso cref="PublicKey"/>
 /// <seealso cref="PrivateKey"/>
-public delegate ValueTask<TResult> KeyMaterialBinder<TInput, TResult, TState>(TInput material, TState state, CancellationToken cancellationToken = default) where TInput: SensitiveMemory;
+public delegate ValueTask<TResult> KeyMaterialBinder<TInput, TResult, TState>(TInput material, TState state, CancellationToken cancellationToken = default) where TInput : SensitiveMemory;

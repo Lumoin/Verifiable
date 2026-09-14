@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -11,7 +5,6 @@ using Verifiable.Json;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -235,12 +228,12 @@ internal sealed class StatusListTokenVerificationTests
         string compact = await SignRawPayloadAsync(BuildHeaderWithType("JWT"), NotJsonPayload.ToArray(), issuerPrivate).ConfigureAwait(false);
 
         int resolverCalls = 0;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
-        };
+        }
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
 
@@ -267,12 +260,12 @@ internal sealed class StatusListTokenVerificationTests
         string compact = await SignAsync(BuildHeaderWithAlgorithm(WellKnownJwaValues.None), BuildPayload(), issuerPrivate).ConfigureAwait(false);
 
         int resolverCalls = 0;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
-        };
+        }
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
 
@@ -335,12 +328,12 @@ internal sealed class StatusListTokenVerificationTests
         string compact = await SignAsync(BuildHeaderWithAlgorithm(WellKnownJwaValues.Hs256), BuildPayload(), issuerPrivate).ConfigureAwait(false);
 
         int resolverCalls = 0;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
-        };
+        }
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
 
@@ -426,12 +419,12 @@ internal sealed class StatusListTokenVerificationTests
         string compact = await SignAsync(BuildHeader(), BuildPayload(), issuerPrivate).ConfigureAwait(false);
 
         int resolverCalls = 0;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(null);
-        };
+        }
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
 
@@ -461,13 +454,13 @@ internal sealed class StatusListTokenVerificationTests
         string? seenUri = null;
         object? seenKeyId = null;
         bool isKeyIdPresent = false;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext context, CancellationToken cancellationToken)
         {
             seenUri = context.StatusListUri;
             isKeyIdPresent = context.Header.TryGetValue(WellKnownJwkMemberNames.Kid, out seenKeyId);
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
-        };
+        }
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
 
@@ -646,12 +639,12 @@ internal sealed class StatusListTokenVerificationTests
         using PrivateKeyMemory issuerPrivate = issuerKeys.PrivateKey;
 
         int resolverCalls = 0;
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
-        };
+        }
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
 
@@ -991,7 +984,7 @@ internal sealed class StatusListTokenVerificationTests
         (string compact, StatusListTokenVerificationFailure? expectedFailure) =
             await TokenTakingAsync(path, issuerPrivate, strangerPrivate).ConfigureAwait(false);
 
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
             ValueTask.FromResult<ResolvedStatusListIssuerKey?>(StatusListFixtures.OwnedKeyOver(issuerPublic, metered.Pool));
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
@@ -1040,7 +1033,7 @@ internal sealed class StatusListTokenVerificationTests
 
         //The resolver, not the read, owns this carrier for the whole evaluation, exactly as a key set does.
         ResolvedStatusListIssuerKey lent = StatusListFixtures.BorrowedKeyOver(issuerPublic, metered.Pool);
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
             ValueTask.FromResult<ResolvedStatusListIssuerKey?>(lent);
 
         StatusListTokenVerificationResult result = await VerifyAsync(compact, resolveIssuerKey).ConfigureAwait(false);
@@ -1259,12 +1252,12 @@ internal sealed class StatusListTokenVerificationTests
     /// <returns>The compact serialization.</returns>
     private async Task<string> SignRawPayloadAsync(JwtHeader header, byte[] payloadBytes, PrivateKeyMemory signingKey)
     {
-        JwtPayloadSerializer rawSerializer = _ => payloadBytes;
-        var unsigned = new UnsignedJwt(header, new JwtPayload());
+        ReadOnlySpan<byte> rawSerializer(JwtPayload _) => payloadBytes;
+        var unsigned = new UnsignedJwt(header, []);
         using JwsMessage jws = await unsigned.SignAsync(
             signingKey,
             JwtClaimsJson.HeaderSerializer,
-            rawSerializer,
+rawSerializer,
             TestSetup.Base64UrlEncoder,
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);

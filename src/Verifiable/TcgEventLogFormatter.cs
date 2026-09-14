@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
+using Lumoin.Base;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using Lumoin.Base;
 using Verifiable.Tpm;
 using Verifiable.Tpm.EventLog;
 using Verifiable.Tpm.Extensions.EventLog;
@@ -154,7 +152,7 @@ internal static class TcgEventLogFormatter
         var typeCounts = new System.Collections.Generic.Dictionary<uint, int>();
         foreach(var evt in log.Events)
         {
-            typeCounts.TryGetValue(evt.EventType, out int count);
+            _ = typeCounts.TryGetValue(evt.EventType, out int count);
             typeCounts[evt.EventType] = count + 1;
         }
 

@@ -17,19 +17,19 @@ namespace Verifiable.Tests.Jose
         {
             yield return new object[] { WellKnownJwaValues.None, new Func<string, bool>(WellKnownJwaValues.IsNone) };
             yield return new object[] { WellKnownJwaValues.Hs256, new Func<string, bool>(WellKnownJwaValues.IsHs256) };
-            yield return new object[] {WellKnownJwaValues.Hs384, new Func<string, bool>(WellKnownJwaValues.IsHs384) };
-            yield return new object[] {WellKnownJwaValues.Hs512, new Func<string, bool>(WellKnownJwaValues.IsHs512) };
-            yield return new object[] {WellKnownJwaValues.Es256, new Func<string, bool>(WellKnownJwaValues.IsEs256) };
-            yield return new object[] {WellKnownJwaValues.Es384, new Func<string, bool>(WellKnownJwaValues.IsEs384) };
-            yield return new object[] {WellKnownJwaValues.Es512, new Func<string, bool>(WellKnownJwaValues.IsEs512) };
-            yield return new object[] {WellKnownJwaValues.Es256K, new Func<string, bool>(WellKnownJwaValues.IsEs256K) };
-            yield return new object[] {WellKnownJwaValues.Ps256, new Func<string, bool>(WellKnownJwaValues.IsPs256) };
-            yield return new object[] {WellKnownJwaValues.Ps384, new Func<string, bool>(WellKnownJwaValues.IsPs384) };
-            yield return new object[] {WellKnownJwaValues.Ps512, new Func<string, bool>(WellKnownJwaValues.IsPs512) };
-            yield return new object[] {WellKnownJwaValues.Rs256, new Func<string, bool>(WellKnownJwaValues.IsRs256) };
-            yield return new object[] {WellKnownJwaValues.Rs384, new Func<string, bool>(WellKnownJwaValues.IsRs384) };
-            yield return new object[] {WellKnownJwaValues.Rs512, new Func<string, bool>(WellKnownJwaValues.IsRs512) };
-            yield return new object[] {WellKnownJwaValues.EdDsa, new Func<string, bool>(WellKnownJwaValues.IsEdDsa) };
+            yield return new object[] { WellKnownJwaValues.Hs384, new Func<string, bool>(WellKnownJwaValues.IsHs384) };
+            yield return new object[] { WellKnownJwaValues.Hs512, new Func<string, bool>(WellKnownJwaValues.IsHs512) };
+            yield return new object[] { WellKnownJwaValues.Es256, new Func<string, bool>(WellKnownJwaValues.IsEs256) };
+            yield return new object[] { WellKnownJwaValues.Es384, new Func<string, bool>(WellKnownJwaValues.IsEs384) };
+            yield return new object[] { WellKnownJwaValues.Es512, new Func<string, bool>(WellKnownJwaValues.IsEs512) };
+            yield return new object[] { WellKnownJwaValues.Es256K, new Func<string, bool>(WellKnownJwaValues.IsEs256K) };
+            yield return new object[] { WellKnownJwaValues.Ps256, new Func<string, bool>(WellKnownJwaValues.IsPs256) };
+            yield return new object[] { WellKnownJwaValues.Ps384, new Func<string, bool>(WellKnownJwaValues.IsPs384) };
+            yield return new object[] { WellKnownJwaValues.Ps512, new Func<string, bool>(WellKnownJwaValues.IsPs512) };
+            yield return new object[] { WellKnownJwaValues.Rs256, new Func<string, bool>(WellKnownJwaValues.IsRs256) };
+            yield return new object[] { WellKnownJwaValues.Rs384, new Func<string, bool>(WellKnownJwaValues.IsRs384) };
+            yield return new object[] { WellKnownJwaValues.Rs512, new Func<string, bool>(WellKnownJwaValues.IsRs512) };
+            yield return new object[] { WellKnownJwaValues.EdDsa, new Func<string, bool>(WellKnownJwaValues.IsEdDsa) };
         }
 
 

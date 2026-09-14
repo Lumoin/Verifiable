@@ -1,18 +1,14 @@
-using System;
+using Org.BouncyCastle.Crypto.Digests;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
-using Org.BouncyCastle.Crypto.Digests;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -58,11 +54,11 @@ internal static class WebPlusMinter
     public static string MbHash(ReadOnlySpan<byte> input)
     {
         Span<byte> digest = stackalloc byte[Blake3DigestLength];
-        Blake3(input, digest);
+        _ = Blake3(input, digest);
 
         Span<byte> multihashHeader = stackalloc byte[MultihashCode.Length + 1];
         MultihashCode.Span.CopyTo(multihashHeader);
-        multihashHeader[MultihashCode.Length] = (byte)Blake3DigestLength;
+        multihashHeader[MultihashCode.Length] = Blake3DigestLength;
 
         return MultibaseSerializer.Encode(digest, multihashHeader, MultibaseAlgorithms.Base64Url, TestSetup.Base64UrlEncoder, BaseMemoryPool.Shared);
     }
@@ -207,7 +203,7 @@ internal static class WebPlusMinter
             VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
                 verificationKey.PublicKey, MultikeyVerificationMethodTypeInfo.Instance, verificationMethodId, id, BaseMemoryPool.Shared);
             didDocument.VerificationMethod = [verificationMethod];
-            didDocument.WithStandardVerificationRelationships(verificationKey.PublicKey, verificationMethodId);
+            _ = didDocument.WithStandardVerificationRelationships(verificationKey.PublicKey, verificationMethodId);
         }
 
         JsonObject document = JsonNode.Parse(JsonSerializerExtensions.Serialize(didDocument, TestSetup.DefaultSerializationOptions))!.AsObject();
@@ -237,7 +233,7 @@ internal static class WebPlusMinter
     {
         if(plan.Deactivate)
         {
-            return new JsonObject();
+            return [];
         }
 
         return new JsonObject { ["key"] = plan.UpdateKey!.MbPubKey };
@@ -293,7 +289,7 @@ internal static class WebPlusMinter
         //encoded through the shared encoder delegate (never a raw BCL Base64 call).
         int headerByteCount = Encoding.UTF8.GetByteCount(headerText);
         using IMemoryOwner<byte> headerOwner = BaseMemoryPool.Shared.Rent(headerByteCount);
-        Encoding.UTF8.GetBytes(headerText, headerOwner.Memory.Span[..headerByteCount]);
+        _ = Encoding.UTF8.GetBytes(headerText, headerOwner.Memory.Span[..headerByteCount]);
         string protectedSegment = TestSetup.Base64UrlEncoder(headerOwner.Memory.Span[..headerByteCount]);
 
         //The RFC 7797 unencoded-payload (b64:false) signing input — ASCII(protected) '.' rawPayload(S) — assembled

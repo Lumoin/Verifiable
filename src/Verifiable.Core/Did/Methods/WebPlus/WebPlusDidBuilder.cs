@@ -1,13 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 
 namespace Verifiable.Core.Did.Methods.WebPlus;
 
@@ -128,13 +122,13 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
 
         //First transformation: the standard verification method and its relationships, via the SHARED
         //construction every method builder uses — only the did:webplus verification-method id format is specific.
-        _ = With((document, builder, buildState, _) =>
+        _ = With((document, builder, buildState, cancellationToken) =>
         {
             string verificationMethodId = $"{buildState!.PlaceholderDid}?selfHash={buildState.Placeholder}&versionId=0#0";
             VerificationMethod verificationMethod = DidBuilderExtensions.CreateVerificationMethod(
                 buildState.UpdateKey, buildState.VerificationMethodType, verificationMethodId, buildState.PlaceholderDid, builder.Pool);
             document.VerificationMethod = [verificationMethod];
-            document.WithStandardVerificationRelationships(buildState.UpdateKey, verificationMethodId);
+            _ = document.WithStandardVerificationRelationships(buildState.UpdateKey, verificationMethodId);
 
             return ValueTask.FromResult(document);
         })
@@ -183,7 +177,7 @@ public sealed class WebPlusDidBuilder: Builder<DidDocument, WebPlusDidBuildState
             {
                 verificationMethod.Id = verificationMethod.Id?.Replace(placeholder, selfHash, StringComparison.Ordinal);
                 verificationMethod.Controller = verificationMethod.Controller?.Replace(placeholder, selfHash, StringComparison.Ordinal);
-                webPlus.WithStandardVerificationRelationships(buildState.UpdateKey, verificationMethod.Id!);
+                _ = webPlus.WithStandardVerificationRelationships(buildState.UpdateKey, verificationMethod.Id!);
             }
 
             return document;

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Cesr;
 
 namespace Verifiable.Tests.Cesr;
@@ -60,6 +59,6 @@ internal sealed class CesrVersionPrimitiveTests
     [TestMethod]
     public void RejectsTooShortVersionString()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrVersionPrimitive.ProtocolAndVersion("ACDC"));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrVersionPrimitive.ProtocolAndVersion("ACDC"));
     }
 }

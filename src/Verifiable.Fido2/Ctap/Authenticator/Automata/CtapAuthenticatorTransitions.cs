@@ -1,16 +1,10 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
-using Verifiable.Fido2;
-using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Foundation.Automata;
-using Verifiable.JCose;
 
 namespace Verifiable.Fido2.Ctap.Authenticator.Automata;
 
@@ -749,7 +743,7 @@ public static class CtapAuthenticatorTransitions
             }
 
             //Sub-step 2.1 (line 3336): capable AND enabled, but the value is neither 1 nor 2.
-            if(enterpriseAttestationValue != 1 && enterpriseAttestationValue != 2)
+            if(enterpriseAttestationValue is not 1 and not 2)
             {
                 return Reject(state, WellKnownCtapStatusCodes.InvalidOption, "MakeCredential:EnterpriseAttestationInvalidValue");
             }
@@ -1581,13 +1575,13 @@ public static class CtapAuthenticatorTransitions
     /// </summary>
     private static TransitionResult<CtapAuthenticatorState, CtapAuthenticatorStackSymbol> ResumeAfterUserPresenceGranted(
         CtapAuthenticatorState state, CtapUserPresenceContinuation continuation) => continuation switch
-    {
-        CtapMakeCredentialUserPresenceContinuation mc =>
-            ContinueMakeCredential(state, mc.Requested, mc.Requested.Request, mc.UserVerified, userPresent: true, mc.EnterpriseAttestationGranted),
-        CtapGetAssertionUserPresenceContinuation ga =>
-            ContinueGetAssertion(state, ga.Requested, ga.Requested.Request, ga.UserVerified, userPresent: true, ga.AuthenticatingPinUvAuthProtocol),
-        _ => throw new NotSupportedException($"No resume handling is defined for user-presence continuation '{continuation.GetType().Name}'.")
-    };
+        {
+            CtapMakeCredentialUserPresenceContinuation mc =>
+                ContinueMakeCredential(state, mc.Requested, mc.Requested.Request, mc.UserVerified, userPresent: true, mc.EnterpriseAttestationGranted),
+            CtapGetAssertionUserPresenceContinuation ga =>
+                ContinueGetAssertion(state, ga.Requested, ga.Requested.Request, ga.UserVerified, userPresent: true, ga.AuthenticatingPinUvAuthProtocol),
+            _ => throw new NotSupportedException($"No resume handling is defined for user-presence continuation '{continuation.GetType().Name}'.")
+        };
 
 
     /// <summary>
@@ -3559,8 +3553,8 @@ public static class CtapAuthenticatorTransitions
         CtapAuthenticatorState state, CtapPinUvAuthProtocolId protocolId, CtapPinUvAuthKeyAgreementKeyPair regeneratedKeyPair,
         CtapPinAttemptVerdict? verdict)
     {
-        int retries = verdict?.RetriesRemaining ?? state.PinRetries - 1;
-        bool isBlocked = verdict?.IsBlocked ?? retries == 0;
+        int retries = verdict?.RetriesRemaining ?? (state.PinRetries - 1);
+        bool isBlocked = verdict?.IsBlocked ?? (retries == 0);
         int mismatches = state.ConsecutivePinMismatches + 1;
 
         (byte statusCode, bool isLatched) = isBlocked

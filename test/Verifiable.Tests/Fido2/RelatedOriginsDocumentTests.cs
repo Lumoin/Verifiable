@@ -70,7 +70,7 @@ internal sealed class RelatedOriginsDocumentTests
     [TestMethod]
     public void NullCandidateThrowsArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => RelatedOrigins.IsValidOrigin(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => RelatedOrigins.IsValidOrigin(null!));
     }
 
 
@@ -113,7 +113,7 @@ internal sealed class RelatedOriginsDocumentTests
     [TestMethod]
     public void NullRpIdSequenceThrowsArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => RelatedOrigins.HasSingleCommonRpId(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => RelatedOrigins.HasSingleCommonRpId(null!));
     }
 
 

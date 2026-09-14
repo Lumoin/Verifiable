@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Keri;
@@ -65,9 +64,9 @@ public static class WellKnownKeriCountCodes
     /// <returns>The equivalent interned instance of <paramref name="code"/>, or the original instance if none match.</returns>
     public static string GetCanonicalizedValue(string code) => code switch
     {
-        string _ when Equals(code, ControllerSignatureGroup) => ControllerSignatureGroup,
-        string _ when Equals(code, WitnessSignatureGroup) => WitnessSignatureGroup,
-        string _ => code
+        string when Equals(code, ControllerSignatureGroup) => ControllerSignatureGroup,
+        string when Equals(code, WitnessSignatureGroup) => WitnessSignatureGroup,
+        string => code
     };
 
 

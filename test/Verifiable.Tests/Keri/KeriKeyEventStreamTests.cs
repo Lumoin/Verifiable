@@ -1,11 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cesr;
 using Verifiable.Cesr.Streaming;
@@ -77,7 +73,7 @@ internal sealed class KeriKeyEventStreamTests
             Assert.IsTrue(result.IsVerified, $"Every streamed event must verify; error: '{result.Error}'.");
             Assert.AreEqual(3, result.EventCount, "The stream carries three events.");
             Assert.IsNotNull(result.KeyState, "A verified log yields a key state.");
-            Assert.AreEqual(2, result.KeyState!.SequenceNumber, "The log advances to sequence two.");
+            Assert.AreEqual(2, result.KeyState.SequenceNumber, "The log advances to sequence two.");
             Assert.AreEqual(rotation.Said, result.KeyState.LastEventSaid, "The last event SAID is the rotation's.");
             Assert.AreSequenceEqual(
                 (System.Collections.ICollection)rotation.SigningKeys,
@@ -350,7 +346,7 @@ internal sealed class KeriKeyEventStreamTests
             WriteEventFrame(pipe.Writer, signed);
         }
 
-        await pipe.Writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+        _ = await pipe.Writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         await pipe.Writer.CompleteAsync().ConfigureAwait(false);
 
         KeriKeyEventStreamReplayResult result = await KeriKeyEventStream.ReplayAsync(
@@ -376,7 +372,7 @@ internal sealed class KeriKeyEventStreamTests
         string indexedSignature = CesrIndexedSignatureCodec.EncodeText(WellKnownCesrSignatureCodes.Ed25519, signed.Signature.AsReadOnlyMemory().Span, index: 0);
         int byteCount = Encoding.ASCII.GetByteCount(indexedSignature);
         using IMemoryOwner<byte> groupBody = BaseMemoryPool.Shared.Rent(byteCount);
-        Encoding.ASCII.GetBytes(indexedSignature, groupBody.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(indexedSignature, groupBody.Memory.Span);
         CesrStreamWriter.WriteTextGroup(writer, WellKnownKeriCountCodes.ControllerSignatureGroup, groupBody.Memory.Span[..byteCount]);
     }
 
@@ -434,7 +430,7 @@ internal sealed class KeriKeyEventStreamTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return await CesrSaid.ComputeAsync(owner.Memory[..length], Code, AgileDigest, BaseMemoryPool.Shared).ConfigureAwait(false);
     }
@@ -532,7 +528,7 @@ internal sealed class KeriKeyEventStreamTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return new MintedEvent(owner, length, said);
     }

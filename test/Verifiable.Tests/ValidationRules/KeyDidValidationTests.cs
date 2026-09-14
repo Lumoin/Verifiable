@@ -1,7 +1,6 @@
 using Verifiable.Core.Assessment;
-using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Validation;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -24,11 +23,11 @@ namespace Verifiable.Tests.ValidationRules
         {
             //These are test vectors from https://w3c-ccg.github.io/did-method-key/#test-vectors.
             var keyDid = new DidDocument();
-            keyDid.Id = new KeyDidMethod("did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");            
+            keyDid.Id = new KeyDidMethod("did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");
             var successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid, cancellationToken: TestContext.CancellationToken)
                 .ConfigureAwait(false);
             Assert.IsTrue(successfulValidationResult.All(c => c.Outcome == ClaimOutcome.Success));
-            
+
             keyDid.Id = new KeyDidMethod("did:key:zInvalidMkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp");
             successfulValidationResult = await KeyDidValidationRules.ValidateIdFormatAsync(keyDid, cancellationToken: TestContext.CancellationToken)
                 .ConfigureAwait(false);

@@ -1,13 +1,8 @@
-using System;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
-using Verifiable.Tpm.Spec;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Automata;
 
@@ -790,7 +785,7 @@ public sealed record TpmSimulatorState(
     /// <returns><see langword="true"/> when <paramref name="hierarchy"/> names a hierarchy that has a policy slot.</returns>
     public bool TryGetHierarchyAuthPolicy(uint hierarchy, out Tpm2bDigest authPolicy, out TpmiAlgHash authPolicyHashAlg)
     {
-        (Tpm2bDigest Digest, TpmiAlgHash HashAlg) resolved = hierarchy switch
+        (Tpm2bDigest Digest, TpmiAlgHash HashAlg) = hierarchy switch
         {
             (uint)TpmRh.TPM_RH_OWNER => (Digest: OwnerAuthPolicy, HashAlg: OwnerAuthPolicyHashAlg),
             (uint)TpmRh.TPM_RH_ENDORSEMENT => (Digest: EndorsementAuthPolicy, HashAlg: EndorsementAuthPolicyHashAlg),
@@ -799,8 +794,8 @@ public sealed record TpmSimulatorState(
             _ => (Digest: Tpm2bDigest.Empty, HashAlg: TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_NULL))
         };
 
-        authPolicy = resolved.Digest;
-        authPolicyHashAlg = resolved.HashAlg;
+        authPolicy = Digest;
+        authPolicyHashAlg = HashAlg;
 
         return IsHierarchyAuthHandle(hierarchy);
     }

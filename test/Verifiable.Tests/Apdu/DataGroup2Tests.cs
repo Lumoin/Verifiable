@@ -1,7 +1,5 @@
-using System;
 using System.Buffers.Binary;
 using Verifiable.Apdu.Lds;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Apdu;
 

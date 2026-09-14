@@ -1,6 +1,5 @@
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Base;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -312,7 +311,7 @@ public static class XAdESArchiveTimeStampImprint
 
         using(referencesContribution)
         {
-            output.AddRange(referencesContribution!.AsReadOnlySpan());
+            _ = output.AddRange(referencesContribution.AsReadOnlySpan());
         }
 
         //Step 4: ds:SignedInfo, ds:SignatureValue, then ds:KeyInfo if present, in that fixed order.
@@ -405,7 +404,7 @@ public static class XAdESArchiveTimeStampImprint
                 return false;
             }
 
-            output.AddRange(canonical!.AsReadOnlySpan());
+            _ = output.AddRange(canonical.AsReadOnlySpan());
             error = default;
 
             return true;

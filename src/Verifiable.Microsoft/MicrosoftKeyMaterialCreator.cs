@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -186,9 +185,9 @@ public static class MicrosoftKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = CryptoTags.P256ExchangePrivateKey.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         using ECDiffieHellman ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
@@ -282,9 +281,9 @@ public static class MicrosoftKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         using ECDiffieHellman ecdh = ECDiffieHellman.Create(namedCurve);
@@ -333,9 +332,9 @@ public static class MicrosoftKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(ECCurve namedCurve) =>
@@ -381,9 +380,9 @@ public static class MicrosoftKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         static (Tag PublicKeyTag, Tag PrivateKeyTag) GetTags(int keySizeInBits) =>
@@ -398,7 +397,7 @@ public static class MicrosoftKeyMaterialCreator
         using RSA key = RSA.Create(keySizeInBits);
         RSAParameters parameters = key.ExportParameters(includePrivateParameters: true);
 
-        byte[] derEncodedPublicKey = RsaUtilities.Encode(parameters.Modulus!);
+        byte[] derEncodedPublicKey = RsaUtilities.Encode(parameters.Modulus);
 
         var publicKeyMemory = new PublicKeyMemory(
             AsPooledMemory(derEncodedPublicKey, memoryPool, AllocationKind.Managed), publicKeyTag);
@@ -450,9 +449,9 @@ public static class MicrosoftKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         using MLDsa key = MLDsa.GenerateKey(algorithm);
@@ -514,9 +513,9 @@ public static class MicrosoftKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         using MLKem key = MLKem.GenerateKey(algorithm);

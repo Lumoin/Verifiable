@@ -6,7 +6,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -413,9 +412,9 @@ internal sealed class JoseTests
         JwtPayload payload = new() { [WellKnownJwtClaimNames.Sub] = "null-test" };
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await Jws.SignAsync(
+            _ = await Jws.SignAsync(
                 header,
                 payload,
                 JwtWireFixtures.EncodeJwtPart,
@@ -447,7 +446,7 @@ internal sealed class JoseTests
     [TestMethod]
     public void CryptoFormatConversionsThrowsForUnsupportedAlgorithm()
     {
-        Assert.Throws<NotSupportedException>(() => GetSigningTag("UNSUPPORTED"));
+        _ = Assert.Throws<NotSupportedException>(() => GetSigningTag("UNSUPPORTED"));
     }
 
 

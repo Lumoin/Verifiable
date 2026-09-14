@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -138,7 +135,7 @@ internal sealed class EArkEvidenceSelfDescriptionTests
         _ = Assert.Throws<InvalidOperationException>(() => nothing.ToExtensionText(BaseMemoryPool.Shared));
 
         var writer = new AsnWriter(AsnEncodingRules.DER);
-        writer.PushSequence();
+        _ = writer.PushSequence();
         writer.PopSequence();
         Assert.IsFalse(EArkEvidenceSelfDescription.TryDecodeValue(writer.Encode(), out EArkEvidenceSelfDescription? read));
         Assert.IsNull(read);

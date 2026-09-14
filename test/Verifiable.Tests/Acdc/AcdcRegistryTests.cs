@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -117,7 +115,7 @@ internal sealed class AcdcRegistryTests
             TransactionAcdcSaid: AcdcExampleVectors.RegistryTargetAcdcSaid,
             TransactionState: "issued");
 
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRegistry.ValidateChain([inception, brokenUpdate]));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRegistry.ValidateChain([inception, brokenUpdate]));
     }
 
 
@@ -138,7 +136,7 @@ internal sealed class AcdcRegistryTests
             TransactionAcdcSaid: AcdcExampleVectors.RegistryTargetAcdcSaid,
             TransactionState: "issued");
 
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRegistry.ValidateChain([inception, foreignUpdate]));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRegistry.ValidateChain([inception, foreignUpdate]));
     }
 
 
@@ -150,7 +148,7 @@ internal sealed class AcdcRegistryTests
     {
         var update = AcdcRegistryReader.Read(Decode(AcdcExampleVectors.RegistryIssuedUpdateJson));
 
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRegistry.ValidateChain([update]));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRegistry.ValidateChain([update]));
     }
 
 
@@ -161,7 +159,7 @@ internal sealed class AcdcRegistryTests
     public void RejectsFieldsOutOfOrder()
     {
         //The inception with its issuer and uuid swapped out of order.
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRegistryReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRegistryReader.Read(Decode(
             """{"v":"ACDCCAACAAJSONAADa.","t":"rip","d":"d","i":"EEDGM_DvZ9qFEAPf_FX08J3HX49ycrVvYVXe9isaP5SW","u":"0ABhY2Rjc3BlY3dvcmtyYXcz","n":"0","dt":"2025-07-04T17:53:00.000000+00:00"}""")));
     }
 
@@ -172,7 +170,7 @@ internal sealed class AcdcRegistryTests
     [TestMethod]
     public void RejectsBlindableUpdate()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcRegistryReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcRegistryReader.Read(Decode(
             """{"v":"ACDCCAACAAJSONAADa.","t":"bup","d":"d","rd":"rd","n":"1","p":"p","dt":"dt","b":"b"}""")));
     }
 

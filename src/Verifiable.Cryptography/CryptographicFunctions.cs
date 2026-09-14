@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Verifiable.Cryptography;
 
 // This library provides two parallel sets of cryptographic function delegates:

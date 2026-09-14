@@ -3,7 +3,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 
 namespace Verifiable.Tests.OAuth;
 

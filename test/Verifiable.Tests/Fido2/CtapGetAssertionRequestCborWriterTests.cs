@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
@@ -123,6 +122,6 @@ internal sealed class CtapGetAssertionRequestCborWriterTests
     [TestMethod]
     public void ThrowsArgumentNullExceptionForNullRequest()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CtapGetAssertionRequestCborWriter.Write(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CtapGetAssertionRequestCborWriter.Write(null!));
     }
 }

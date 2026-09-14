@@ -1,12 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -333,6 +328,7 @@ public static class EvidenceRecordCmsIntegration
     {
         EvidenceRecordCmsSelectionMethod.CmsObject => EvidenceRecordWellKnown.InternalEvidenceRecordAttributeOid,
         EvidenceRecordCmsSelectionMethod.CmsObjectAndContent => EvidenceRecordWellKnown.ExternalEvidenceRecordAttributeOid,
+        EvidenceRecordCmsSelectionMethod.NotStated => throw new ArgumentOutOfRangeException(nameof(selectionMethod), selectionMethod, "RFC 4998 Appendix A defines two selection methods, and an Evidence Record attribute states one of them."),
         _ => throw new ArgumentOutOfRangeException(nameof(selectionMethod), selectionMethod, "RFC 4998 Appendix A defines two selection methods, and an Evidence Record attribute states one of them.")
     };
 

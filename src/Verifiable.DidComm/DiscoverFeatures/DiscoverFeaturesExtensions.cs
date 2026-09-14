@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.DidComm.DiscoverFeatures;
@@ -255,7 +254,7 @@ public static class DiscoverFeaturesExtensions
             {
                 if(!IsReservedDisclosureMember(member.Key))
                 {
-                    additionalFields ??= new Dictionary<string, object>();
+                    additionalFields ??= [];
                     additionalFields[member.Key] = member.Value;
                 }
             }
@@ -321,7 +320,7 @@ public static class DiscoverFeaturesExtensions
     //(it never over-discloses). Ordinal throughout.
     private static bool MatchesIdentifier(string match, string candidate)
     {
-        if(match.EndsWith('*'))
+        if(match.EndsWith('*', StringComparison.Ordinal))
         {
             return candidate.StartsWith(match[..^1], StringComparison.Ordinal);
         }

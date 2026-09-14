@@ -1,5 +1,4 @@
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Json;
 

@@ -29,7 +29,7 @@ internal sealed class CoseCredentialResolvingBindingTests
     private const string IssuerDid = "did:example:issuer";
     private const string SignerKeyId = "did:example:issuer#key-1";
 
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string CredentialJson = /*lang=json,strict*/ """
     {
@@ -101,7 +101,7 @@ internal sealed class CoseCredentialResolvingBindingTests
         CoseSign1Message message = await SignAsync(credential, privateKey, SignerKeyId).ConfigureAwait(false);
         DidResolver resolver = CreateResolver(CreateIssuerDidDocument());
 
-        VerificationFunction<byte, byte, Signature, ValueTask<bool>> verify = (keyBytes, data, signature) =>
+        ValueTask<bool> verify(ReadOnlyMemory<byte> keyBytes, ReadOnlyMemory<byte> data, Signature signature)
         {
             CryptoAlgorithm algorithm = CryptoAlgorithm.Ed25519;
             Purpose purpose = Purpose.Verification;
@@ -116,14 +116,14 @@ internal sealed class CoseCredentialResolvingBindingTests
 
                 return isValid;
             }
-        };
+        }
 
         CoseCredentialVerificationResult result = await CredentialCoseExtensions.VerifyCoseAsync(
             message,
             CoseSerialization.BuildSigStructure,
             resolver,
             Context,
-            verify,
+verify,
             CredentialFromJsonBytes,
             CoseSerialization.ParseProtectedHeader,
             BaseMemoryPool.Shared,

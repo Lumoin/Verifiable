@@ -204,18 +204,18 @@ public sealed class HttpHeaderSet
         {
             if(string.Equals(existing, canonical, StringComparison.OrdinalIgnoreCase))
             {
-                builder.AddValues(canonical, values);
+                _ = builder.AddValues(canonical, values);
                 replaced = true;
             }
             else
             {
-                builder.AddValues(existing, ValuesByName[existing]);
+                _ = builder.AddValues(existing, ValuesByName[existing]);
             }
         }
 
         if(!replaced)
         {
-            builder.AddValues(canonical, values);
+            _ = builder.AddValues(canonical, values);
         }
 
         return builder.Build();
@@ -254,7 +254,7 @@ public sealed class HttpHeaderSet
         var builder = new Builder();
         foreach(string name in order)
         {
-            builder.AddValues(name, grouped[name]);
+            _ = builder.AddValues(name, grouped[name]);
         }
 
         return builder.Build();
@@ -302,7 +302,7 @@ public sealed class HttpHeaderSet
         var builder = new Builder();
         foreach(string name in order)
         {
-            builder.AddValues(name, grouped[name]);
+            _ = builder.AddValues(name, grouped[name]);
         }
 
         return builder.Build();

@@ -1,13 +1,9 @@
-using System.Collections.Generic;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
-using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -140,7 +136,7 @@ internal sealed class RefreshGrantTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            refreshFields, new ExchangeContext(),
+            refreshFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode);
@@ -169,7 +165,7 @@ internal sealed class RefreshGrantTests
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            fields, new ExchangeContext(),
+            fields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,
@@ -198,7 +194,7 @@ internal sealed class RefreshGrantTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode);
         string requestUri = ExtractRequestUri(parResponse.Body);
@@ -209,7 +205,7 @@ internal sealed class RefreshGrantTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId("subject-1");
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -231,7 +227,7 @@ internal sealed class RefreshGrantTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode,
             $"Token exchange must succeed. Body: {tokenResponse.Body}");
@@ -255,7 +251,7 @@ internal sealed class RefreshGrantTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            refreshFields, new ExchangeContext(),
+            refreshFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

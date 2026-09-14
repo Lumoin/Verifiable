@@ -47,6 +47,15 @@ public sealed record ServerCodeIssuedState: FlowState
     public required string CodeChallenge { get; init; }
 
     /// <summary>
+    /// The <c>code_challenge_method</c> bound at authorization time — <c>S256</c> or, under a
+    /// deployment that accepts it, <c>plain</c> — per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc7636#section-4.3">RFC 7636 §4.3</see>. The
+    /// token endpoint dispatches PKCE verification on this PERSISTED value; RFC 7636 §4.6 is never
+    /// read from the token request, which carries no <c>code_challenge_method</c> parameter at all.
+    /// </summary>
+    public required string CodeChallengeMethod { get; init; }
+
+    /// <summary>
     /// The scope granted at the authorization endpoint.
     /// May be narrower than what was requested in the PAR body.
     /// </summary>

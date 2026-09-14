@@ -12,12 +12,12 @@ internal sealed class StatusListReferenceTests
     /// Gets the index of the suspended credential used for testing purposes.
     /// </summary>
     private int SuspendedCredentialIndex { get; } = StatusListTestConstants.SuspendedCredentialIndex;
-    
+
     /// <summary>
     /// Gets the example subject value used for token generation in test scenarios.
     /// </summary>
     private string ExampleTokenSubject { get; } = StatusListTestConstants.ExampleTokenSubject;
-    
+
     /// <summary>
     /// Gets the subject identifier associated with the second token used in status list tests.
     /// </summary>
@@ -37,21 +37,21 @@ internal sealed class StatusListReferenceTests
     [TestMethod]
     public void ConstructorThrowsForNegativeIndex()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new StatusListReference(-1, ExampleTokenSubject));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new StatusListReference(-1, ExampleTokenSubject));
     }
 
 
     [TestMethod]
     public void ConstructorThrowsForNullUri()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new StatusListReference(0, null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new StatusListReference(0, null!));
     }
 
 
     [TestMethod]
     public void ConstructorThrowsForWhitespaceUri()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new StatusListReference(0, "   "));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new StatusListReference(0, "   "));
     }
 
 
@@ -63,7 +63,7 @@ internal sealed class StatusListReferenceTests
     [TestMethod]
     public void ConstructorThrowsForRelativeUri()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new StatusListReference(0, "/statuslists/1"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new StatusListReference(0, "/statuslists/1"));
     }
 
 
@@ -74,7 +74,7 @@ internal sealed class StatusListReferenceTests
     [TestMethod]
     public void ConstructorThrowsForSchemeLessUri()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new StatusListReference(0, "example.com/list"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new StatusListReference(0, "example.com/list"));
     }
 
 
@@ -155,5 +155,5 @@ internal sealed class StatusListReferenceTests
 
         Assert.Contains(SuspendedCredentialIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), result, StringComparison.Ordinal);
         Assert.Contains(ExampleTokenSubject, result, StringComparison.Ordinal);
-    }    
+    }
 }

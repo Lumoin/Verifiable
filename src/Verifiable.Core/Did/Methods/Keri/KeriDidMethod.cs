@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods.Keri
 {
     /// <summary>
@@ -9,7 +7,7 @@ namespace Verifiable.Core.Did.Methods.Keri
     /// The 3. did:keri Format: 3.1 Method Name</see>.</remarks>
     public record KeriDidMethod: GenericDidMethod
     {
-        public KeriDidMethod(string didString): base(didString)
+        public KeriDidMethod(string didString) : base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
             if(!didString.StartsWith("did:keri:", StringComparison.Ordinal))
@@ -42,8 +40,8 @@ namespace Verifiable.Core.Did.Methods.Keri
             return new KeriDidMethod(didId);
         }
 
-       
+
         /// <inheritdoc/>
-        public override string ToString() => Id;        
+        public override string ToString() => Id;
     }
 }

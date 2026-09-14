@@ -88,7 +88,7 @@ public static partial class DateTimeStampFormat
     /// </remarks>
     public static string Format(DateTimeOffset value, string format = Utc)
     {
-        var valueToFormat = format == Utc || format == UtcMilliseconds || format == UtcMicroseconds
+        var valueToFormat = format is Utc or UtcMilliseconds or UtcMicroseconds
             ? value.ToUniversalTime()
             : value;
 

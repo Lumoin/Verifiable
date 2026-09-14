@@ -1,5 +1,3 @@
-using Verifiable.Tpm.Infrastructure;
-
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>

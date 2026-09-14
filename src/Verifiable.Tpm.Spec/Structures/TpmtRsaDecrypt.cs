@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Spec.Constants;

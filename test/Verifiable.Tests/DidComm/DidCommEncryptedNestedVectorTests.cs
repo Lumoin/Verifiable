@@ -1,15 +1,11 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -45,7 +41,7 @@ internal sealed class DidCommEncryptedNestedVectorTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string ExampleDidPrefix = "did:example";
     private const string AliceDid = "did:example:alice";
@@ -203,7 +199,7 @@ internal sealed class DidCommEncryptedNestedVectorTests
         Assert.IsTrue(result.IsRecipientAddressedInTo, "The C.3 example 5 recipient (did:example:bob) is listed in the inner 'to' and MUST be flagged as addressed.");
 
         Assert.IsNotNull(result.Message);
-        DidCommMessage message = result.Message!;
+        DidCommMessage message = result.Message;
         Assert.AreEqual(ExpectedId, message.Id);
         Assert.AreEqual(ExpectedType, message.Type);
         Assert.AreEqual(ExpectedFrom, message.From);
@@ -211,11 +207,11 @@ internal sealed class DidCommEncryptedNestedVectorTests
         Assert.AreEqual<long?>(ExpectedExpiresTime, message.ExpiresTime);
 
         Assert.IsNotNull(message.To);
-        Assert.HasCount(1, message.To!);
-        Assert.AreEqual(ExpectedTo, message.To![0]);
+        Assert.HasCount(1, message.To);
+        Assert.AreEqual(ExpectedTo, message.To[0]);
 
         Assert.IsNotNull(message.Body);
-        Assert.IsTrue(message.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(message.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 

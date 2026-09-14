@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
@@ -32,7 +31,7 @@ public sealed class TpmSealedStateCustodyException: Exception
     /// Initializes a new instance with a message describing which TPM operation failed closed.
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
-    public TpmSealedStateCustodyException(string message): base(message)
+    public TpmSealedStateCustodyException(string message) : base(message)
     {
     }
 
@@ -43,7 +42,7 @@ public sealed class TpmSealedStateCustodyException: Exception
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
     /// <param name="innerException">The underlying TPM or parse failure, if any.</param>
-    public TpmSealedStateCustodyException(string message, Exception innerException): base(message, innerException)
+    public TpmSealedStateCustodyException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

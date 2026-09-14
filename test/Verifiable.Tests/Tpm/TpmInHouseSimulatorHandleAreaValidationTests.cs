@@ -1,21 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -416,7 +407,7 @@ internal sealed class TpmInHouseSimulatorHandleAreaValidationTests
         }
         finally
         {
-            await tpm.FlushContextAsync(policySessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await tpm.FlushContextAsync(policySessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -493,7 +484,7 @@ internal sealed class TpmInHouseSimulatorHandleAreaValidationTests
         }
         finally
         {
-            await tpm.FlushContextAsync(policySessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await tpm.FlushContextAsync(policySessionHandle, TestContext.CancellationToken).ConfigureAwait(false);
         }
     }
 

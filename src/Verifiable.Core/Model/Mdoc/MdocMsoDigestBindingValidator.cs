@@ -102,7 +102,7 @@ public static class MdocMsoDigestBindingValidator
         foreach(KeyValuePair<string, IReadOnlyList<MdocIssuerSignedItem>> nsEntry in nameSpaces)
         {
             string nameSpace = nsEntry.Key;
-            issuerAuth.Mso.ValueDigests.TryGetValue(nameSpace, out IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>? msoNamespaceDigests);
+            _ = issuerAuth.Mso.ValueDigests.TryGetValue(nameSpace, out IReadOnlyDictionary<uint, ReadOnlyMemory<byte>>? msoNamespaceDigests);
 
             foreach(MdocIssuerSignedItem item in nsEntry.Value)
             {
@@ -154,9 +154,9 @@ public static class MdocMsoDigestBindingValidator
 
 
     private static bool IsSupportedDigestAlgorithm(string digestAlgorithm) =>
-        digestAlgorithm == MdocMsoWellKnownKeys.DigestAlgorithmSha256
-        || digestAlgorithm == MdocMsoWellKnownKeys.DigestAlgorithmSha384
-        || digestAlgorithm == MdocMsoWellKnownKeys.DigestAlgorithmSha512;
+        digestAlgorithm is MdocMsoWellKnownKeys.DigestAlgorithmSha256
+        or MdocMsoWellKnownKeys.DigestAlgorithmSha384
+        or MdocMsoWellKnownKeys.DigestAlgorithmSha512;
 
 
     /// <summary>

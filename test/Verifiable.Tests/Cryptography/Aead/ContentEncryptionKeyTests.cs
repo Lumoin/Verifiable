@@ -35,7 +35,7 @@ internal sealed class ContentEncryptionKeyTests
         using ContentEncryptionKey cek = BuildCek();
         using SymmetricKeyMemory consumed = cek.UseKey();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => cek.UseKey());
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => cek.UseKey());
         Assert.AreEqual(2, cek.UseCount);
         Assert.IsNotNull(consumed);
     }
@@ -47,7 +47,7 @@ internal sealed class ContentEncryptionKeyTests
         using ContentEncryptionKey cek = BuildCek();
         using SymmetricKeyMemory consumed = cek.UseKey();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = cek.Tag);
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => _ = cek.Tag);
         Assert.IsNotNull(consumed);
     }
 
@@ -76,7 +76,7 @@ internal sealed class ContentEncryptionKeyTests
     [TestMethod]
     public void ConstructorRejectsNullInner()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => _ = new ContentEncryptionKey(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => _ = new ContentEncryptionKey(null!));
     }
 
 
@@ -95,11 +95,11 @@ internal sealed class ContentEncryptionKeyTests
             {
                 using SymmetricKeyMemory consumed = cek.UseKey();
                 Assert.IsNotNull(consumed);
-                System.Threading.Interlocked.Increment(ref successes);
+                _ = System.Threading.Interlocked.Increment(ref successes);
             }
             catch(InvalidOperationException)
             {
-                System.Threading.Interlocked.Increment(ref failures);
+                _ = System.Threading.Interlocked.Increment(ref failures);
             }
         }
 

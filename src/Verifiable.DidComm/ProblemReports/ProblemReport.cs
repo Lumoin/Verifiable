@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Foundation;
 
@@ -142,15 +140,15 @@ public sealed record ProblemReport
                     && int.TryParse(comment.AsSpan(i + 1, j - i - 1), out int oneBasedIndex)
                     && oneBasedIndex >= 1)
                 {
-                    referencedIndexes.Add(oneBasedIndex);
-                    builder.Append(ResolveArgument(args, oneBasedIndex - 1));
+                    _ = referencedIndexes.Add(oneBasedIndex);
+                    _ = builder.Append(ResolveArgument(args, oneBasedIndex - 1));
                     i = j + 1;
 
                     continue;
                 }
             }
 
-            builder.Append(comment[i]);
+            _ = builder.Append(comment[i]);
             ++i;
         }
 
@@ -161,8 +159,8 @@ public sealed record ProblemReport
         {
             if(!referencedIndexes.Contains(index))
             {
-                builder.Append(", ");
-                builder.Append(ResolveArgument(args, index - 1));
+                _ = builder.Append(", ");
+                _ = builder.Append(ResolveArgument(args, index - 1));
             }
         }
 

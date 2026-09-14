@@ -1,5 +1,3 @@
-using System.Buffers;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
@@ -8,6 +6,7 @@ using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Mdoc;
 

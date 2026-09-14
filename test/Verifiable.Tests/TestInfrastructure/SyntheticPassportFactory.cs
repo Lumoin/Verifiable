@@ -1,12 +1,10 @@
-using System;
+using Org.BouncyCastle.Crypto.Digests;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using Org.BouncyCastle.Crypto.Digests;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
@@ -567,7 +565,7 @@ internal static class SyntheticPassportFactory
         var digest = new Sha1Digest();
         digest.BlockUpdate(data);
         byte[] hash = new byte[digest.GetDigestSize()];
-        digest.DoFinal(hash);
+        _ = digest.DoFinal(hash);
 
         return hash;
     }

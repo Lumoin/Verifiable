@@ -1,9 +1,6 @@
-using System;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Foundation;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestInfrastructure;
@@ -413,12 +410,12 @@ internal sealed class StatusListTokenFetchTests
     [TestMethod]
     public async Task ATransportFailureIsReportedRatherThanThrown()
     {
-        OutboundTransportDelegate failing = (request, context, cancellationToken) =>
+        static ValueTask<OutboundResponse> failing(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The Status Provider refused the connection.");
 
         StatusListTokenFetchResult result = await StatusListTokenFetch.FetchAsync(
             new Uri(ListUrl), StatusListTokenFormat.Jwt, Context(OutboundFetchPolicy.SecureDefault),
-            failing, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false);
+failing, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(StatusListTokenFetchOutcome.TransportFailed, result.Outcome,
             "A transport fault is a fetch outcome, not an exception the caller must catch.");
@@ -436,13 +433,13 @@ internal sealed class StatusListTokenFetchTests
     [TestMethod]
     public async Task CancellationPropagatesInsteadOfBecomingATransportFailure()
     {
-        OutboundTransportDelegate cancelling = (request, context, cancellationToken) =>
+        static ValueTask<OutboundResponse> cancelling(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken) =>
             throw new OperationCanceledException("The caller cancelled the Status List Token fetch.");
 
         _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             async () => await StatusListTokenFetch.FetchAsync(
                 new Uri(ListUrl), StatusListTokenFormat.Jwt, Context(OutboundFetchPolicy.SecureDefault),
-                cancelling, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false));
+cancelling, MaxResponseBytes, TestContext.CancellationToken).ConfigureAwait(false));
     }
 
 

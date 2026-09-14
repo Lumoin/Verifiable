@@ -1,6 +1,3 @@
-using System;
-using System.Linq;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor.Converters;
@@ -72,9 +69,9 @@ public sealed class DictionaryStringObjectCborConverter: CborConverter<Dictionar
             CborThrowHelper.ThrowIndefiniteLengthNotAllowed();
         }
 
-        var dictionary = length.HasValue
-            ? new Dictionary<string, object>(length.Value)
-            : new Dictionary<string, object>();
+        Dictionary<string, object> dictionary = length.HasValue
+            ? new(length.Value)
+            : [];
 
         while(reader.PeekState() != CborReaderState.EndMap)
         {

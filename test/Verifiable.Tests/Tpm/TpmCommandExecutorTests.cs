@@ -1,17 +1,11 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -55,7 +49,7 @@ internal sealed class TpmCommandExecutorTests
     {
         const int RequestedBytes = 16;
 
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -144,7 +138,7 @@ internal sealed class TpmCommandExecutorTests
     [TestMethod]
     public async Task ExecutorSurfacesTpmErrorResponseCode()
     {
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -172,7 +166,7 @@ internal sealed class TpmCommandExecutorTests
     [TestMethod]
     public async Task ExecutorSurfacesTransportError()
     {
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -196,7 +190,7 @@ internal sealed class TpmCommandExecutorTests
     [TestMethod]
     public async Task ExecutorRejectsHandleNamesCountMismatch()
     {
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -217,7 +211,7 @@ internal sealed class TpmCommandExecutorTests
         //before touching the device.
         ReadOnlyMemory<byte>[] handleNames = [new byte[] { 0x40, 0x00, 0x00, 0x01 }];
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await TpmCommandExecutor.ExecuteAsync<GetRandomResponse>(
                 device, input, [], handleNames, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -230,7 +224,7 @@ internal sealed class TpmCommandExecutorTests
         //An HMAC session authorizing a transient OBJECT (handle type 0x80) must supply that object's Name for
         //cpHash; without it the executor fails fast rather than hashing the raw handle (which the TPM never does
         //for an object). Deterministic, no hardware needed.
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -253,7 +247,7 @@ internal sealed class TpmCommandExecutorTests
         Tpm2bNonce nonceTpm = Tpm2bNonce.Create(new byte[32], pool);
         using var session = new TpmSession(new TpmHandle(0x02000000u), nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await TpmCommandExecutor.ExecuteAsync<CreateResponse>(
                 device, input, [session], null, pool, registry, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -303,19 +297,19 @@ internal sealed class TpmCommandExecutorTests
         var input = new NvReadInput(NvHandle, NvHandle, Size, Offset);
 
         //Parameters exactly as serialized into the command: size (UINT16 BE) + offset (UINT16 BE).
-        byte[] parameters = [(byte)(Size >> 8), (byte)(Size & 0xFF), (byte)(Offset >> 8), (byte)(Offset & 0xFF)];
+        byte[] parameters = [(Size >> 8), (Size & 0xFF), (Offset >> 8), (Offset & 0xFF)];
         byte[] commandCode = [0x00, 0x00, 0x01, 0x4E]; //TPM_CC_NV_Read.
 
         //Names path: cpHash over the supplied Names, in handle order.
-        (byte[] nonceCaller, byte attributes, byte[] hmac) named = await RunNvReadAndParseAuthAsync(
+        (byte[] nonceCaller, byte attributes, byte[] hmac) = await RunNvReadAndParseAuthAsync(
             input, [authName, nvName], nonceTpmValue, authValue, pool, registry).ConfigureAwait(false);
-        byte[] expectedNamed = ExpectedAuthHmac(authValue, Concat(commandCode, authName, nvName, parameters), named.nonceCaller, nonceTpmValue, named.attributes);
-        Assert.IsTrue(named.hmac.AsSpan().SequenceEqual(expectedNamed),
+        byte[] expectedNamed = ExpectedAuthHmac(authValue, Concat(commandCode, authName, nvName, parameters), nonceCaller, nonceTpmValue, attributes);
+        Assert.IsTrue(hmac.AsSpan().SequenceEqual(expectedNamed),
             "The command HMAC must be computed over cpHash = H(cc || authName || nvName || params).");
 
         //Without the NV index Names the executor refuses to guess: an NV index Name is nameAlg||H(nvPublic),
         //never the raw handle, so it fails fast rather than producing a cpHash the TPM would reject.
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await RunNvReadAndParseAuthAsync(input, null, nonceTpmValue, authValue, pool, registry).ConfigureAwait(false)).ConfigureAwait(false);
     }
 

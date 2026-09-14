@@ -158,7 +158,7 @@ internal sealed class FederationTrustMarkResolverTests
         };
 
         //The mark is signed by the subject; the delegation is signed by the anchor (the owner).
-        VerifyCompactJwsDelegate verify = (compactJws, key, cancellationToken) =>
+        ValueTask<bool> verify(string compactJws, PublicKeyMemory key, CancellationToken cancellationToken) =>
             compactJws == minted.CompactJws ? FederationTestRing.VerifyAsync(subject, compactJws, cancellationToken)
             : compactJws == delegation.CompactJws ? FederationTestRing.VerifyAsync(anchor, compactJws, cancellationToken)
             : ValueTask.FromResult(false);

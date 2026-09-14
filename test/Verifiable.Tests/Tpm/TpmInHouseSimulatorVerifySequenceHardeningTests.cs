@@ -1,7 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -11,11 +10,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -92,13 +86,13 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_VerifySequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(primary.ObjectHandle, out TransientKeyState? maybeStartingKey), "The starting key must be present in the captured post-Start state.");
-        TransientKeyState startingKey = maybeStartingKey!;
+        TransientKeyState startingKey = maybeStartingKey;
 
         Assert.IsTrue(capturedState.SequenceObjects.TryGetValue(sequenceHandle, out SequenceObjectState? maybeSequence), "The started sequence must be present in the captured post-Start state.");
-        SequenceObjectState sequence = maybeSequence!;
+        SequenceObjectState sequence = maybeSequence;
 
         TpmiDhObject reloadedHandle = TpmiDhObject.FromValue(ReloadedVerificationKeyHandleValue);
         TransientKeyState nameEqualCopyAtANewHandle = startingKey with { Handle = reloadedHandle };
@@ -117,8 +111,8 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_VerifySequenceComplete() always yields a transition — either a rejection or a declared verification action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmEccVerifySequenceAction>(
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmEccVerifySequenceAction>(
             nonNullResult.NextState.NextAction,
             "A key Name-equal to the one that started the sequence, loaded at a DIFFERENT handle, must produce the verification action rather than a TPM_RC_SIGN_CONTEXT_KEY rejection.");
     }
@@ -148,13 +142,13 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_VerifySequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(otherKeyPrimary.ObjectHandle, out TransientKeyState? maybeOtherKey), "The other key must be present in the captured post-Start state.");
-        TransientKeyState otherKey = maybeOtherKey!;
+        TransientKeyState otherKey = maybeOtherKey;
 
         Assert.IsTrue(capturedState.SequenceObjects.TryGetValue(sequenceHandle, out SequenceObjectState? maybeSequence), "The started sequence must be present in the captured post-Start state.");
-        SequenceObjectState sequence = maybeSequence!;
+        SequenceObjectState sequence = maybeSequence;
 
         TransientKeyState otherKeyAtTheStartingHandle = otherKey with { Handle = startingKeyPrimary.ObjectHandle };
         TpmSimulatorState mutatedState = capturedState with
@@ -169,9 +163,9 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_VerifySequenceComplete() always yields a transition — either a rejection or a declared verification action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
-        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
         Assert.AreEqual(
             HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_SIGN_CONTEXT_KEY, 1), rejection.ResponseCode,
             "keyHandle, handle 2 of Table 118, of a different key's state installed at the sequence's OWN starting handle must still be refused with handle-encoded TPM_RC_SIGN_CONTEXT_KEY: the gate compares Names, not handles.");
@@ -512,13 +506,13 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_VerifySequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(primary.ObjectHandle, out TransientKeyState? maybeStartingKey), "The starting key must be present in the captured post-Start state.");
-        TransientKeyState startingKey = maybeStartingKey!;
+        TransientKeyState startingKey = maybeStartingKey;
 
         Assert.IsTrue(capturedState.SequenceObjects.TryGetValue(sequenceHandle, out SequenceObjectState? maybeSequence), "The started sequence must be present in the captured post-Start state.");
-        SequenceObjectState sequence = maybeSequence!;
+        SequenceObjectState sequence = maybeSequence;
 
         TransientKeyState flippedKey = flipKey(startingKey);
         TpmSimulatorState mutatedState = capturedState with
@@ -533,10 +527,10 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_VerifySequenceComplete() always yields a transition — either a rejection or a declared verification action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
 
-        return (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        return (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
     }
 
     /// <summary>
@@ -562,10 +556,10 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_VerifySequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.SequenceObjects.TryGetValue(sequenceHandle, out SequenceObjectState? maybeStartingSequence), "The started sequence must be present in the captured post-Start state.");
-        SequenceObjectState startingSequence = maybeStartingSequence!;
+        SequenceObjectState startingSequence = maybeStartingSequence;
 
         SequenceObjectState flippedSequence = flipSequence(startingSequence);
         TpmSimulatorState mutatedState = capturedState with
@@ -580,10 +574,10 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_VerifySequenceComplete() always yields a transition — either a rejection or a declared verification action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
 
-        return (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        return (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
     }
 
     /// <summary>
@@ -641,9 +635,9 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
         length =
             TpmHeader.HeaderSize
             + sizeof(uint)                          //Handle area: @keyHandle.
-            + (sizeof(ushort) + sequenceAuth.Length) //auth: TPM2B_AUTH.
-            + (sizeof(ushort) + hint.Length)         //hint: TPM2B_SIGNATURE_HINT.
-            + (sizeof(ushort) + context.Length);     //context: TPM2B_SIGNATURE_CTX.
+            + sizeof(ushort) + sequenceAuth.Length //auth: TPM2B_AUTH.
+            + sizeof(ushort) + hint.Length         //hint: TPM2B_SIGNATURE_HINT.
+            + sizeof(ushort) + context.Length;     //context: TPM2B_SIGNATURE_CTX.
 
         IMemoryOwner<byte> owner = pool.Rent(length);
         try
@@ -750,11 +744,11 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
         using VerifyDigestSignatureResponse verified = verifyResult.Value;
         Assert.IsTrue(verified.Validation.Metadata.HasValue, "A TPM_ST_DIGEST_VERIFIED ticket must carry metadata (Table 111's digestVerified arm).");
         Assert.AreEqual(
-            TpmAlgIdConstants.TPM_ALG_SHA384, verified.Validation.Metadata!.Value.Value,
+            TpmAlgIdConstants.TPM_ALG_SHA384, verified.Validation.Metadata.Value.Value,
             "The ticket's metadata must record the scheme hash (SHA-384) the signature was actually verified under, not the authority key's nameAlg (SHA-256).");
 
         TpmtTkVerified ticket = MintTicketWithMetadata(
-            verified.Validation.Tag, verified.Validation.Hierarchy, verified.Validation.Metadata!.Value, verified.Validation.Hmac, pool);
+            verified.Validation.Tag, verified.Validation.Hierarchy, verified.Validation.Metadata.Value, verified.Validation.Hmac, pool);
 
         return (approvedPolicy, policyRef, ticket);
     }
@@ -1070,7 +1064,7 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
 
         length =
             TpmHeader.HeaderSize
-            + 2 * sizeof(uint)                 //Handle area: @sequenceHandle, keyHandle.
+            + (2 * sizeof(uint))                 //Handle area: @sequenceHandle, keyHandle.
             + sizeof(uint) + PasswordSlotSize  //authorizationSize + one empty TPM_RS_PW slot.
             + signatureBody.Length;            //signature: TPMT_SIGNATURE.
 
@@ -1082,7 +1076,7 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
             header.WriteTo(ref writer);
             writer.WriteUInt32(sequenceHandle);
             writer.WriteUInt32(keyHandle);
-            writer.WriteUInt32((uint)PasswordSlotSize);
+            writer.WriteUInt32(PasswordSlotSize);
             writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
             writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
             writer.WriteByte((byte)TpmaSession.CONTINUE_SESSION);
@@ -1133,7 +1127,7 @@ internal sealed class TpmInHouseSimulatorVerifySequenceHardeningTests
     /// <returns>The marshaled body.</returns>
     private static byte[] BuildEcdsaSignatureBodyFromComponents(TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> signatureR, ReadOnlySpan<byte> signatureS)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + signatureR.Length + sizeof(ushort) + signatureS.Length];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + signatureR.Length + sizeof(ushort) + signatureS.Length];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_ECDSA);
         writer.WriteUInt16((ushort)hashAlg);

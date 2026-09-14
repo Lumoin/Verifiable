@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Cbom;

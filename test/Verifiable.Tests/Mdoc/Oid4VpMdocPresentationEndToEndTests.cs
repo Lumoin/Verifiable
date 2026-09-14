@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
@@ -186,7 +186,7 @@ internal sealed class Oid4VpMdocPresentationEndToEndTests
     public void EncodeRejectsUnderSizedMdocGeneratedNonce()
     {
         byte[] tooShort = new byte[8];
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             Oid4VpMdocSessionTranscriptEncoder.Encode(
                 VerifierClientId, VerifierResponseUri, AuthorizationRequestNonce, tooShort, BaseMemoryPool.Shared));
     }

@@ -1,9 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -12,11 +9,6 @@ using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -137,7 +129,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_PLATFORM, OwnerCreatedIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -162,7 +154,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await InstallPlatformAuthAsync(device).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> refusedWithTheFactoryValue = await UndefineIndexAsync(
@@ -194,7 +186,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_PLATFORM, PlatformCreatedIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -219,7 +211,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_OWNER, OwnerCreatedIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -248,7 +240,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await InstallPlatformAuthAsync(device).ConfigureAwait(false);
 
         byte[] indexName = await ReadIndexNameAsync(device, OwnerCreatedIndexHandle).ConfigureAwait(false);
@@ -279,7 +271,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await InstallPlatformAuthAsync(device).ConfigureAwait(false);
 
         byte[] indexName = await ReadIndexNameAsync(device, OwnerCreatedIndexHandle).ConfigureAwait(false);
@@ -323,7 +315,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_OWNER, PlatformCreatedIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -351,7 +343,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         byte[] indexName = await ReadIndexNameAsync(device, PlatformCreatedIndexHandle).ConfigureAwait(false);
 
@@ -382,7 +374,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_OWNER, PolicyDeleteIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -410,7 +402,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_PLATFORM, PolicyDeleteIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -437,7 +429,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         byte[] indexName = await ReadIndexNameAsync(device, PolicyDeleteIndexHandle).ConfigureAwait(false);
 
@@ -467,7 +459,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await InstallPlatformAuthAsync(device).ConfigureAwait(false);
 
         byte[] indexName = await ReadIndexNameAsync(device, PolicyDeleteIndexHandle).ConfigureAwait(false);
@@ -501,7 +493,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await InstallPlatformAuthAsync(device).ConfigureAwait(false);
 
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
@@ -594,8 +586,8 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PolicyDeleteIndexHandle, PolicyDeleteAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> platformCreateOnly = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_OWNER, PlatformCreatedIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -626,7 +618,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await SetHierarchyEnableAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, TpmiYesNo.No).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> hiddenResult = await UndefineIndexAsync(
@@ -660,8 +652,8 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty, PlatformCreatedIndexHandle, PlatformCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
         await SetHierarchyEnableAsync(device, pool, registry, TpmRh.TPM_RH_PLATFORM_NV, TpmiYesNo.No).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> hiddenResult = await UndefineIndexAsync(
@@ -694,7 +686,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, PinFailIndexHandle, PinFailAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, PinFailIndexHandle, PinFailAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> exhaustingFailure = await ReadIndexAsync(device, pool, registry, PinFailIndexHandle, WrongAuth).ConfigureAwait(false);
@@ -742,7 +734,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, PinFailIndexHandle, PinFailAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, PinFailIndexHandle, PinFailAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
         await InstallPlatformAuthAsync(device).ConfigureAwait(false);
 
@@ -791,7 +783,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, CounterIndexHandle, CounterAttributes, EightOctetDataSize).ConfigureAwait(false);
 
         for(int increment = 0; increment < IncrementsBeforeRemoval; increment++)
         {
@@ -842,7 +834,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, OwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, (TpmRh)inadmissibleAuthHandle, OwnerCreatedIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -873,7 +865,7 @@ internal sealed class TpmInHouseSimulatorNvUndefineSpacePlatformTests
 
         long baseline = trackingPool.OutstandingCount;
 
-        await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, SecondOwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty, SecondOwnerCreatedIndexHandle, OwnerCreatedAttributes, OrdinaryDataSize).ConfigureAwait(false);
 
         long withIndexDefined = trackingPool.OutstandingCount;
 

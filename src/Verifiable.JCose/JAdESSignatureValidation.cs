@@ -1341,7 +1341,7 @@ public static class JAdESSignatureValidation
         IMemoryOwner<byte> owner = pool.Rent(Math.Max(text.Length, 1));
         try
         {
-            Encoding.ASCII.GetBytes(text, owner.Memory.Span);
+            _ = Encoding.ASCII.GetBytes(text, owner.Memory.Span);
 
             return new PooledMemory(owner, text.Length, tag);
         }

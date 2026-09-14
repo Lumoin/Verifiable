@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -140,14 +138,14 @@ public sealed class AsicManifestNamingException: Exception
 
 
     /// <summary>Initializes a new <see cref="AsicManifestNamingException"/> with an unclassified fault.</summary>
-    public AsicManifestNamingException(): this(AsicManifestNamingFailureKind.UnsupportedFileKind, "The container file name could not be created.")
+    public AsicManifestNamingException() : this(AsicManifestNamingFailureKind.UnsupportedFileKind, "The container file name could not be created.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="AsicManifestNamingException"/> with an unclassified fault.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public AsicManifestNamingException(string message): this(AsicManifestNamingFailureKind.UnsupportedFileKind, message)
+    public AsicManifestNamingException(string message) : this(AsicManifestNamingFailureKind.UnsupportedFileKind, message)
     {
     }
 
@@ -164,7 +162,7 @@ public sealed class AsicManifestNamingException: Exception
     /// <summary>Initializes a new <see cref="AsicManifestNamingException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public AsicManifestNamingException(AsicManifestNamingFailureKind failureKind, string message): base(message)
+    public AsicManifestNamingException(AsicManifestNamingFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -416,6 +414,9 @@ public static class AsicManifestNaming
             AsicContainerFileKind.Timestamp => (TimestampToken, TimestampExtension),
             AsicContainerFileKind.BinaryEvidenceRecord => (EvidenceRecordToken, BinaryEvidenceRecordExtension),
             AsicContainerFileKind.XmlEvidenceRecord => (EvidenceRecordToken, XmlExtension),
+            AsicContainerFileKind.NotEvaluated => throw new AsicManifestNamingException(
+                AsicManifestNamingFailureKind.UnsupportedFileKind,
+                $"'{fileKind}' does not name a kind of file the META-INF folder holds."),
             _ => throw new AsicManifestNamingException(
                 AsicManifestNamingFailureKind.UnsupportedFileKind,
                 $"'{fileKind}' does not name a kind of file the META-INF folder holds.")

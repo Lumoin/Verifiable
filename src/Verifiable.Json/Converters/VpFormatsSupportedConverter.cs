@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -45,7 +43,7 @@ public sealed class VpFormatsSupportedConverter: JsonConverter<VpFormatsSupporte
             }
 
             string formatId = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
             formats[formatId] = ReadPropertyMap(ref reader);
         }
 
@@ -107,7 +105,7 @@ public sealed class VpFormatsSupportedConverter: JsonConverter<VpFormatsSupporte
             }
 
             string property = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
             map[property] = ReadStringArray(ref reader);
         }
 

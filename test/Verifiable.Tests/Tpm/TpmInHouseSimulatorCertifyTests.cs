@@ -1,11 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -15,11 +12,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -591,7 +583,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
 
         byte[] expectedName = await ComputeObjectNameAsync(subject.OutPublic, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
-            attest.Attested.Certify!.Name.Span.SequenceEqual(expectedName),
+            attest.Attested.Certify.Name.Span.SequenceEqual(expectedName),
             "The certified Name must equal the userWithAuth-CLEAR subject's Name recomputed from its exported public area.");
     }
 
@@ -636,7 +628,7 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         //2. Name binding: firewalled recomputation from the wire-exported public area.
         byte[] expectedName = await ComputeObjectNameAsync(subject.OutPublic, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
-            attest.Attested.Certify!.Name.Span.SequenceEqual(expectedName),
+            attest.Attested.Certify.Name.Span.SequenceEqual(expectedName),
             "The certified Name must equal the subject's Name recomputed from its exported public area.");
 
         //3. Qualified Name realism: qualifiedSigner and attested.certify.qualifiedName must equal the independent
@@ -653,10 +645,10 @@ internal sealed class TpmInHouseSimulatorCertifyTests
         byte[] expectedSubjectQn = await ComputeQualifiedNameAsync(
             (uint)TpmRh.TPM_RH_OWNER, subject.Name.Span.ToArray(), pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
-            attest.Attested.Certify!.QualifiedName.Span.SequenceEqual(expectedSubjectQn),
+            attest.Attested.Certify.QualifiedName.Span.SequenceEqual(expectedSubjectQn),
             "attested.certify.qualifiedName must equal the subject's independently recomputed Qualified Name.");
         Assert.IsFalse(
-            attest.Attested.Certify!.QualifiedName.Span.SequenceEqual(subject.Name.Span),
+            attest.Attested.Certify.QualifiedName.Span.SequenceEqual(subject.Name.Span),
             "attested.certify.qualifiedName must not collapse to the subject's plain Name.");
 
         //4. Signature: over the RAW attestation bytes, against the RSA AK public key reconstructed from the

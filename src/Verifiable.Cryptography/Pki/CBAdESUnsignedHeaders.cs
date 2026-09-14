@@ -1,6 +1,4 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -388,7 +386,7 @@ public abstract record CBAdESUnsignedHeaderElementLabel
 /// </summary>
 /// <param name="Value">The integer label.</param>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementIntegerLabel: {Value}")]
-public sealed record CBAdESUnsignedHeaderElementIntegerLabel(int Value) : CBAdESUnsignedHeaderElementLabel;
+public sealed record CBAdESUnsignedHeaderElementIntegerLabel(int Value): CBAdESUnsignedHeaderElementLabel;
 
 
 /// <summary>
@@ -397,7 +395,7 @@ public sealed record CBAdESUnsignedHeaderElementIntegerLabel(int Value) : CBAdES
 /// </summary>
 /// <param name="Value">The text label.</param>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementTextLabel: {Value}")]
-public sealed record CBAdESUnsignedHeaderElementTextLabel(string Value) : CBAdESUnsignedHeaderElementLabel;
+public sealed record CBAdESUnsignedHeaderElementTextLabel(string Value): CBAdESUnsignedHeaderElementLabel;
 
 
 /// <summary>
@@ -405,7 +403,7 @@ public sealed record CBAdESUnsignedHeaderElementTextLabel(string Value) : CBAdES
 /// <see cref="CBAdESSignatureTimestamp"/> incorporated as an element of <see cref="CBAdESUnsignedHeaders"/>.
 /// </summary>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementSignatureTimestamp: {SignatureTimestamp}")]
-public sealed class CBAdESUnsignedHeaderElementSignatureTimestamp    : CBAdESUnsignedHeaderElement, IDisposable
+public sealed class CBAdESUnsignedHeaderElementSignatureTimestamp: CBAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementSignatureTimestamp"/>.</summary>
     /// <param name="signatureTimestamp">The wrapped signature time-stamp component.</param>
@@ -434,7 +432,7 @@ public sealed class CBAdESUnsignedHeaderElementSignatureTimestamp    : CBAdESUns
 /// <see cref="CBAdESValidationData"/> incorporated as an element of <see cref="CBAdESUnsignedHeaders"/>.
 /// </summary>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementValidationData: {ValidationData}")]
-public sealed class CBAdESUnsignedHeaderElementValidationData    : CBAdESUnsignedHeaderElement
+public sealed class CBAdESUnsignedHeaderElementValidationData: CBAdESUnsignedHeaderElement
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementValidationData"/>.</summary>
     /// <param name="validationData">The wrapped certificate/revocation validation-data component.</param>
@@ -459,7 +457,7 @@ public sealed class CBAdESUnsignedHeaderElementValidationData    : CBAdESUnsigne
 /// <see cref="CBAdESArchiveTimestamp"/> incorporated as an element of <see cref="CBAdESUnsignedHeaders"/>.
 /// </summary>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementArchiveTimestamp: {ArchiveTimestamp}")]
-public sealed class CBAdESUnsignedHeaderElementArchiveTimestamp    : CBAdESUnsignedHeaderElement, IDisposable
+public sealed class CBAdESUnsignedHeaderElementArchiveTimestamp: CBAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementArchiveTimestamp"/>.</summary>
     /// <param name="archiveTimestamp">The wrapped archive time-stamp component.</param>
@@ -488,7 +486,7 @@ public sealed class CBAdESUnsignedHeaderElementArchiveTimestamp    : CBAdESUnsig
 /// <see cref="CBAdESReferences"/> incorporated as an element of <see cref="CBAdESUnsignedHeaders"/>.
 /// </summary>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementReferences: {References}")]
-public sealed class CBAdESUnsignedHeaderElementReferences    : CBAdESUnsignedHeaderElement, IDisposable
+public sealed class CBAdESUnsignedHeaderElementReferences: CBAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementReferences"/>.</summary>
     /// <param name="references">The wrapped certificate/revocation references component.</param>
@@ -518,7 +516,7 @@ public sealed class CBAdESUnsignedHeaderElementReferences    : CBAdESUnsignedHea
 /// <see cref="CBAdESUnsignedHeaders"/>.
 /// </summary>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp: {SignatureAndReferencesTimestamp}")]
-public sealed class CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp    : CBAdESUnsignedHeaderElement, IDisposable
+public sealed class CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp: CBAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp"/>.</summary>
     /// <param name="signatureAndReferencesTimestamp">The wrapped signature-and-references time-stamp component.</param>
@@ -547,7 +545,7 @@ public sealed class CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp  
 /// <see cref="CBAdESReferencesTimestamp"/> incorporated as an element of <see cref="CBAdESUnsignedHeaders"/>.
 /// </summary>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementReferencesTimestamp: {ReferencesTimestamp}")]
-public sealed class CBAdESUnsignedHeaderElementReferencesTimestamp    : CBAdESUnsignedHeaderElement, IDisposable
+public sealed class CBAdESUnsignedHeaderElementReferencesTimestamp: CBAdESUnsignedHeaderElement, IDisposable
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementReferencesTimestamp"/>.</summary>
     /// <param name="referencesTimestamp">The wrapped references-only time-stamp component.</param>
@@ -582,7 +580,7 @@ public sealed class CBAdESUnsignedHeaderElementReferencesTimestamp    : CBAdESUn
 /// for an already-incorporated store is asking.
 /// </remarks>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementSignaturePolicyStore: {SignaturePolicyStore}")]
-public sealed class CBAdESUnsignedHeaderElementSignaturePolicyStore    : CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementSignaturePolicyStore>
+public sealed class CBAdESUnsignedHeaderElementSignaturePolicyStore: CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementSignaturePolicyStore>
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementSignaturePolicyStore"/>.</summary>
     /// <param name="signaturePolicyStore">The wrapped signature-policy-store component.</param>
@@ -669,7 +667,7 @@ public sealed class CBAdESUnsignedHeaderElementSignaturePolicyStore    : CBAdESU
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementFullCounterSignature: {Value.Length} bytes")]
-public sealed class CBAdESUnsignedHeaderElementFullCounterSignature    : CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementFullCounterSignature>
+public sealed class CBAdESUnsignedHeaderElementFullCounterSignature: CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementFullCounterSignature>
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementFullCounterSignature"/>.</summary>
     /// <param name="value">
@@ -756,7 +754,7 @@ public sealed class CBAdESUnsignedHeaderElementFullCounterSignature    : CBAdESU
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementAbbreviatedCounterSignature: {Value.Length} bytes")]
-public sealed class CBAdESUnsignedHeaderElementAbbreviatedCounterSignature    : CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementAbbreviatedCounterSignature>
+public sealed class CBAdESUnsignedHeaderElementAbbreviatedCounterSignature: CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementAbbreviatedCounterSignature>
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementAbbreviatedCounterSignature"/>.</summary>
     /// <param name="value">
@@ -835,7 +833,7 @@ public sealed class CBAdESUnsignedHeaderElementAbbreviatedCounterSignature    : 
 /// </para>
 /// </remarks>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementCertificateChain: {Value.Length} bytes")]
-public sealed class CBAdESUnsignedHeaderElementCertificateChain    : CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementCertificateChain>
+public sealed class CBAdESUnsignedHeaderElementCertificateChain: CBAdESUnsignedHeaderElement, IEquatable<CBAdESUnsignedHeaderElementCertificateChain>
 {
     /// <summary>Initializes a new <see cref="CBAdESUnsignedHeaderElementCertificateChain"/>.</summary>
     /// <param name="value">
@@ -909,7 +907,7 @@ public sealed class CBAdESUnsignedHeaderElementCertificateChain    : CBAdESUnsig
 /// makes no claim about the shape of a component it does not itself specify.
 /// </remarks>
 [DebuggerDisplay("CBAdESUnsignedHeaderElementUnknown: {Label}, {Value.Length} bytes")]
-public sealed class CBAdESUnsignedHeaderElementUnknown : CBAdESUnsignedHeaderElement
+public sealed class CBAdESUnsignedHeaderElementUnknown: CBAdESUnsignedHeaderElement
 {
     /// <summary>
     /// Initializes a new <see cref="CBAdESUnsignedHeaderElementUnknown"/>.

@@ -1,17 +1,10 @@
-using System;
 using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -247,7 +240,7 @@ internal sealed class TpmInHouseSimulatorSealedDataTemplateTests
         //TPMS_SENSITIVE_CREATE declaring a 10-octet data field of which only two octets follow, and nothing after.
         const int DeclaredDataLength = 10;
         const int PresentDataLength = 2;
-        int interior = (sizeof(ushort) + 0) + (sizeof(ushort) + DeclaredDataLength);
+        int interior = sizeof(ushort) + 0 + sizeof(ushort) + DeclaredDataLength;
         int size = sizeof(ushort) + interior - (DeclaredDataLength - PresentDataLength);
         using IMemoryOwner<byte> parameters = pool.Rent(size);
         var writer = new TpmWriter(parameters.Memory.Span[..size]);

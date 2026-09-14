@@ -1,17 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -173,7 +168,7 @@ internal sealed class Oid4VciKeyAttestationTests
     {
         VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
@@ -221,7 +216,7 @@ internal sealed class Oid4VciKeyAttestationTests
                 [WellKnownHttpHeaderNames.Authorization] = ["Bearer " + accessToken]
             }),
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -246,7 +241,7 @@ internal sealed class Oid4VciKeyAttestationTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, tokenResponse.StatusCode, tokenResponse.Body);

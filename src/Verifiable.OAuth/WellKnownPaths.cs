@@ -1,4 +1,3 @@
-using Verifiable.Core.Resolvers;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Cryptography.Text;
 

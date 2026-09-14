@@ -1,7 +1,6 @@
 using System.Text;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.WellKnown;
 
 namespace Verifiable.OAuth.Server.Pipeline;
 

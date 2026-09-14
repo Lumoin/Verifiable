@@ -1,9 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
@@ -12,7 +9,6 @@ using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -130,7 +126,7 @@ internal sealed class MinPinLengthExtensionProcessorTests
     /// </summary>
     private static async Task<byte[]> AuthorizeRpAndMintMinPinLengthAuthenticatorOutputBytesAsync(CancellationToken cancellationToken)
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("minpinlength-processor",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("minpinlength-processor", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 

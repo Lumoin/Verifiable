@@ -1,10 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
@@ -143,7 +139,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             DcqlFixtures.PidPrimaryAndSecondaryFamilyNamePrepared(),
             "nonce-policy-one-revoked").ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A policy that rejects a not-valid credential status refuses the presentation.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -158,7 +154,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         Assert.IsNotNull(failed.CredentialStatusRefusal,
             "A credential-status refusal rides the failed state as typed detail for the relying party.");
-        Assert.HasCount(1, failed.CredentialStatusRefusal!.Credentials,
+        Assert.HasCount(1, failed.CredentialStatusRefusal.Credentials,
             "Only the credential whose entry read 0x01 INVALID is refused; the valid one is passed over.");
         Assert.AreEqual(DcqlFixtures.PidSecondaryCredentialId,
             failed.CredentialStatusRefusal.Credentials[0].CredentialQueryId.Value,
@@ -227,7 +223,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         Assert.IsNull(refusalDetail,
             "Both credentials read 0x00 VALID, so the Response URI answers the OID4VP 1.0 Section 8.2 success.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A presentation the policy accepts reaches the verified terminal state.");
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
 
@@ -235,7 +231,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             "The policy decides once over the complete presentation.");
         Assert.IsNotNull(verified.CredentialStatuses,
             "The outcomes the verifier read are surfaced on the verified state.");
-        Assert.HasCount(2, verified.CredentialStatuses!,
+        Assert.HasCount(2, verified.CredentialStatuses,
             "Both presented credentials carried a status claim, so both outcomes are surfaced.");
         Assert.IsTrue(verified.CredentialStatuses[new CredentialQueryId(DcqlFixtures.PidPrimaryCredentialId)].IsValid,
             "An unset entry reads 0x00 VALID.");
@@ -282,7 +278,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         Assert.IsNull(refusalDetail,
             "A credential with no status claim has no status to refuse, so the Response URI answers 200.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A credential carrying no status claim verifies under the refusing policy unchanged.");
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
 
@@ -333,7 +329,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             DcqlFixtures.PidFamilyNamePrepared(),
             "nonce-policy-undeterminable").ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "An index outside the Status List leaves the status undeterminable, which fails closed.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -359,7 +355,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
     {
         const int credentialIndex = 55;
 
-        ResolveVerifiedStatusListTokenDelegate failingResolver = (context, ct) =>
+        static ValueTask<ResolvedStatusListToken?> failingResolver(StatusListResolutionContext context, CancellationToken ct = default) =>
             throw new StatusListResolutionException(context.Reference.Uri, "The status list host refused the connection.");
 
         CountingCredentialStatusPolicy policy = new(CredentialStatusPolicies.RefuseNotValid);
@@ -386,7 +382,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             DcqlFixtures.PidFamilyNamePrepared(),
             "nonce-policy-resolution-failure").ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A Status List Token the verifier could not obtain leaves the status undeterminable, which fails closed.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -444,7 +440,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             DcqlFixtures.PidFamilyNameValueConstraintPrepared("Schmidt"),
             "nonce-policy-unsatisfied-query").ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A presentation that does not satisfy the Authorization Request's DCQL query is refused.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -508,7 +504,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             alignedRegistration with { ClientId = clientIdRedirectUri };
 
         const string Nonce = "nonce-policy-wire";
-        (Uri _, string parHandle) = await app.HandleParAsync(
+        (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
             new TransactionNonce(Nonce),
             DcqlFixtures.PidFamilyNamePrepared(),
@@ -576,7 +572,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
         Assert.DoesNotContain("suspended", errorDescription, StringComparison.OrdinalIgnoreCase,
             "OID4VP 1.0 Section 15.9 keeps which not-valid state was read out of the wire description.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "The refused presentation leaves the verifier's flow in its failed terminal state.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -659,7 +655,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
         Assert.DoesNotContain(StatusMechanismNames.IdentifierList, wireDescription, StringComparison.Ordinal,
             "OID4VP 1.0 Section 15.9 keeps the mechanism the issuer named out of the wire description.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A status about which no statement can be made fails the presentation closed.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -725,17 +721,17 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
         Assert.IsNull(refusalDetail,
             "The relying party took the SHOULD's exception, so the Response URI answers the OID4VP 1.0 " +
             "Section 8.2 success.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A presentation the relying party chose to accept reaches the verified terminal state.");
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
 
         Assert.IsTrue(verified.Credentials.TryGetValue(
             new CredentialQueryId(DcqlFixtures.PidCredentialId), out VpCredentialClaims? credential),
             "The verified credentials are keyed by the DCQL credential query identifier each answered.");
-        Assert.IsNotNull(credential!.Status,
+        Assert.IsNotNull(credential.Status,
             "Token Status List Section 6.1 requires the status claim to name at least one mechanism, and the " +
             "issuer named one, so the credential carries a status claim.");
-        Assert.IsNull(credential.Status!.StatusList,
+        Assert.IsNull(credential.Status.StatusList,
             "The claim names no status_list mechanism, so there is no reference for the relying party to resolve.");
         Assert.HasCount(1, credential.Status.Mechanisms,
             "The issuer named exactly one mechanism, so exactly one is surfaced.");
@@ -787,14 +783,14 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         Assert.IsNull(refusalDetail,
             "A credential with no status claim has no status to reject, so the Response URI answers 200.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "The fail-closed default applies to a status claim that exists, not to a credential without one.");
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
 
         Assert.IsTrue(verified.Credentials.TryGetValue(
             new CredentialQueryId(DcqlFixtures.PidCredentialId), out VpCredentialClaims? credential),
             "The verified credentials are keyed by the DCQL credential query identifier each answered.");
-        Assert.IsNull(credential!.Status,
+        Assert.IsNull(credential.Status,
             "Step 1's existence check found no status claim, so the credential surfaces none.");
         Assert.IsNull(verified.CredentialStatuses,
             "Nothing was evaluated, so no outcome is recorded.");
@@ -845,7 +841,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
         Assert.IsNull(refusalDetail,
             "A determinable status is a statement the verifier can make, so no deployment default refuses it " +
             "on the wire; the relying party's own policy decides.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A credential naming status_list is evaluated, not rejected for naming a mechanism.");
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
 
@@ -853,10 +849,10 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
             "Step 2 resolves the Status List Token from the provided URI for the one reference presented.");
         Assert.IsNotNull(verified.CredentialStatuses,
             "Step 7's status value is the outcome the verifier records for the relying party.");
-        Assert.IsTrue(verified.CredentialStatuses!.TryGetValue(
+        Assert.IsTrue(verified.CredentialStatuses.TryGetValue(
             new CredentialQueryId(DcqlFixtures.PidCredentialId), out CredentialStatusOutcome? outcome),
             "The outcomes are keyed by the DCQL credential query identifier the credential answered.");
-        Assert.AreEqual(StatusTypes.Invalid, outcome!.Status,
+        Assert.AreEqual(StatusTypes.Invalid, outcome.Status,
             "Section 7.1: the entry set to 0x01 INVALID reads back as the value the issuer set.");
     }
 
@@ -909,7 +905,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
         Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
             "Section 4.1.2.1: a malformed vp_token presentation is answered with invalid_request.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A presentation carrying a status_list that fails Section 6.2 is refused.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
 
@@ -1128,7 +1124,7 @@ internal sealed class Oid4VpCredentialStatusPolicyFlowTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 

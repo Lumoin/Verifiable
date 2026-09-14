@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -79,7 +77,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        ClientRecord ephemeral = await ResolveAndProjectAsync(host).ConfigureAwait(false);
+        ClientRecord ephemeral = await ResolveAndProjectAsync().ConfigureAwait(false);
 
         //A PAR carrying the redirect_uri the RP declared in its federation
         //metadata is accepted — the federation-derived registration drives the
@@ -93,7 +91,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetRegistration(ephemeral);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -116,7 +114,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
     {
         await using TestHostShell host = new(TimeProvider);
 
-        ClientRecord ephemeral = await ResolveAndProjectAsync(host).ConfigureAwait(false);
+        ClientRecord ephemeral = await ResolveAndProjectAsync().ConfigureAwait(false);
 
         //A redirect_uri the RP never declared in its federation metadata must
         //be refused — the AllowedRedirectUris came from the resolved chain.
@@ -129,7 +127,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
             [OAuthRequestParameterNames.Scope] = WellKnownScopes.OpenId,
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetRegistration(ephemeral);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -150,7 +148,7 @@ internal sealed class FederationAutomaticRegistrationFlowTests
     /// then projects the effective metadata onto an ephemeral
     /// <see cref="ClientRecord"/> — the application-side step the skin owns.
     /// </summary>
-    private async ValueTask<ClientRecord> ResolveAndProjectAsync(TestHostShell host)
+    private async ValueTask<ClientRecord> ResolveAndProjectAsync()
     {
         DateTimeOffset now = TimeProvider.GetUtcNow();
 

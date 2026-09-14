@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Spec.Structures;
 
@@ -104,7 +102,7 @@ public sealed class Tpm2bSensitiveData: SensitiveMemory, ITpmWireType
 
         IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(length);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, length));
+        sourceBytes.CopyTo(storage.Memory.Span[..length]);
 
         return new Tpm2bSensitiveData(storage);
     }

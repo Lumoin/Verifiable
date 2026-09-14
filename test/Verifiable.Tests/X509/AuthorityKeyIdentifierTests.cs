@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
@@ -109,7 +106,7 @@ internal sealed class AuthorityKeyIdentifierTests
     {
         var left = new AuthorityKeyIdentifier(new byte[] { 0x01, 0x02, 0x03, 0x04 });
         var sameBytes = new AuthorityKeyIdentifier(new byte[] { 0x01, 0x02, 0x03, 0x04 });
-        var otherBytes = new AuthorityKeyIdentifier(new byte[] { 0x09, 0x09 });
+        var otherBytes = new AuthorityKeyIdentifier("\t\t"u8.ToArray());
 
         Assert.AreEqual(left, sameBytes, "§6.1.1.1: identifiers over equal raw bytes are equal.");
         Assert.AreEqual(left.GetHashCode(), sameBytes.GetHashCode(), "§6.1.1.1: equal raw bytes agree on GetHashCode.");

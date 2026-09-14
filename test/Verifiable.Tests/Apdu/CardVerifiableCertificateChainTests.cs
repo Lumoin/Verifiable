@@ -1,8 +1,5 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Eac;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Apdu;
 

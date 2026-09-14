@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core.Did;
 using Verifiable.Core.Model.Did;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -229,7 +228,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4f7jGC8Y4A8L2Y9XZGx8QY4Y8A8L
         [TestMethod]
         public void ConstructorThrowsOnNullKey()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyHex(null!));
+            _ = Assert.ThrowsExactly<ArgumentNullException>(() => new PublicKeyHex(null!));
         }
 
 

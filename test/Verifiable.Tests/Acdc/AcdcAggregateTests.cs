@@ -1,5 +1,4 @@
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -86,8 +85,8 @@ internal sealed class AcdcAggregateTests
         Assert.IsTrue(issuee.Detail.TryGetString(AcdcMessageFields.Issuer, out string? issueeAid));
         Assert.AreEqual(AcdcExampleVectors.AggregateIssueeAid, issueeAid);
 
-        Assert.IsInstanceOfType<ExpandedAggregateBlock>(section.Blocks[1]);
-        Assert.IsInstanceOfType<ExpandedAggregateBlock>(section.Blocks[2]);
+        _ = Assert.IsInstanceOfType<ExpandedAggregateBlock>(section.Blocks[1]);
+        _ = Assert.IsInstanceOfType<ExpandedAggregateBlock>(section.Blocks[2]);
     }
 
 
@@ -175,7 +174,7 @@ internal sealed class AcdcAggregateTests
     [TestMethod]
     public void RejectsNonStringNonListAggregate()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcAggregateReader.Read(DecodeAggregate("""{"A":{"d":"d"}}""")));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcAggregateReader.Read(DecodeAggregate("""{"A":{"d":"d"}}""")));
     }
 
 
@@ -185,14 +184,14 @@ internal sealed class AcdcAggregateTests
     [TestMethod]
     public void RejectsListWithoutAgid()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcAggregateReader.Read(DecodeAggregate("""{"A":[{"d":"d"}]}""")));
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcAggregateReader.Read(DecodeAggregate("""{"A":[{"d":"d"}]}""")));
     }
 
 
     private static object? DecodeAggregate(string wrappedJson)
     {
         MessageFieldMap map = AcdcJson.DecodeFieldMap(Encoding.UTF8.GetBytes(wrappedJson));
-        map.TryGetValue(AcdcMessageFields.AttributeAggregate, out object? aggregate);
+        _ = map.TryGetValue(AcdcMessageFields.AttributeAggregate, out object? aggregate);
 
         return aggregate;
     }

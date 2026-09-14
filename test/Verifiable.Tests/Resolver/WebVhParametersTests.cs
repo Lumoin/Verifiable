@@ -29,7 +29,7 @@ internal sealed class WebVhParametersTests
         Assert.IsNull(error, $"Genesis fold MUST succeed. Error: {error}.");
         Assert.IsNotNull(parameters);
 
-        return parameters!;
+        return parameters;
     }
 
 
@@ -128,7 +128,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.AreEqual(prior.Method, next!.Method);
+        Assert.AreEqual(prior.Method, next.Method);
         Assert.AreEqual(prior.Scid, next.Scid);
         Assert.AreSequenceEqual(prior.UpdateKeys, next.UpdateKeys);
         Assert.AreSequenceEqual(prior.NextKeyHashes, next.NextKeyHashes);
@@ -147,7 +147,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.HasCount(1, next!.UpdateKeys);
+        Assert.HasCount(1, next.UpdateKeys);
         Assert.AreEqual(rotatedKey, next.UpdateKeys[0]);
         Assert.IsTrue(next.Deactivated);
     }
@@ -193,7 +193,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.IsFalse(next!.Portable);
+        Assert.IsFalse(next.Portable);
     }
 
 
@@ -214,7 +214,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.IsFalse(next!.IsPreRotationActive);
+        Assert.IsFalse(next.IsPreRotationActive);
     }
 
 
@@ -241,7 +241,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNotNull(parameters.Witness);
         Assert.IsTrue(parameters.IsWitnessActive);
-        Assert.AreEqual(1, parameters.Witness!.Threshold);
+        Assert.AreEqual(1, parameters.Witness.Threshold);
         Assert.AreEqual(WitnessA, parameters.Witness.Witnesses[0]);
     }
 
@@ -316,8 +316,8 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.IsNotNull(next!.Witness);
-        Assert.AreEqual(WitnessA, next.Witness!.Witnesses[0]);
+        Assert.IsNotNull(next.Witness);
+        Assert.AreEqual(WitnessA, next.Witness.Witnesses[0]);
     }
 
 
@@ -331,7 +331,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.IsNull(next!.Witness);
+        Assert.IsNull(next.Witness);
         Assert.IsFalse(next.IsWitnessActive);
     }
 
@@ -408,7 +408,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.AreSequenceEqual(prior.Watchers, next!.Watchers);
+        Assert.AreSequenceEqual(prior.Watchers, next.Watchers);
     }
 
 
@@ -427,7 +427,7 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.HasCount(1, next!.Watchers);
+        Assert.HasCount(1, next.Watchers);
         Assert.AreEqual(WatcherB, next.Watchers[0]);
     }
 
@@ -448,6 +448,6 @@ internal sealed class WebVhParametersTests
 
         Assert.IsNull(error);
         Assert.IsNotNull(next);
-        Assert.IsEmpty(next!.Watchers);
+        Assert.IsEmpty(next.Watchers);
     }
 }

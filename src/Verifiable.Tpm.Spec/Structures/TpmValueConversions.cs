@@ -1,4 +1,3 @@
-using System;
 using System.Buffers.Binary;
 using System.Text;
 using Verifiable.Tpm.Spec.Handles;
@@ -38,7 +37,7 @@ public static class TpmValueConversions
 
         foreach(byte b in bytes)
         {
-            if(b != 0 && (b < 0x20 || b > 0x7E))
+            if(b is not 0 and (< 0x20 or > 0x7E))
             {
                 return $"0x{value:X8}";
             }

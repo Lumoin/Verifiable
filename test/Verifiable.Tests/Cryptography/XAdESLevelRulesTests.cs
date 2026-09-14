@@ -1,7 +1,6 @@
-using System.Buffers;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
@@ -54,45 +53,45 @@ internal sealed class XAdESLevelRulesTests
         IReadOnlyList<XAdESTimestampContainerMetadata>? timestampContainers = null,
         XAdESSignaturePolicyFact? signaturePolicy = null,
         IReadOnlyList<XAdESSigningCertificateDigestFact>? signingCertificateDigests = null) => new()
-    {
-        SigningCertificateDigests = signingCertificateDigests ?? [],
-        Discovery = discovery ?? new XAdESDiscoveryFact
         {
-            HasQualifyingProperties = true,
-            TargetResolvedToSignature = true,
-            SignedPropertiesReferencePresent = true,
-            SignedPropertiesReferenceResolvedToDiscoveredNode = true
-        },
-        IsDataObjectFormatCoverageSatisfied = isDataObjectFormatCoverageSatisfied,
-        SignaturePolicy = signaturePolicy,
-        ValidationData = validationData ?? EmptyValidationData,
-        ValidationDataForTimestampsHasContent = validationDataForTimestampsHasContent
+            SigningCertificateDigests = signingCertificateDigests ?? [],
+            Discovery = discovery ?? new XAdESDiscoveryFact
+            {
+                HasQualifyingProperties = true,
+                TargetResolvedToSignature = true,
+                SignedPropertiesReferencePresent = true,
+                SignedPropertiesReferenceResolvedToDiscoveredNode = true
+            },
+            IsDataObjectFormatCoverageSatisfied = isDataObjectFormatCoverageSatisfied,
+            SignaturePolicy = signaturePolicy,
+            ValidationData = validationData ?? EmptyValidationData,
+            ValidationDataForTimestampsHasContent = validationDataForTimestampsHasContent
             ?? (validationData ?? EmptyValidationData) is { TimeStampValidationDataCount: > 0 } or { AnyValidationDataCount: > 0 },
-        TimestampContainers = timestampContainers ?? [],
-        SignedPropertyOccurrenceCounts = signed ?? new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            [XAdESBaselineLevelTable.SigningTime.Name] = 1,
-            [XAdESBaselineLevelTable.SigningCertificateV2.Name] = 1
-        },
-        UnsignedPropertyOccurrenceCounts = unsigned ?? new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            [XAdESBaselineLevelTable.SignatureTimeStamp.Name] = 1
-        },
-        SignerRole = signerRole,
-        UnknownPropertyObservations = unknownPropertyObservations ?? [],
-        DeprecatedPropertyObservations = deprecatedPropertyObservations ?? [],
-        EmbeddedCertificates = embeddedCertificates ?? [],
-        EmbeddedCertificateRevocationLists = embeddedCrls ?? [],
-        EmbeddedOcspResponses = embeddedOcsp ?? [],
-        CompleteCertificateRefs = completeCertificateRefs ?? [],
-        AttributeCertificateRefs = attributeCertificateRefs ?? [],
-        CompleteRevocationCrlRefs = completeRevocationCrlRefs ?? [],
-        CompleteRevocationOcspRefs = completeRevocationOcspRefs ?? [],
-        AttributeRevocationCrlRefs = attributeRevocationCrlRefs ?? [],
-        AttributeRevocationOcspRefs = attributeRevocationOcspRefs ?? [],
-        CertificateValidationDataTriggered = certificateValidationDataTriggered,
-        RevocationValidationDataTriggered = revocationValidationDataTriggered
-    };
+            TimestampContainers = timestampContainers ?? [],
+            SignedPropertyOccurrenceCounts = signed ?? new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                [XAdESBaselineLevelTable.SigningTime.Name] = 1,
+                [XAdESBaselineLevelTable.SigningCertificateV2.Name] = 1
+            },
+            UnsignedPropertyOccurrenceCounts = unsigned ?? new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                [XAdESBaselineLevelTable.SignatureTimeStamp.Name] = 1
+            },
+            SignerRole = signerRole,
+            UnknownPropertyObservations = unknownPropertyObservations ?? [],
+            DeprecatedPropertyObservations = deprecatedPropertyObservations ?? [],
+            EmbeddedCertificates = embeddedCertificates ?? [],
+            EmbeddedCertificateRevocationLists = embeddedCrls ?? [],
+            EmbeddedOcspResponses = embeddedOcsp ?? [],
+            CompleteCertificateRefs = completeCertificateRefs ?? [],
+            AttributeCertificateRefs = attributeCertificateRefs ?? [],
+            CompleteRevocationCrlRefs = completeRevocationCrlRefs ?? [],
+            CompleteRevocationOcspRefs = completeRevocationOcspRefs ?? [],
+            AttributeRevocationCrlRefs = attributeRevocationCrlRefs ?? [],
+            AttributeRevocationOcspRefs = attributeRevocationOcspRefs ?? [],
+            CertificateValidationDataTriggered = certificateValidationDataTriggered,
+            RevocationValidationDataTriggered = revocationValidationDataTriggered
+        };
 
 
     /// <summary>
@@ -126,7 +125,7 @@ internal sealed class XAdESLevelRulesTests
 
         IReadOnlyList<XAdESRuleViolation> violations = XAdESLevelRules.Check(context);
 
-        Assert.ContainsSingle(v => v is XAdESRowPresenceViolation { IsMissing: true } p && p.Row.RequirementId == "XA-6.3-t44", violations);
+        _ = Assert.ContainsSingle(v => v is XAdESRowPresenceViolation { IsMissing: true } p && p.Row.RequirementId == "XA-6.3-t44", violations);
         Assert.HasCount(1, violations);
     }
 
@@ -338,7 +337,7 @@ internal sealed class XAdESLevelRulesTests
         //Ownership transfers into 'legal' below (XAdESQualifyingPropertiesFacts.Dispose cascades through
         //SignaturePolicy.Dispose), mirroring CheckSignaturePolicyDocumentDigestAsyncComparesAgainstTheSignedSigPolicyHash's
         //own inline-Hash-assignment precedent -- no separate 'using' on the digest itself.
-        DigestValue hash = await ComputeAndCopyDigestAsync(new byte[] { 0x70, 0x71 }).ConfigureAwait(false);
+        DigestValue hash = await ComputeAndCopyDigestAsync("pq"u8.ToArray()).ConfigureAwait(false);
         using XAdESQualifyingPropertiesFacts legal = BuildFacts(
             validationData: EmptyValidationData with { SignaturePolicyStoreCount = 1 },
             signaturePolicy: new XAdESSignaturePolicyFact { IsImplied = false, Id = new AdESObjectIdentifier("urn:oid:1.2.3.4", null), HashAlgorithm = AlgorithmIdentifier.Sha256, Hash = hash });
@@ -744,12 +743,12 @@ internal sealed class XAdESLevelRulesTests
             BoundProvenance? binding = await BoundProvenance.TryBindByCertificateDigestAsync(
                 [signerReference.Reference], verifiedCrypto, facts, pool, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(binding, "A signer reference whose committed digest matches the carried certificate must bind.");
-            Assert.AreEqual(ResolutionSource.CertificateDigest, binding!.Source);
+            Assert.AreEqual(ResolutionSource.CertificateDigest, binding.Source);
             Assert.AreEqual(VerificationRelationship.SignerCertificate, binding.Relationship);
 
             Verified<XAdESQualifyingPropertiesFacts>? promoted = XAdESLevelRules.Promote(context, verifiedCrypto, binding);
             Assert.IsNotNull(promoted, "Promote must mint when the gate binds and Table 2/crypto both hold.");
-            Assert.IsTrue(promoted!.Value.IsIdentityBound, "The minted Verified<T> must be identity-bound, not merely asserted.");
+            Assert.IsTrue(promoted.Value.IsIdentityBound, "The minted Verified<T> must be identity-bound, not merely asserted.");
             Assert.AreSame(binding, promoted.Value.Provenance);
 
             using XAdESQualifyingPropertiesFacts differentFacts = BuildFacts();
@@ -782,7 +781,7 @@ internal sealed class XAdESLevelRulesTests
         using(XAdESQualifyingPropertiesFacts duplicated = BuildFacts(embeddedCertificates:
             [Certificate(0x01, PkiCertificateTags.X509Certificate), Certificate(0x01, PkiCertificateTags.X509Certificate)]))
         {
-            Assert.ContainsSingle(o => o is XAdESCertificateValueDuplicationObservation, XAdESLevelRules.CheckValidationDataDuplication(duplicated));
+            _ = Assert.ContainsSingle(o => o is XAdESCertificateValueDuplicationObservation, XAdESLevelRules.CheckValidationDataDuplication(duplicated));
         }
 
         using(XAdESQualifyingPropertiesFacts distinct = BuildFacts(embeddedCertificates:
@@ -808,13 +807,13 @@ internal sealed class XAdESLevelRulesTests
         using(XAdESQualifyingPropertiesFacts crlDuplicated = BuildFacts(embeddedCrls:
             [Certificate(0x03, PkiCertificateTags.X509Crl), Certificate(0x03, PkiCertificateTags.X509Crl)]))
         {
-            Assert.ContainsSingle(o => o is XAdESRevocationValueDuplicationObservation { IsCrl: true }, XAdESLevelRules.CheckValidationDataDuplication(crlDuplicated));
+            _ = Assert.ContainsSingle(o => o is XAdESRevocationValueDuplicationObservation { IsCrl: true }, XAdESLevelRules.CheckValidationDataDuplication(crlDuplicated));
         }
 
         using(XAdESQualifyingPropertiesFacts ocspDuplicated = BuildFacts(embeddedOcsp:
             [Certificate(0x04, PkiCertificateTags.OcspResponse), Certificate(0x04, PkiCertificateTags.OcspResponse)]))
         {
-            Assert.ContainsSingle(o => o is XAdESRevocationValueDuplicationObservation { IsCrl: false }, XAdESLevelRules.CheckValidationDataDuplication(ocspDuplicated));
+            _ = Assert.ContainsSingle(o => o is XAdESRevocationValueDuplicationObservation { IsCrl: false }, XAdESLevelRules.CheckValidationDataDuplication(ocspDuplicated));
         }
     }
 
@@ -852,12 +851,12 @@ internal sealed class XAdESLevelRulesTests
             byte[] wrongCandidate = [0xFF, 0xFF, 0xFF];
             IReadOnlyList<XAdESRuleViolation> mismatched = await XAdESLevelRules.CheckSigningCertificateBindingAsync(
                 [signerReference], wrongCandidate, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.ContainsSingle(v => v is XAdESSigningCertificateBindingViolation, mismatched);
+            _ = Assert.ContainsSingle(v => v is XAdESSigningCertificateBindingViolation, mismatched);
         }
 
         IReadOnlyList<XAdESRuleViolation> noSignerReference = await XAdESLevelRules.CheckSigningCertificateBindingAsync(
             [], candidate, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.ContainsSingle(v => v is XAdESSigningCertificateBindingViolation, noSignerReference);
+        _ = Assert.ContainsSingle(v => v is XAdESSigningCertificateBindingViolation, noSignerReference);
     }
 
 
@@ -881,7 +880,7 @@ internal sealed class XAdESLevelRulesTests
 
         IReadOnlyList<XAdESRuleViolation> afterExpiry = XAdESLevelRules.CheckSignatureTimeStampsWithinSigningCertificateValidity(
             [new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero)], validity);
-        Assert.ContainsSingle(v => v is XAdESSignatureTimeStampCertificateValidityViolation, afterExpiry);
+        _ = Assert.ContainsSingle(v => v is XAdESSignatureTimeStampCertificateValidityViolation, afterExpiry);
     }
 
 
@@ -906,7 +905,7 @@ internal sealed class XAdESLevelRulesTests
 
         IReadOnlyList<XAdESRuleViolation> afterRevocation = XAdESLevelRules.CheckSignatureTimeStampsWithinSigningCertificateValidity(
             [new DateTimeOffset(2024, 7, 1, 0, 0, 0, TimeSpan.Zero)], validity, revokedAt);
-        Assert.ContainsSingle(v => v is XAdESSignatureTimeStampCertificateRevokedViolation, afterRevocation);
+        _ = Assert.ContainsSingle(v => v is XAdESSignatureTimeStampCertificateRevokedViolation, afterRevocation);
 
         IReadOnlyList<XAdESRuleViolation> beforeRevocation = XAdESLevelRules.CheckSignatureTimeStampsWithinSigningCertificateValidity(
             [new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.Zero)], validity, revokedAt);
@@ -962,7 +961,7 @@ internal sealed class XAdESLevelRulesTests
         using(XAdESQualifyingPropertiesFacts unresolved = BuildFacts(completeCertificateRefs: [unmatchedRef], embeddedCertificates: [otherCandidate], certificateValidationDataTriggered: true))
         {
             IReadOnlyList<XAdESRuleViolation> violations = await XAdESLevelRules.CheckReferencesResolveToValidationDataAsync(unresolved, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.ContainsSingle(v => v is XAdESReferencesValidationDataConsistencyViolation c
+            _ = Assert.ContainsSingle(v => v is XAdESReferencesValidationDataConsistencyViolation c
                 && c.Surface == XAdESRefsFamilyDigestSurface.CompleteCertificateRefs && c.MaterialKind == XAdESReferenceMaterialKind.Certificate, violations);
         }
 
@@ -1009,7 +1008,7 @@ internal sealed class XAdESLevelRulesTests
 
         IReadOnlyList<XAdESRuleViolation> violations = await XAdESLevelRules.CheckReferencesResolveToValidationDataAsync(facts, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ContainsSingle(v => v is XAdESReferencesValidationDataConsistencyViolation c
+        _ = Assert.ContainsSingle(v => v is XAdESReferencesValidationDataConsistencyViolation c
             && c.Surface == XAdESRefsFamilyDigestSurface.AttributeRevocationRefs && c.MaterialKind == XAdESReferenceMaterialKind.Ocsp, violations);
         Assert.HasCount(1, violations);
     }
@@ -1059,7 +1058,7 @@ internal sealed class XAdESLevelRulesTests
         using(XAdESQualifyingPropertiesFacts disagreeing = BuildFacts(completeRevocationOcspRefs: [disagreeingRef], embeddedOcsp: [disagreeingResponse]))
         {
             IReadOnlyList<XAdESRuleViolation> violations = await XAdESLevelRules.CheckOcspProducedAtConsistencyAsync(disagreeing, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.ContainsSingle(v => v is XAdESOcspProducedAtConsistencyViolation c && c.Surface == XAdESRefsFamilyDigestSurface.CompleteRevocationRefs && c.Ordinal == 0, violations);
+            _ = Assert.ContainsSingle(v => v is XAdESOcspProducedAtConsistencyViolation c && c.Surface == XAdESRefsFamilyDigestSurface.CompleteRevocationRefs && c.Ordinal == 0, violations);
         }
 
         var undigestedRef = new XAdESOcspReferenceFact { HasDigestAlgAndValue = false, ResponderKind = XAdESOcspResponderIdKind.ByName, ProducedAtLexical = "2034-01-01T00:00:00Z", ProducedAt = producedAt.AddYears(10) };
@@ -1088,7 +1087,7 @@ internal sealed class XAdESLevelRulesTests
         Assert.IsEmpty(agreeing);
 
         IReadOnlyList<XAdESRuleViolation> disagreeing = await XAdESLevelRules.CheckSignaturePolicyDocumentDigestAsync(policy, new byte[] { 0xFF, 0xFF, 0xFF }, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.ContainsSingle(v => v is XAdESSignaturePolicyDocumentDigestViolation, disagreeing);
+        _ = Assert.ContainsSingle(v => v is XAdESSignaturePolicyDocumentDigestViolation, disagreeing);
 
         using var impliedPolicy = new XAdESSignaturePolicyFact { IsImplied = true };
         IReadOnlyList<XAdESRuleViolation> impliedIsSkipped = await XAdESLevelRules.CheckSignaturePolicyDocumentDigestAsync(
@@ -1120,7 +1119,7 @@ internal sealed class XAdESLevelRulesTests
         using DigestValue unmatchedDigest = await ComputeAndCopyDigestAsync(new byte[] { 0xFF, 0xFF, 0xFF }).ConfigureAwait(false);
         IReadOnlyList<XAdESRuleViolation> unresolved = await XAdESLevelRules.CheckRenewedDigestsV2ReferenceLookupAsync(
             [(AlgorithmIdentifier.Sha256, unmatchedDigest)], [candidateReferenceInput], BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.ContainsSingle(v => v is XAdESRenewedDigestsV2ReferenceUnresolvedViolation u && u.Ordinal == 0, unresolved);
+        _ = Assert.ContainsSingle(v => v is XAdESRenewedDigestsV2ReferenceUnresolvedViolation u && u.Ordinal == 0, unresolved);
     }
 
 
@@ -1135,7 +1134,7 @@ internal sealed class XAdESLevelRulesTests
     public void CheckValidationDataServicePreferenceObservesOnlyWhenSatisfiedSolelyByTheEmbeddedOption()
     {
         using XAdESQualifyingPropertiesFacts embeddedOnly = BuildFacts();
-        Assert.ContainsSingle(o => o is XAdESValidationDataServicePreferenceObservation,
+        _ = Assert.ContainsSingle(o => o is XAdESValidationDataServicePreferenceObservation,
             XAdESLevelRules.CheckValidationDataServicePreference(new XAdESLevelRuleContext { Level = AdESBaselineLevel.BLT, Facts = embeddedOnly, AnyTimestampTokenCarriesEmbeddedValidationMaterial = true }));
 
         using XAdESQualifyingPropertiesFacts preferred = BuildFacts(validationData: EmptyValidationData with { TimeStampValidationDataCount = 1 });
@@ -1155,7 +1154,7 @@ internal sealed class XAdESLevelRulesTests
     {
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(32);
         owner.Memory.Span.Fill(0xFF);
-        BitConverter.TryWriteBytes(owner.Memory.Span[28..], distinguisher);
+        _ = BitConverter.TryWriteBytes(owner.Memory.Span[28..], distinguisher);
 
         return new DigestValue(owner, CryptoTags.Sha256Digest);
     }

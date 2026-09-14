@@ -1,11 +1,7 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;
@@ -195,7 +191,7 @@ public static class CAdESSignatureCreation
         ArgumentNullException.ThrowIfNull(pool);
         cancellationToken.ThrowIfCancellationRequested();
 
-        if(content is null == detachedContentDigest is null)
+        if((content is null) == (detachedContentDigest is null))
         {
             throw new ArgumentException(
                 "Exactly one of content (attached, clause 4.5) or detachedContentDigest (detached, clause 4.5) must be supplied.",
@@ -445,7 +441,7 @@ public static class CAdESSignatureCreation
             {
                 content = signer.Preparation.Content;
             }
-            else if(signer.Preparation.Content is null != content is null)
+            else if((signer.Preparation.Content is null) != (content is null))
             {
                 throw new ArgumentException(
                     "Every parallel signer signs the same content the same way: all preparations attached or all detached, because one encapContentInfo holds one content (RFC 5652 §5.1).",

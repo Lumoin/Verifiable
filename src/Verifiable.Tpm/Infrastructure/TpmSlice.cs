@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tpm.Infrastructure;
 
 /// <summary>

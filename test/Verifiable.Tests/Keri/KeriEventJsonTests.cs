@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -68,8 +67,8 @@ internal sealed class KeriEventJsonTests
     {
         MessageFieldMap fields = KeriEventJson.DecodeFieldMap(Encoding.UTF8.GetBytes(InceptionJson));
 
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.SigningKeys]);
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.Anchors]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.SigningKeys]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.Anchors]);
         Assert.IsEmpty((IReadOnlyList<string>)fields[KeriMessageFields.Anchors]!);
     }
 
@@ -88,7 +87,7 @@ internal sealed class KeriEventJsonTests
 
         MessageFieldMap fields = KeriEventJson.DecodeFieldMap(Encoding.UTF8.GetBytes(interactionJson));
 
-        Assert.IsInstanceOfType<IReadOnlyList<object>>(fields[KeriMessageFields.Anchors]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<object>>(fields[KeriMessageFields.Anchors]);
         var interaction = (KeriInteractionEvent)KeriEventReader.Read(fields);
         Assert.AreEqual(1, interaction.SequenceNumber);
     }
@@ -100,6 +99,6 @@ internal sealed class KeriEventJsonTests
     [TestMethod]
     public void RejectsNonObjectBytes()
     {
-        Assert.ThrowsExactly<System.Text.Json.JsonException>(() => KeriEventJson.DecodeFieldMap(Encoding.UTF8.GetBytes("[]")));
+        _ = Assert.ThrowsExactly<System.Text.Json.JsonException>(() => KeriEventJson.DecodeFieldMap(Encoding.UTF8.GetBytes("[]")));
     }
 }

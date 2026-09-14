@@ -46,13 +46,13 @@ public abstract record JAdESDetachedObjectDereferenceResult
 /// result.
 /// </param>
 [DebuggerDisplay("JAdESDetachedObjectDereferenceSuccess: {Content.Length} bytes")]
-public sealed record JAdESDetachedObjectDereferenceSuccess(PooledMemory Content) : JAdESDetachedObjectDereferenceResult;
+public sealed record JAdESDetachedObjectDereferenceSuccess(PooledMemory Content): JAdESDetachedObjectDereferenceResult;
 
 
 /// <summary>A failed dereference attempt (locator unreachable, an HTTP status outside the success range, an unsupported scheme).</summary>
 /// <param name="Reason">A human-readable statement of why dereferencing failed.</param>
 [DebuggerDisplay("JAdESDetachedObjectDereferenceFailure: {Reason}")]
-public sealed record JAdESDetachedObjectDereferenceFailure(string Reason) : JAdESDetachedObjectDereferenceResult;
+public sealed record JAdESDetachedObjectDereferenceFailure(string Reason): JAdESDetachedObjectDereferenceResult;
 
 
 /// <summary>
@@ -118,7 +118,7 @@ public delegate ValueTask<PooledMemory> JAdESUnknownDetachedObjectMechanismDeleg
 /// Thrown when a <c>sigD</c> payload cannot be resolved because a referenced object could not be dereferenced —
 /// a creation-time operational failure, mirroring <see cref="CBAdESDetachedObjectDereferenceException"/>.
 /// </summary>
-public sealed class JAdESDetachedObjectDereferenceException : Exception
+public sealed class JAdESDetachedObjectDereferenceException: Exception
 {
     /// <summary>Gets the URI-reference whose dereference failed, or <see langword="null"/> when unset.</summary>
     [SuppressMessage("Design", "CA1056:URI-like properties should not be strings",

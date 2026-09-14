@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Verifiable.DidComm;
 using Verifiable.DidComm.DiscoverFeatures;
-using Verifiable.Foundation;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.DidComm;
@@ -50,7 +45,7 @@ internal sealed class DidCommDiscoverFeaturesTests
         Assert.Contains("\"match\":\"https://didcomm.org/tictactoe/1.*\"", json, "The match (with its wildcard) is preserved verbatim.");
 
         Assert.IsTrue(RoundTrip(message).TryInterpretDiscoverFeaturesQuery(out DiscoverFeaturesQuery? recovered));
-        Assert.HasCount(2, recovered!.Queries);
+        Assert.HasCount(2, recovered.Queries);
         Assert.AreEqual(WellKnownDiscoverFeaturesNames.Protocol, recovered.Queries[0].FeatureType);
         Assert.AreEqual(TicTacToeWildcard, recovered.Queries[0].Match);
         Assert.AreEqual(WellKnownDiscoverFeaturesNames.GoalCode, recovered.Queries[1].FeatureType);
@@ -135,7 +130,7 @@ internal sealed class DidCommDiscoverFeaturesTests
         Assert.DoesNotContain("\"roles\"", json, "A null roles is not emitted (a missing roles is not 'no roles').");
 
         Assert.IsTrue(RoundTrip(message).TryInterpretDiscoverFeaturesDisclose(out DiscoverFeaturesDisclose? recovered));
-        Assert.IsNull(recovered!.Disclosures[0].Roles);
+        Assert.IsNull(recovered.Disclosures[0].Roles);
     }
 
 
@@ -148,7 +143,7 @@ internal sealed class DidCommDiscoverFeaturesTests
         DidCommMessage message = disclose.CreateDiscoverFeaturesDisclose("disclose-3", threadId: "query-1");
 
         Assert.IsTrue(RoundTrip(message).TryInterpretDiscoverFeaturesDisclose(out DiscoverFeaturesDisclose? recovered));
-        Assert.IsEmpty(recovered!.Disclosures);
+        Assert.IsEmpty(recovered.Disclosures);
     }
 
 
@@ -166,7 +161,7 @@ internal sealed class DidCommDiscoverFeaturesTests
         DidCommMessage parsed = RoundTrip(message);
         Assert.IsNull(parsed.ThreadId);
         Assert.IsTrue(parsed.TryInterpretDiscoverFeaturesDisclose(out DiscoverFeaturesDisclose? recovered), "A thid-less proactive disclose still interprets.");
-        Assert.HasCount(1, recovered!.Disclosures);
+        Assert.HasCount(1, recovered.Disclosures);
     }
 
 
@@ -355,13 +350,13 @@ internal sealed class DidCommDiscoverFeaturesTests
         IReadOnlyList<FeatureDisclosure> catalog =
             [new FeatureDisclosure { FeatureType = WellKnownDiscoverFeaturesNames.Protocol, Id = TicTacToe10, Roles = ["player"] }];
 
-        DiscoverFeaturesDisclose matched = received!.MatchDisclosures(catalog);
+        DiscoverFeaturesDisclose matched = received.MatchDisclosures(catalog);
         DidCommMessage discloseMessage = matched.CreateDiscoverFeaturesDisclose("d-1", threadId: queryMessage.Id);
 
         DidCommMessage parsed = RoundTrip(discloseMessage);
         Assert.AreEqual("q-1", parsed.ThreadId, "The responder's disclose continues the query's thread.");
         Assert.IsTrue(parsed.TryInterpretDiscoverFeaturesDisclose(out DiscoverFeaturesDisclose? recovered));
-        Assert.HasCount(1, recovered!.Disclosures);
+        Assert.HasCount(1, recovered.Disclosures);
         Assert.AreEqual(TicTacToe10, recovered.Disclosures[0].Id);
     }
 
@@ -410,11 +405,11 @@ internal sealed class DidCommDiscoverFeaturesTests
     [TestMethod]
     public void BuildValidationThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new DiscoverFeaturesQuery { Queries = [] }.CreateDiscoverFeaturesQuery("id"));
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new DiscoverFeaturesQuery { Queries = [new FeatureQuery { FeatureType = "protocol", Match = "*" }] }.CreateDiscoverFeaturesQuery(""));
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new DiscoverFeaturesDisclose { Disclosures = [] }.CreateDiscoverFeaturesDisclose("", threadId: "t"));
     }
 

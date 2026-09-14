@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Spec.Algorithms;
 
 namespace Verifiable.Tpm.Spec.Structures;
@@ -115,7 +113,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
     /// Initializes a new digest with the specified storage.
     /// </summary>
     /// <param name="storage">The memory owner containing the digest bytes.</param>
-    public Tpm2bDigest(IMemoryOwner<byte> storage): base(storage, TpmTags.Digest)
+    public Tpm2bDigest(IMemoryOwner<byte> storage) : base(storage, TpmTags.Digest)
     {
     }
 
@@ -183,7 +181,7 @@ public sealed class Tpm2bDigest: SensitiveMemory, ITpmWireType
 
         //Copy digest bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(size);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, size));
+        sourceBytes.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bDigest(storage);
     }

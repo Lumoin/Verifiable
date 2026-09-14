@@ -69,7 +69,7 @@ internal sealed class Fido2AttestationSelectorsTests
     [TestMethod]
     public void DuplicateFormatRegistrationThrowsArgumentException()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => Fido2AttestationSelectors.FromFormats(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, PackedVerifier),
             (WellKnownWebAuthnAttestationFormats.Packed, NoneVerifier)));
     }

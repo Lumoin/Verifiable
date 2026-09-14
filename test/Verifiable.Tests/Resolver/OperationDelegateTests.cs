@@ -18,7 +18,7 @@ internal sealed class OperationDelegateTests
     [TestMethod]
     public async Task ApplyCreateDelegateIsIndependentlyTestable()
     {
-        ApplyCreateDelegate<string> applyCreate = (operationData, ct) =>
+        static ValueTask<Result<string, string>> applyCreate(ReadOnlyMemory<byte> operationData, CancellationToken ct)
         {
             string content = Encoding.UTF8.GetString(operationData.Span);
             if(string.IsNullOrWhiteSpace(content))
@@ -27,7 +27,7 @@ internal sealed class OperationDelegateTests
             }
 
             return ValueTask.FromResult(Result<string, string>.Success(content));
-        };
+        }
 
         Result<string, string> success = await applyCreate(Encoding.UTF8.GetBytes("initial-state"), TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(success.IsSuccess);
@@ -42,11 +42,11 @@ internal sealed class OperationDelegateTests
     [TestMethod]
     public async Task ApplyUpdateDelegateIsIndependentlyTestable()
     {
-        ApplyUpdateDelegate<string> applyUpdate = (currentState, operationData, ct) =>
+        static ValueTask<Result<string, string>> applyUpdate(string currentState, ReadOnlyMemory<byte> operationData, CancellationToken ct)
         {
             string patch = Encoding.UTF8.GetString(operationData.Span);
             return ValueTask.FromResult(Result<string, string>.Success($"{currentState}+{patch}"));
-        };
+        }
 
         Result<string, string> result = await applyUpdate("v1", Encoding.UTF8.GetBytes("patch1"), TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess);
@@ -57,19 +57,19 @@ internal sealed class OperationDelegateTests
     [TestMethod]
     public async Task ApplyDeactivateDelegateProducesTerminalState()
     {
-        ApplyDeactivateDelegate<string> applyDeactivate = (currentState, operationData, ct) =>
+        static ValueTask<Result<string, string>> applyDeactivate(string currentState, ReadOnlyMemory<byte> operationData, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success($"DEACTIVATED:{currentState}"));
 
         Result<string, string> result = await applyDeactivate("active-state", ReadOnlyMemory<byte>.Empty, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess);
-        Assert.StartsWith("DEACTIVATED:", result.Value!, StringComparison.Ordinal);
+        Assert.StartsWith("DEACTIVATED:", result.Value, StringComparison.Ordinal);
     }
 
 
     [TestMethod]
     public async Task ValidateProofDelegateCanRejectInvalidSignatures()
     {
-        ValidateProofDelegate<string> validateProof = (currentState, operationData, ct) =>
+        static ValueTask<Result<string, string>> validateProof(string? currentState, ReadOnlyMemory<byte> operationData, CancellationToken ct)
         {
             if(operationData.Length > 0 && operationData.Span[0] == 0x01)
             {
@@ -77,7 +77,7 @@ internal sealed class OperationDelegateTests
             }
 
             return ValueTask.FromResult(Result<string, string>.Failure("Invalid proof: missing validity marker."));
-        };
+        }
 
         Result<string, string> valid = await validateProof("state", new byte[] { 0x01, 0x02, 0x03 }, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(valid.IsSuccess);
@@ -90,7 +90,7 @@ internal sealed class OperationDelegateTests
     [TestMethod]
     public async Task ValidateProofDelegateCanBeAsyncForRemoteHsm()
     {
-        ValidateProofDelegate<string> remoteHsmValidation = async (currentState, operationData, ct) =>
+        static async ValueTask<Result<string, string>> remoteHsmValidation(string? currentState, ReadOnlyMemory<byte> operationData, CancellationToken ct)
         {
             await Task.Yield();
 
@@ -100,7 +100,7 @@ internal sealed class OperationDelegateTests
             }
 
             return Result<string, string>.Failure("Proof too short.");
-        };
+        }
 
         Result<string, string> result = await remoteHsmValidation("state", new byte[] { 0x01, 0x02, 0x03, 0x04 }, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(result.IsSuccess);
@@ -113,16 +113,16 @@ internal sealed class OperationDelegateTests
     [TestMethod]
     public async Task OperationRulesGroupsDelegatesTogether()
     {
-        ApplyCreateDelegate<string> create = (data, ct) =>
+        static ValueTask<Result<string, string>> create(ReadOnlyMemory<byte> data, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success(Encoding.UTF8.GetString(data.Span)));
 
-        ApplyUpdateDelegate<string> update = (state, data, ct) =>
+        static ValueTask<Result<string, string>> update(string state, ReadOnlyMemory<byte> data, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success($"{state}+{Encoding.UTF8.GetString(data.Span)}"));
 
-        ApplyDeactivateDelegate<string> deactivate = (state, _, ct) =>
+        static ValueTask<Result<string, string>> deactivate(string state, ReadOnlyMemory<byte> _, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success($"DEACTIVATED:{state}"));
 
-        ValidateProofDelegate<string> validate = (state, data, ct) =>
+        static ValueTask<Result<string, string>> validate(string? state, ReadOnlyMemory<byte> data, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success(state ?? ""));
 
         var rules = new OperationRules<string>(create, update, deactivate, validate);
@@ -138,17 +138,17 @@ internal sealed class OperationDelegateTests
     [TestMethod]
     public async Task MethodsCanShareDelegatesSelectively()
     {
-        ApplyCreateDelegate<string> sharedCreate = (data, ct) =>
+        static ValueTask<Result<string, string>> sharedCreate(ReadOnlyMemory<byte> data, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success(Encoding.UTF8.GetString(data.Span)));
 
-        ApplyUpdateDelegate<string> sharedUpdate = (state, data, ct) =>
+        static ValueTask<Result<string, string>> sharedUpdate(string state, ReadOnlyMemory<byte> data, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success($"{state}+{Encoding.UTF8.GetString(data.Span)}"));
 
-        ApplyDeactivateDelegate<string> sharedDeactivate = (state, _, ct) =>
+        static ValueTask<Result<string, string>> sharedDeactivate(string state, ReadOnlyMemory<byte> _, CancellationToken ct) =>
             ValueTask.FromResult(Result<string, string>.Success($"DEACTIVATED:{state}"));
 
         //Different proof validation delegates for different methods.
-        ValidateProofDelegate<string> celValidateProof = (state, data, ct) =>
+        static ValueTask<Result<string, string>> celValidateProof(string? state, ReadOnlyMemory<byte> data, CancellationToken ct)
         {
             if(data.Length >= 2 && data.Span[0] == 0xCE && data.Span[1] == 0x10)
             {
@@ -156,9 +156,9 @@ internal sealed class OperationDelegateTests
             }
 
             return ValueTask.FromResult(Result<string, string>.Failure("Missing oblivious witness signature."));
-        };
+        }
 
-        ValidateProofDelegate<string> webvhValidateProof = (state, data, ct) =>
+        static ValueTask<Result<string, string>> webvhValidateProof(string? state, ReadOnlyMemory<byte> data, CancellationToken ct)
         {
             if(data.Length >= 2 && data.Span[0] == 0xBC && data.Span[1] == 0x60)
             {
@@ -166,7 +166,7 @@ internal sealed class OperationDelegateTests
             }
 
             return ValueTask.FromResult(Result<string, string>.Failure("Missing organizational witness approval."));
-        };
+        }
 
         var celRules = new OperationRules<string>(sharedCreate, sharedUpdate, sharedDeactivate, celValidateProof);
         var webvhRules = new OperationRules<string>(sharedCreate, sharedUpdate, sharedDeactivate, webvhValidateProof);

@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
@@ -6,7 +5,6 @@ using Verifiable.JCose;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 namespace Verifiable.OAuth.Server.Metadata;
 
 /// <summary>
@@ -298,7 +296,7 @@ public static class MetadataEndpoints
                 string discoveryJson;
                 try
                 {
-                    sb.Append('{');
+                    _ = sb.Append('{');
 
                     //Every member name the base emission writes, so a contributed field
                     //(below, via AppendContributedField) naming one of them is refused
@@ -316,7 +314,7 @@ public static class MetadataEndpoints
                     string issuerValue = issuer.OriginalString;
                     bool issuerFirst = true;
                     JsonAppender.AppendStringField(sb, "issuer", issuerValue, ref issuerFirst);
-                    emittedFieldNames.Add("issuer");
+                    _ = emittedFieldNames.Add("issuer");
 
                     //Endpoint emission walks the per-request
                     //EndpointChain. The dispatcher places it on the context after
@@ -601,15 +599,20 @@ public static class MetadataEndpoints
                         }
                     }
 
-                    //code_challenge_methods_supported (RFC 7636 §6.2.1). The
-                    //library only implements S256 — plain is forbidden per OAuth
-                    //2.1 §7.5.1.
+                    //code_challenge_methods_supported (RFC 8414 §2) reflects the resolved
+                    //policy, matching enforcement: S256-only under PkceMethodSet.S256Only (OAuth
+                    //2.1 draft-16 §7.5.2: "The plain code challenge method, defined in [RFC7636],
+                    //is explicitly forbidden in OAuth 2.1." for the FAPI/HAIP/2.1 profiles),
+                    //S256-and-plain under PkceMethodSet.S256AndPlain (the RFC 6749 + RFC 7636
+                    //baseline profile, RFC 9700 §2.1.1's SHOULD-not-use-plain notwithstanding).
                     if(authorizationCodeOnChain)
                     {
                         AppendStringArrayField(
                             sb,
                             AuthorizationServerMetadataParameterNames.CodeChallengeMethodsSupported,
-                            CodeChallengeMethodS256,
+                            context.AllowedPkceMethods == PkceMethodSet.S256AndPlain
+                                ? CodeChallengeMethodS256AndPlain
+                                : CodeChallengeMethodS256,
                             emittedFieldNames);
 
                         //FAPI 2.0 §5.2.2 / RFC 9207: advertise whether PAR is mandatory and
@@ -777,7 +780,7 @@ public static class MetadataEndpoints
                         }
                     }
 
-                    sb.Append('}');
+                    _ = sb.Append('}');
 
                     discoveryJson = sb.ToString();
                 }
@@ -823,7 +826,7 @@ public static class MetadataEndpoints
         //primitive.
         bool first = false;
         JsonAppender.AppendStringField(sb, key, value, ref first);
-        emittedFieldNames.Add(key);
+        _ = emittedFieldNames.Add(key);
     }
 
 
@@ -849,7 +852,7 @@ public static class MetadataEndpoints
 
         bool first = false;
         JsonAppender.AppendStringArrayField(sb, key, values, ref first);
-        emittedFieldNames.Add(key);
+        _ = emittedFieldNames.Add(key);
     }
 
 
@@ -867,14 +870,17 @@ public static class MetadataEndpoints
     {
         bool first = false;
         JsonAppender.AppendBoolField(sb, key, value, ref first);
-        emittedFieldNames.Add(key);
+        _ = emittedFieldNames.Add(key);
     }
 
 
     //Static well-known value sets emitted by the discovery endpoint.
     private static IReadOnlyList<string> SubjectTypePublic { get; } = ["public"];
     private static IReadOnlyList<string> ResponseTypeCode { get; } = ["code"];
-    private static IReadOnlyList<string> CodeChallengeMethodS256 { get; } = ["S256"];
+    private static IReadOnlyList<string> CodeChallengeMethodS256 { get; } =
+        [WellKnownCodeChallengeMethods.S256];
+    private static IReadOnlyList<string> CodeChallengeMethodS256AndPlain { get; } =
+        [WellKnownCodeChallengeMethods.S256, WellKnownCodeChallengeMethods.Plain];
     private static IReadOnlyList<string> ClaimTypeNormal { get; } = ["normal"];
 
     /// <summary>
@@ -973,7 +979,7 @@ public static class MetadataEndpoints
             if(key is null) { continue; }
 
             string jwa = Verifiable.JCose.CryptoFormatConversions.DefaultTagToJwaConverter(key.Tag);
-            algorithms.Add(jwa);
+            _ = algorithms.Add(jwa);
         }
 
         return algorithms.Count == 0 ? [] : algorithms.ToArray();
@@ -1092,21 +1098,21 @@ public static class MetadataEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append("{\"keys\":[");
+            _ = sb.Append("{\"keys\":[");
 
             bool first = true;
             foreach(JsonWebKey key in jwks.Keys)
             {
                 if(!first)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
                 first = false;
                 JsonAppender.AppendObject(sb, key);
             }
 
-            sb.Append("]}");
+            _ = sb.Append("]}");
 
             return sb.ToString();
         }

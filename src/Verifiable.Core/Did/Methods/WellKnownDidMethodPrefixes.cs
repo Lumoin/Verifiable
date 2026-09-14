@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods;
 
 /// <summary>
@@ -88,13 +86,13 @@ public static class WellKnownDidMethodPrefixes
     /// </summary>
     public static string GetCanonicalizedValue(string didPrefix) => didPrefix switch
     {
-        string _ when IsKeyDidPrefix(didPrefix) => KeyDidMethodPrefix,
-        string _ when IsWebPlusDidPrefix(didPrefix) => WebPlusDidMethodPrefix,
-        string _ when IsWebVhDidPrefix(didPrefix) => WebVhDidMethodPrefix,
-        string _ when IsWebDidPrefix(didPrefix) => WebDidMethodPrefix,
-        string _ when IsEbsiDidPrefix(didPrefix) => EbsiDidMethodPrefix,
-        string _ when IsCheqdDidPrefix(didPrefix) => CheqdDidMethodPrefix,
-        string _ when IsPeerDidPrefix(didPrefix) => PeerDidMethodPrefix,
+        string when IsKeyDidPrefix(didPrefix) => KeyDidMethodPrefix,
+        string when IsWebPlusDidPrefix(didPrefix) => WebPlusDidMethodPrefix,
+        string when IsWebVhDidPrefix(didPrefix) => WebVhDidMethodPrefix,
+        string when IsWebDidPrefix(didPrefix) => WebDidMethodPrefix,
+        string when IsEbsiDidPrefix(didPrefix) => EbsiDidMethodPrefix,
+        string when IsCheqdDidPrefix(didPrefix) => CheqdDidMethodPrefix,
+        string when IsPeerDidPrefix(didPrefix) => PeerDidMethodPrefix,
         _ => didPrefix
     };
 

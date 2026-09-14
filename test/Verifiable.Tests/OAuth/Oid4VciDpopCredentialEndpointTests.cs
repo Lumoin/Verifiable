@@ -1,11 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
@@ -13,8 +12,6 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -161,8 +158,8 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
     {
         VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Haip10, Capabilities);
-        host.EnableDpop();
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.EnableDpop();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
@@ -183,7 +180,7 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
         ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
 
         //Step 2 — Authorize (user-agent GET replicated in-process with a pre-authenticated subject).
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(TestSubject);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -261,11 +258,11 @@ internal sealed class Oid4VciDpopCredentialEndpointTests
             "{\"credential_configuration_id\":\"" + ConfigurationId + "\",\"proofs\":{\"jwt\":[\"p\"]}}",
             Encoding.UTF8, WellKnownMediaTypes.Application.Json);
         using HttpRequestMessage request = new(HttpMethod.Post, ctx.CredentialUrl) { Content = content };
-        request.Headers.TryAddWithoutValidation(
+        _ = request.Headers.TryAddWithoutValidation(
             WellKnownHttpHeaderNames.Authorization, $"{scheme} {accessToken}");
         if(dpopProof is not null)
         {
-            request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, dpopProof);
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, dpopProof);
         }
 
         return await ctx.Http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);

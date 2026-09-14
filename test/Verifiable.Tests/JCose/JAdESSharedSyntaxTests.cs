@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.JCose;
@@ -72,10 +71,10 @@ internal sealed class JAdESSharedSyntaxTests
         Assert.AreEqual(id, model.Id);
         Assert.IsNull(model.Desc);
         Assert.IsNotNull(model.DocRefs);
-        Assert.HasCount(docRefs.Length, model.DocRefs!);
+        Assert.HasCount(docRefs.Length, model.DocRefs);
         for(int i = 0; i < docRefs.Length; i++)
         {
-            Assert.AreEqual(docRefs[i], model.DocRefs![i], $"docRefs[{i}] must carry through unchanged.");
+            Assert.AreEqual(docRefs[i], model.DocRefs[i], $"docRefs[{i}] must carry through unchanged.");
         }
     }
 
@@ -93,8 +92,8 @@ internal sealed class JAdESSharedSyntaxTests
         Assert.AreEqual(id, model.Id);
         Assert.AreEqual(desc, model.Desc);
         Assert.IsNotNull(model.DocRefs);
-        Assert.HasCount(1, model.DocRefs!);
-        Assert.AreEqual(docRefs[0], model.DocRefs![0]);
+        Assert.HasCount(1, model.DocRefs);
+        Assert.AreEqual(docRefs[0], model.DocRefs[0]);
     }
 
 
@@ -102,7 +101,7 @@ internal sealed class JAdESSharedSyntaxTests
     [TestMethod]
     public void ConstructingObjectIdentifierWithNullIdThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESObjectIdentifier(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESObjectIdentifier(null!));
     }
 
 
@@ -110,7 +109,7 @@ internal sealed class JAdESSharedSyntaxTests
     [TestMethod]
     public void ConstructingObjectIdentifierWithEmptyIdThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESObjectIdentifier(string.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESObjectIdentifier(string.Empty));
     }
 
 
@@ -121,7 +120,7 @@ internal sealed class JAdESSharedSyntaxTests
     [TestMethod]
     public void ConstructingObjectIdentifierWithEmptyDocRefsArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESObjectIdentifier("https://example.org/jades/oid/1", docRefs: []));
     }
 
@@ -291,7 +290,7 @@ internal sealed class JAdESSharedSyntaxTests
     [TestMethod]
     public void ConstructingTimestampContainerWithNullTokensThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new AdESTimestampContainer(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new AdESTimestampContainer(null!));
     }
 
 
@@ -302,7 +301,7 @@ internal sealed class JAdESSharedSyntaxTests
     [TestMethod]
     public void ConstructingTimestampContainerWithEmptyTokensArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESTimestampContainer(Array.Empty<AdESTimestampToken>()));
     }
 

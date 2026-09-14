@@ -1,9 +1,5 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -119,7 +115,7 @@ internal sealed class SignInputFramingTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using SignInput input = SignInput.ForEcdsa(TpmiDhObject.FromValue(0x80000001u), [0x00], TpmAlgIdConstants.TPM_ALG_SHA256, pool);
 
-        Assert.IsTrue(((ITpmCommandInput)input).FirstCommandParameterIsEncryptable, "digest is a sized first parameter, so a decrypt session may protect it.");
+        Assert.IsTrue(input.FirstCommandParameterIsEncryptable, "digest is a sized first parameter, so a decrypt session may protect it.");
     }
 
     /// <summary>

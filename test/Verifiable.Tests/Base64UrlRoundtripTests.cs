@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests
@@ -26,24 +25,24 @@ namespace Verifiable.Tests
             };
 
             foreach(var originalData in testData)
-            {                
+            {
                 //Test our Base64Url encoder/decoder roundtrip.
                 var memPool = BaseMemoryPool.Shared;
 
                 //Encode using our Base64Url encoder.
                 string ourBase64Url = TestSetup.Base64UrlEncoder(originalData);
-                
+
                 //Decode using our Base64Url decoder.
                 using var decodedOwner = TestSetup.Base64UrlDecoder(ourBase64Url, memPool);
                 byte[] ourDecoded = decodedOwner.Memory.ToArray();
-                
+
                 //Verify roundtrip works.
                 Assert.AreSequenceEqual(originalData, ourDecoded, "Our Base64Url roundtrip failed");
 
                 //Compare with .NET Base64 reference implementation.
                 string netBase64 = Convert.ToBase64String(originalData);
                 string netBase64Url = netBase64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
-                
+
                 //Our encoder should produce the same result as .NET conversion.
                 Assert.AreEqual(netBase64Url, ourBase64Url, "Base64Url encoding doesn't match .NET reference");
 
@@ -52,7 +51,7 @@ namespace Verifiable.Tests
                 byte[] netDecoded = netDecodedOwner.Memory.ToArray();
 
                 //Should decode .NET Base64Url correctly.
-                Assert.AreSequenceEqual(originalData, netDecoded, "Failed to decode .NET Base64Url");                
+                Assert.AreSequenceEqual(originalData, netDecoded, "Failed to decode .NET Base64Url");
             }
         }
 
@@ -64,13 +63,13 @@ namespace Verifiable.Tests
 
             //Standard Base64.
             string base64 = Convert.ToBase64String(testData);
-            
+
             //Manual Base64Url conversion.
             string manualBase64Url = base64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
-            
+
             //Our Base64Url encoder.
             string ourBase64Url = TestSetup.Base64UrlEncoder(testData);
-            
+
             //Should match manual conversion.
             Assert.AreEqual(manualBase64Url, ourBase64Url, "Character replacement doesn't match manual conversion");
 
@@ -86,10 +85,10 @@ namespace Verifiable.Tests
             //Test different padding scenarios.
             var testCases = new[]
             {
-                (Data: new byte[] { 0x48 }, ExpectedPadding: 2), // 1 byte -> 2 padding chars in Base64
-                (Data: new byte[] { 0x48, 0x65 }, ExpectedPadding: 1), // 2 bytes -> 1 padding char in Base64
-                (Data: new byte[] { 0x48, 0x65, 0x6C }, ExpectedPadding: 0), // 3 bytes -> no padding in Base64
-                (Data: new byte[] { 0x48, 0x65, 0x6C, 0x6C }, ExpectedPadding: 2), // 4 bytes -> 2 padding chars
+                (Data: "H"u8.ToArray(), ExpectedPadding: 2), // 1 byte -> 2 padding chars in Base64
+                (Data: "He"u8.ToArray(), ExpectedPadding: 1), // 2 bytes -> 1 padding char in Base64
+                (Data: "Hel"u8.ToArray(), ExpectedPadding: 0), // 3 bytes -> no padding in Base64
+                (Data: "Hell"u8.ToArray(), ExpectedPadding: 2), // 4 bytes -> 2 padding chars
             };
 
             foreach(var (data, expectedPadding) in testCases)
@@ -125,7 +124,7 @@ namespace Verifiable.Tests
             Assert.AreEqual(OperationStatus.Done, status, "Direct Base64 encoding failed");
 
             string directBase64 = Encoding.UTF8.GetString(directBase64Buffer[..bytesWritten]);
-            
+
             //Our Base64Url encoder (should use same Base64 underneath).
             string ourBase64Url = TestSetup.Base64UrlEncoder(testData);
 
@@ -138,7 +137,7 @@ namespace Verifiable.Tests
             {
                 ourAsBase64 = ourAsBase64.PadRight(ourAsBase64.Length + paddingNeeded, '=');
             }
-            
+
             //Should match the direct Base64 encoding.
             Assert.AreEqual(directBase64, ourAsBase64, "Our Base64 doesn't match direct System.Buffers.Text.Base64");
         }

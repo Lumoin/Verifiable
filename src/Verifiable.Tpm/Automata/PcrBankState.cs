@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Immutable;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Automata;
 

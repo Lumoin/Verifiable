@@ -1,4 +1,3 @@
-using System;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;

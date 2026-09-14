@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
+using System.Diagnostics;
 using Verifiable.Core.Assessment;
 
 
@@ -153,7 +153,7 @@ internal sealed class ClaimIssuerTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+            Sample = (ref _) => ActivitySamplingResult.AllData
         };
         ActivitySource.AddActivityListener(listener);
 
@@ -161,7 +161,7 @@ internal sealed class ClaimIssuerTests
         Assert.IsNotNull(activity, "Activity should be created.");
 
         //Add baggage to the activity.
-        activity.AddBaggage("test-key", "test-value");
+        _ = activity.AddBaggage("test-key", "test-value");
 
         var result = await issuer.GenerateClaimsAsync(
             "test-input",
@@ -243,7 +243,7 @@ internal sealed class ClaimIssuerTests
         var failedClaim = result.Claims[1];
         Assert.AreEqual(ClaimId.FailedClaim, failedClaim.Id);
         Assert.AreEqual(ClaimOutcome.Failure, failedClaim.Outcome);
-        Assert.IsInstanceOfType<FailedClaimContext>(failedClaim.Context);
+        _ = Assert.IsInstanceOfType<FailedClaimContext>(failedClaim.Context);
 
         var failedContext = (FailedClaimContext)failedClaim.Context;
         Assert.Contains("Simulated rule failure", failedContext.FailureMessage, StringComparison.Ordinal);
@@ -302,7 +302,7 @@ internal sealed class ClaimIssuerTests
     {
         var rules = new List<ClaimDelegate<string>>();
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             new ClaimIssuer<string>(null!, rules, TimeProvider));
     }
 
@@ -312,7 +312,7 @@ internal sealed class ClaimIssuerTests
     {
         var rules = new List<ClaimDelegate<string>>();
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             new ClaimIssuer<string>(string.Empty, rules, TimeProvider));
     }
 
@@ -320,7 +320,7 @@ internal sealed class ClaimIssuerTests
     [TestMethod]
     public void ConstructorThrowsOnNullValidationRules()
     {
-        Assert.Throws<ArgumentNullException>(() =>
+        _ = Assert.Throws<ArgumentNullException>(() =>
             new ClaimIssuer<string>(TestIssuerId, null!, TimeProvider));
     }
 
@@ -335,7 +335,7 @@ internal sealed class ClaimIssuerTests
         ValueTask<List<Claim>> SignalingRule(string input, CancellationToken ct)
         {
             List<Claim> claims = [new Claim(ClaimId.AlgIsValid, ClaimOutcome.Success)];
-            firstRuleCompleted.TrySetResult(true);
+            _ = firstRuleCompleted.TrySetResult(true);
 
             return ValueTask.FromResult(claims);
         }
@@ -356,7 +356,7 @@ internal sealed class ClaimIssuerTests
         var generateTask = issuer.GenerateClaimsAsync("test-input", TestCorrelationId, cts.Token);
 
         //Wait for the first rule to complete, then cancel.
-        await firstRuleCompleted.Task.ConfigureAwait(false);
+        _ = await firstRuleCompleted.Task.ConfigureAwait(false);
         await cts.CancelAsync().ConfigureAwait(false);
 
         var result = await generateTask.ConfigureAwait(false);

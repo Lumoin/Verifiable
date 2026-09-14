@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
@@ -30,7 +29,7 @@ public sealed class TpmNvSignatureCounterCustodyException: Exception
     /// Initializes a new instance with a message describing which TPM operation failed closed.
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
-    public TpmNvSignatureCounterCustodyException(string message): base(message)
+    public TpmNvSignatureCounterCustodyException(string message) : base(message)
     {
     }
 
@@ -41,7 +40,7 @@ public sealed class TpmNvSignatureCounterCustodyException: Exception
     /// </summary>
     /// <param name="message">A message describing the rejection.</param>
     /// <param name="innerException">The underlying TPM failure, if any.</param>
-    public TpmNvSignatureCounterCustodyException(string message, Exception innerException): base(message, innerException)
+    public TpmNvSignatureCounterCustodyException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

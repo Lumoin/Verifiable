@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -446,7 +442,7 @@ public static class EvidenceRecordHashTree
             throw new ArgumentException("A hash tree is built over at least one data object group (RFC 4998 clause 4.2).", nameof(context));
         }
 
-        if(context.NodeArity < MinimumNodeArity || context.NodeArity > MaximumNodeArity)
+        if(context.NodeArity is < MinimumNodeArity or > MaximumNodeArity)
         {
             throw new ArgumentException($"An inner node of a hash tree is given between {MinimumNodeArity} and {MaximumNodeArity} children.", nameof(context));
         }
@@ -550,7 +546,7 @@ public static class EvidenceRecordHashTree
             throw new ArgumentException("A hash tree is built over at least one group of hash values (RFC 4998 clause 4.2).", nameof(context));
         }
 
-        if(context.NodeArity < MinimumNodeArity || context.NodeArity > MaximumNodeArity)
+        if(context.NodeArity is < MinimumNodeArity or > MaximumNodeArity)
         {
             throw new ArgumentException($"An inner node of a hash tree is given between {MinimumNodeArity} and {MaximumNodeArity} children.", nameof(context));
         }

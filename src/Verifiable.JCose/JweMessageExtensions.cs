@@ -159,8 +159,8 @@ public static class JweMessageExtensions
 
         int aadByteCount = Encoding.ASCII.GetByteCount(headerEncoded);
         IMemoryOwner<byte> aadRawOwner = pool.Rent(aadByteCount);
-        Encoding.ASCII.GetBytes(headerEncoded, aadRawOwner.Memory.Span);
-        using AdditionalData aad = new AdditionalData(aadRawOwner, CryptoTags.AesGcmAad);
+        _ = Encoding.ASCII.GetBytes(headerEncoded, aadRawOwner.Memory.Span);
+        using AdditionalData aad = new(aadRawOwner, CryptoTags.AesGcmAad);
 
         //Step 3: Key derivation — pure software math, synchronous.
         string encryptionAlgorithm = (string)unencryptedJwe.Header[WellKnownJoseHeaderNames.Enc];
@@ -185,7 +185,7 @@ public static class JweMessageExtensions
             pool,
             cancellationToken).ConfigureAwait(false);
 
-        PublicKeyMemory epk = new PublicKeyMemory(epkOwner, epkTag);
+        PublicKeyMemory epk = new(epkOwner, epkTag);
 
         return new JweMessage(completeHeader, headerEncoded, epk, encryptResult, encryptionAlgorithm);
     }

@@ -50,7 +50,6 @@
     <Project Path="src/Verifiable.Foundation/Verifiable.Foundation.csproj" />
     <Project Path="src/Verifiable.JCose/Verifiable.JCose.csproj" />
     <Project Path="src/Verifiable.Json/Verifiable.Json.csproj" Id="cf528db6-4a4f-4738-991d-21720336c535" />
-    <Project Path="src/Verifiable.JsonPointer/Verifiable.JsonPointer.csproj" Id="e2ec613b-f5d9-4d9f-8657-e047c5a6f7e5" />
     <Project Path="src/Verifiable.Keri/Verifiable.Keri.csproj" />
     <Project Path="src/Verifiable.Libsodium/Verifiable.Libsodium.csproj" />
     <Project Path="src/Verifiable.Microsoft/Verifiable.Microsoft.csproj" />

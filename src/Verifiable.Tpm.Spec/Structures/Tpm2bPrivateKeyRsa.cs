@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Spec.Structures;
 
@@ -54,7 +52,7 @@ public sealed class Tpm2bPrivateKeyRsa: SensitiveMemory, ITpmWireType
     /// Initializes a new RSA private-key prime factor with the specified storage.
     /// </summary>
     /// <param name="storage">The memory owner containing the prime's octets.</param>
-    public Tpm2bPrivateKeyRsa(IMemoryOwner<byte> storage): base(storage, TpmTags.PrivateKeyFactor)
+    public Tpm2bPrivateKeyRsa(IMemoryOwner<byte> storage) : base(storage, TpmTags.PrivateKeyFactor)
     {
     }
 
@@ -117,7 +115,7 @@ public sealed class Tpm2bPrivateKeyRsa: SensitiveMemory, ITpmWireType
 
         IMemoryOwner<byte> storage = pool.Rent(length, AllocationKind.Pinned);
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(length);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, length));
+        sourceBytes.CopyTo(storage.Memory.Span[..length]);
 
         return new Tpm2bPrivateKeyRsa(storage);
     }

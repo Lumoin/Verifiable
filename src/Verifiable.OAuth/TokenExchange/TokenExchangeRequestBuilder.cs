@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.OAuth.Client;
-using Verifiable.OAuth.IdJag;
-using Verifiable.OAuth.WellKnown;
 
 namespace Verifiable.OAuth.TokenExchange;
 

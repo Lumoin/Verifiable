@@ -1,7 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusList;
 using Verifiable.OAuth.Server;
@@ -126,6 +122,8 @@ internal static class VpTokenCredentialStatus
             return unsupportedStatusMechanisms switch
             {
                 UnsupportedStatusMechanismDisposition.Surface => CredentialStatusCheck.NotReferenced(),
+                UnsupportedStatusMechanismDisposition.Refuse => RefuseUnsupportedMechanisms(credentialQueryId, statusClaim),
+
                 _ => RefuseUnsupportedMechanisms(credentialQueryId, statusClaim)
             };
         }

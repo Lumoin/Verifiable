@@ -1,12 +1,9 @@
-using System.Buffers;
-using System.Linq;
 using System.Text;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestInfrastructure;
@@ -56,7 +53,7 @@ internal sealed class SdEventDefaultSinkTests
         }
 
         Assert.Contains(
-            (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.Ed25519,
+            e => e.Algorithm == CryptoAlgorithm.Ed25519,
             observer.Received.OfType<SignatureProducedEvent>(),
             "SdJwtPipeline.Sign must publish a SignatureProducedEvent to the global stream by default.");
     }
@@ -90,7 +87,7 @@ internal sealed class SdEventDefaultSinkTests
         }
 
         Assert.Contains(
-            (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.Ed25519,
+            e => e.Algorithm == CryptoAlgorithm.Ed25519,
             observer.Received.OfType<SignatureProducedEvent>(),
             "SdCwtPipeline.Sign must publish a SignatureProducedEvent to the global stream by default.");
     }

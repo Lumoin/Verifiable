@@ -1,14 +1,7 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -216,7 +209,7 @@ internal sealed class PcrCommandInputFramingTests
         Assert.AreEqual(frame.Length, writer.Written, "The re-marshal must be exactly as long as the parsed frame.");
         Assert.AreSequenceEqual(frame, written);
 
-        byte[] overBound = [0x00, 0x00, 0x00, (byte)(TpmlDigestValues.MaxDigests + 1)];
+        byte[] overBound = [0x00, 0x00, 0x00, (TpmlDigestValues.MaxDigests + 1)];
         _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDigestValues(overBound, pool));
     }
 

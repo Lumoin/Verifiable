@@ -48,7 +48,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES+A256KW\",\"enc\":\"A256GCM\",\"zip\":\"DEF\"}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES+A256KW"),
             "A 'zip' compression parameter must be rejected (RFC 8725 §3.6).");
     }
@@ -62,7 +62,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES\",\"enc\":\"A256GCM\",\"alg\":\"dir\"}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES"),
             "A duplicate top-level Header Parameter name must be rejected (RFC 7516 §4 / §5.2 step 4).");
     }
@@ -75,7 +75,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES+A256KW\",\"enc\":\"A256GCM\",\"crit\":[]}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES+A256KW"),
             "An empty 'crit' list must be rejected (RFC 7515 §4.1.11).");
     }
@@ -88,7 +88,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES+A256KW\",\"enc\":\"A256GCM\",\"crit\":[\"enc\"]}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES+A256KW"),
             "A 'crit' entry naming the registered parameter 'enc' must be rejected (RFC 7515 §4.1.11).");
     }
@@ -101,7 +101,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES+A256KW\",\"enc\":\"A256GCM\",\"crit\":[\"foo\"]}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES+A256KW"),
             "A 'crit' entry naming a parameter absent from the header must be rejected (RFC 7515 §4.1.11).");
     }
@@ -115,7 +115,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES+A256KW\",\"enc\":\"A256GCM\",\"crit\":\"x\"}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES+A256KW"),
             "A 'crit' value that is not a JSON array of strings must be rejected (RFC 7515 §4.1.11).");
     }
@@ -129,7 +129,7 @@ internal sealed class JweHeaderProcessingTests
         byte[] header =
             HeaderBytes("{\"alg\":\"ECDH-ES+A256KW\",\"enc\":\"A256GCM\",\"crit\":[\"foo\"],\"foo\":1}");
 
-        Assert.Throws<FormatException>(() =>
+        _ = Assert.Throws<FormatException>(() =>
             JweHeaderProcessing.Validate(header, "ECDH-ES+A256KW"),
             "An undeclared critical extension must be rejected (RFC 7516 §5.2 step 5).");
     }

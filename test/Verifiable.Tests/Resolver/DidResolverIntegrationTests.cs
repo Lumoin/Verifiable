@@ -1,9 +1,9 @@
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
-using Verifiable.Core.Resolvers;
 using Verifiable.Core.Did.Methods.Web;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -19,7 +19,7 @@ internal sealed class DidResolverIntegrationTests
 
     //These resolvers do no network I/O at this layer, so a default context suffices;
     //it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -157,7 +157,7 @@ internal sealed class DidResolverIntegrationTests
             ]
         };
 
-        var resolver = CreateResolverReturning(did, document);
+        var resolver = CreateResolverReturning(document);
 
         var result = await resolver.DereferenceAsync(
             $"{did}#signing-key", EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -186,7 +186,7 @@ internal sealed class DidResolverIntegrationTests
             Service = [service]
         };
 
-        var resolver = CreateResolverReturning(did, document);
+        var resolver = CreateResolverReturning(document);
 
         var result = await resolver.DereferenceAsync(
             $"{did}#svc-1", EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -202,7 +202,7 @@ internal sealed class DidResolverIntegrationTests
     {
         const string did = "did:example:789";
         var document = new DidDocument { Id = new GenericDidMethod(did) };
-        var resolver = CreateResolverReturning(did, document);
+        var resolver = CreateResolverReturning(document);
 
         var result = await resolver.DereferenceAsync(
             did, EmptyContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -246,10 +246,10 @@ internal sealed class DidResolverIntegrationTests
             Service = [service]
         };
 
-        return CreateResolverReturning(did, document);
+        return CreateResolverReturning(document);
     }
 
-    private static DidResolver CreateResolverReturning(string did, DidDocument document)
+    private static DidResolver CreateResolverReturning(DidDocument document)
     {
         //A DocumentStub carries the fixed document so the handler can be registered as
         //an instance method group without any closure over local variables.

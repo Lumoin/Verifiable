@@ -1,7 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Verifiable.Cryptography.EventLogs;
 
 /// <summary>
@@ -91,7 +87,7 @@ public static class LogReplayDefaults
             {
                 if(currentState is not EmptyLogState<TState> empty)
                 {
-                    return (currentState, $"Genesis entry received in state '{currentState.GetType().Name}'; expected '{nameof(EmptyLogState<TState>)}'.");
+                    return (currentState, $"Genesis entry received in state '{currentState.GetType().Name}'; expected '{nameof(EmptyLogState<>)}'.");
                 }
 
                 (ActiveLogState<TState> activeState, string? genesisError) = await genesis(empty, entry, cancellationToken).ConfigureAwait(false);
@@ -108,7 +104,7 @@ public static class LogReplayDefaults
             {
                 if(currentState is not ActiveLogState<TState> active)
                 {
-                    return (currentState, $"Update entry received in state '{currentState.GetType().Name}'; expected '{nameof(ActiveLogState<TState>)}'.");
+                    return (currentState, $"Update entry received in state '{currentState.GetType().Name}'; expected '{nameof(ActiveLogState<>)}'.");
                 }
 
                 (ActiveLogState<TState> updatedState, string? updateError) = await update(active, entry, cancellationToken).ConfigureAwait(false);
@@ -119,7 +115,7 @@ public static class LogReplayDefaults
             {
                 if(currentState is not ActiveLogState<TState> active)
                 {
-                    return (currentState, $"Deactivate entry received in state '{currentState.GetType().Name}'; expected '{nameof(ActiveLogState<TState>)}'.");
+                    return (currentState, $"Deactivate entry received in state '{currentState.GetType().Name}'; expected '{nameof(ActiveLogState<>)}'.");
                 }
 
                 (DeactivatedLogState<TState> deactivatedState, string? deactivateError) = await deactivate(active, entry, cancellationToken).ConfigureAwait(false);

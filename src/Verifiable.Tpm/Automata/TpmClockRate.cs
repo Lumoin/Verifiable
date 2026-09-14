@@ -1,5 +1,3 @@
-using Verifiable.Tpm.Spec.Constants;
-
 namespace Verifiable.Tpm.Automata;
 
 /// <summary>
@@ -124,7 +122,7 @@ public readonly record struct TpmClockRate(uint Divisor, uint TickResidue)
             _ => -1L
         };
 
-        if(candidate < NominalDivisor - MaxDeviation || candidate > NominalDivisor + MaxDeviation)
+        if(candidate is < (NominalDivisor - MaxDeviation) or > (NominalDivisor + MaxDeviation))
         {
             adjusted = this;
 

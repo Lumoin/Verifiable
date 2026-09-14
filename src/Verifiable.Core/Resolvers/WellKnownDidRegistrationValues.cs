@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Resolvers;

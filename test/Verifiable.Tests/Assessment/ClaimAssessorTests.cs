@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
+using System.Diagnostics;
 using Verifiable.Core.Assessment;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -164,15 +164,15 @@ internal sealed class ClaimAssessorTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+            Sample = (ref _) => ActivitySamplingResult.AllData
         };
         ActivitySource.AddActivityListener(listener);
 
         using var activity = activitySource.StartActivity("AssessmentOperation");
         Assert.IsNotNull(activity, "Activity should be created.");
 
-        activity.AddBaggage("correlation-context", "assessment-test");
-        activity.AddBaggage("user-id", "test-user-123");
+        _ = activity.AddBaggage("correlation-context", "assessment-test");
+        _ = activity.AddBaggage("user-id", "test-user-123");
 
         var result = await assessor.AssessAsync(
             "test-input",
@@ -267,7 +267,7 @@ internal sealed class ClaimAssessorTests
         const string customVersion = "2.0.0-custom";
 
         //Custom assessor that has different logic.
-        AssessDelegateAsync customAssessor = (claims, assessorId, timestamp, traceId, spanId, baggage, ct) =>
+        static ValueTask<AssessmentResult> customAssessor(ClaimIssueResult claims, string assessorId, DateTime timestamp, string? traceId, string? spanId, IReadOnlyDictionary<string, string>? baggage, CancellationToken ct = default)
         {
             //Custom logic: succeed only if there are exactly 2 successful claims.
             var successCount = claims.Claims.Count(c => c.Outcome == ClaimOutcome.Success);
@@ -285,7 +285,7 @@ internal sealed class ClaimAssessorTests
                 TraceId: traceId,
                 SpanId: spanId,
                 Baggage: baggage));
-        };
+        }
 
         var rules = new List<ClaimDelegate<string>>
         {
@@ -296,7 +296,7 @@ internal sealed class ClaimAssessorTests
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
         var assessor = new ClaimAssessor<string>(
             issuer,
-            customAssessor,
+customAssessor,
             TestAssessorId,
             timeProvider);
 
@@ -315,7 +315,7 @@ internal sealed class ClaimAssessorTests
     {
         var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
 
-        Assert.Throws<ArgumentNullException>(() =>
+        _ = Assert.Throws<ArgumentNullException>(() =>
             new ClaimAssessor<string>(
                 null!,
                 DefaultAssessors.DefaultKeyDidAssessorAsync,
@@ -331,7 +331,7 @@ internal sealed class ClaimAssessorTests
         var rules = new List<ClaimDelegate<string>>();
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
-        Assert.Throws<ArgumentNullException>(() =>
+        _ = Assert.Throws<ArgumentNullException>(() =>
             new ClaimAssessor<string>(issuer, null!, TestAssessorId, timeProvider));
     }
 
@@ -343,7 +343,7 @@ internal sealed class ClaimAssessorTests
         var rules = new List<ClaimDelegate<string>>();
         var issuer = new ClaimIssuer<string>(TestIssuerId, rules, timeProvider);
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             new ClaimAssessor<string>(
                 issuer,
                 DefaultAssessors.DefaultKeyDidAssessorAsync,

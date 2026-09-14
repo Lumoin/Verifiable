@@ -103,7 +103,7 @@ public static class DefaultCoderSelector
     /// before use. The default implementation throws <see cref="InvalidOperationException"/>.
     /// </para>
     /// </remarks>
-    public static EncoderSelector SelectEncoder { get; set; } = (Type keyFormatType) =>
+    public static EncoderSelector SelectEncoder { get; set; } = keyFormatType =>
     {
         throw new InvalidOperationException(
             $"The {nameof(SelectEncoder)} delegate has not been initialized. " +
@@ -120,7 +120,7 @@ public static class DefaultCoderSelector
     /// before use. The default implementation throws <see cref="InvalidOperationException"/>.
     /// </para>
     /// </remarks>
-    public static DecoderSelector SelectDecoder { get; set; } = (Type keyFormatType) =>
+    public static DecoderSelector SelectDecoder { get; set; } = keyFormatType =>
     {
         throw new InvalidOperationException(
             $"The {nameof(SelectDecoder)} delegate has not been initialized. " +

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.Tests.OAuth;
 

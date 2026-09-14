@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Globalization;
 using Verifiable.Cryptography.Pki;
 
@@ -34,7 +33,7 @@ internal sealed class AsicManifestNamingTests
     [DataRow("META-INF/signature.p7s", AsicManifestRole.NotAManifest, DisplayName = "a CAdES object is not a manifest")]
     [DataRow("META-INF/manifest.xml", AsicManifestRole.NotAManifest, DisplayName = "a name carrying none of the three tokens")]
     [DataRow("mimetype", AsicManifestRole.NotAManifest, DisplayName = "the media type entry")]
-    [DataRow((string?)null, AsicManifestRole.NotAManifest, DisplayName = "no name at all")]
+    [DataRow(null, AsicManifestRole.NotAManifest, DisplayName = "no name at all")]
     public void EachRoleIsRecognisedFromTheNameTheSpecificationPrintsForIt(string? entryName, AsicManifestRole expected)
     {
         Assert.AreEqual(expected, AsicManifestNaming.RoleFromEntryName(entryName));

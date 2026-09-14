@@ -2,8 +2,6 @@ using System.Text;
 using Verifiable.Fido2;
 using Verifiable.Json;
 
-using static Verifiable.Tests.Fido2.Fido2TestVectors;
-
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
@@ -76,7 +74,7 @@ internal sealed class ClientExtensionOutputsJsonReaderTests
     {
         const string json = """{"appid":true} garbage""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -86,7 +84,7 @@ internal sealed class ClientExtensionOutputsJsonReaderTests
     {
         const string json = """[1,2,3]""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -96,7 +94,7 @@ internal sealed class ClientExtensionOutputsJsonReaderTests
     {
         const string json = "{not json";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 
 
@@ -112,6 +110,6 @@ internal sealed class ClientExtensionOutputsJsonReaderTests
         string deeplyNestedArray = Fido2TestVectors.BuildDeeplyNestedArray(depth: 70);
         string json = "{\"deep\":" + deeplyNestedArray + "}";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientExtensionOutputsJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 }

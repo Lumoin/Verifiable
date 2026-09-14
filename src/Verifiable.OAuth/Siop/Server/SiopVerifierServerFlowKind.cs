@@ -1,5 +1,3 @@
-using Verifiable.OAuth.Server;
-
 namespace Verifiable.OAuth.Siop.Server;
 
 /// <summary>
@@ -59,7 +57,7 @@ public sealed class SiopVerifierServerFlowKind: StatefulFlowKind
 
         var pda = SiopVerifierFlowAutomaton.CreateFromSnapshot(state, stepCount, timeProvider);
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
         return (pda.CurrentState, pda.StepCount);
     }

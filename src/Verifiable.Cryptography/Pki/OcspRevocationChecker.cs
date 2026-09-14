@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -286,6 +281,7 @@ public sealed class OcspRevocationChecker
             {
                 OcspCertificateStatus.Good => CertificateRevocationStatus.Good,
                 OcspCertificateStatus.Revoked => CertificateRevocationStatus.Revoked,
+                OcspCertificateStatus.Unknown => CertificateRevocationStatus.Unknown,
                 _ => CertificateRevocationStatus.Unknown
             };
             if(status == CertificateRevocationStatus.Unknown)

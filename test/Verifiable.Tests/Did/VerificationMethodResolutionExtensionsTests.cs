@@ -1,5 +1,5 @@
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -171,7 +171,7 @@ namespace Verifiable.Tests.Did
             var referencedMethod = resultsList.FirstOrDefault(r => r.Method!.Id == "#key-1");
             Assert.IsNotNull(referencedMethod.Method, "Referenced method should be resolved.");
             Assert.AreEqual("JsonWebKey2020", referencedMethod.Method!.Type, "Method type should match.");
-            Assert.IsInstanceOfType<PublicKeyJwk>(referencedMethod.Method.KeyFormat, "Key format should be PublicKeyJwk.");
+            _ = Assert.IsInstanceOfType<PublicKeyJwk>(referencedMethod.Method.KeyFormat, "Key format should be PublicKeyJwk.");
 
             var embeddedMethod = resultsList.FirstOrDefault(r => r.Method!.Id == "#embedded-key");
             Assert.IsNotNull(embeddedMethod.Method, "Embedded method should be resolved.");
@@ -281,7 +281,7 @@ namespace Verifiable.Tests.Did
         [TestMethod]
         public async Task SelectFromAuthenticationAsyncWithUnresolvableReferenceReturnsUnresolvedResult()
         {
-            var resolver = CreateTestResolver(new Dictionary<string, DidDocument>());
+            var resolver = CreateTestResolver([]);
 
             var didDocument = new DidDocument
             {

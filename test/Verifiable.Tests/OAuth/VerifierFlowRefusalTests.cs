@@ -1,6 +1,5 @@
-using System.Linq;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth;
+using Verifiable.OAuth.Server;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -95,7 +94,7 @@ internal sealed class VerifierFlowRefusalTests
     [TestMethod]
     public void ConstructorRejectsADescriptionOutsideTheRfc6749CharacterSet()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = new VerifierFlowRefusal(VerifierFlowRefusalKind.Malformed, "bad \" description"),
             "RFC 6749 §4.1.2.1's error_description character rule must hold for any caller, not only VerifierFlowRefusal.For's canonical text.");
     }

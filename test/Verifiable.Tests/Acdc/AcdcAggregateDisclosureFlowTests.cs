@@ -1,10 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -75,7 +69,7 @@ internal sealed class AcdcAggregateDisclosureFlowTests
             var revealed = section.Blocks[0] as ExpandedAggregateBlock;
             Assert.IsNotNull(revealed, "The Issuee block is revealed as its detail.");
             Assert.IsTrue(revealed.Detail.TryGetString(AcdcMessageFields.Issuer, out string? subject) && subject == AcdcFlowWellKnown.AggregateSubjectAid, "The revealed block discloses the Issuee AID.");
-            Assert.IsInstanceOfType<CompactAggregateBlock>(section.Blocks[1], "The score block is blinded to its SAID, disclosing no value.");
+            _ = Assert.IsInstanceOfType<CompactAggregateBlock>(section.Blocks[1], "The score block is blinded to its SAID, disclosing no value.");
 
             //Proof of Disclosure: every revealed block is authentic and the blocks aggregate to the AGID.
             Assert.IsTrue(await AcdcAggregate.VerifyDisclosureAsync(section, AcdcJson.Encode, AcdcJson.EncodeAggregateList, AcdcTestSupport.AgileDigest, BaseMemoryPool.Shared, cancellationToken), "The selective disclosure MUST verify: each revealed block is authentic and the AGID matches over the reconstructed list.");

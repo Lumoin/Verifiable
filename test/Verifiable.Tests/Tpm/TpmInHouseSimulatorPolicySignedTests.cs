@@ -1,8 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -11,11 +9,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1227,7 +1220,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     private static IMemoryOwner<byte> FramePolicySignedCommand(
         BaseMemoryPool pool, uint authObject, uint policySession, ReadOnlySpan<byte> signatureBody, out int length)
     {
-        length = TpmHeader.HeaderSize + 2 * sizeof(uint) + 3 * sizeof(ushort) + sizeof(int) + signatureBody.Length;
+        length = TpmHeader.HeaderSize + (2 * sizeof(uint)) + (3 * sizeof(ushort)) + sizeof(int) + signatureBody.Length;
         IMemoryOwner<byte> owner = pool.Rent(length);
         try
         {
@@ -1304,7 +1297,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
         TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg,
         int declaredRSize, int actualRBytesProvided, int declaredSSize, int actualSBytesProvided)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + actualRBytesProvided + sizeof(ushort) + actualSBytesProvided];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + actualRBytesProvided + sizeof(ushort) + actualSBytesProvided];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)sigAlg);
         writer.WriteUInt16((ushort)hashAlg);
@@ -1334,7 +1327,7 @@ internal sealed class TpmInHouseSimulatorPolicySignedTests
     /// <returns>The marshaled body.</returns>
     private static byte[] BuildRsaSignatureBody(TpmAlgIdConstants sigAlg, TpmAlgIdConstants hashAlg, int declaredSigSize, int actualSigBytesProvided)
     {
-        byte[] body = new byte[2 * sizeof(ushort) + sizeof(ushort) + actualSigBytesProvided];
+        byte[] body = new byte[(2 * sizeof(ushort)) + sizeof(ushort) + actualSigBytesProvided];
         var writer = new TpmWriter(body);
         writer.WriteUInt16((ushort)sigAlg);
         writer.WriteUInt16((ushort)hashAlg);

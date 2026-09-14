@@ -1,8 +1,5 @@
-using System;
 using System.Buffers.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -10,7 +7,6 @@ using Verifiable.Json;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -291,13 +287,13 @@ internal sealed class StatusListTokenIssuanceTests
         };
 
         string compact = await ComposeAsync(token, issuerPrivate).ConfigureAwait(false);
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
             ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
 
         StatusListTokenVerificationResult result = await StatusListTokenVerification.VerifyAsync(
             compact,
             StatusListFixtures.ContextFor(RevokedIndex, Subject),
-            resolveIssuerKey,
+resolveIssuerKey,
             TestSetup.Base64UrlDecoder,
             JwtPartJson.Default,
             Pool,

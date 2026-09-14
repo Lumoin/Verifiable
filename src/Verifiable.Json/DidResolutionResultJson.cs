@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Json.Converters;
 

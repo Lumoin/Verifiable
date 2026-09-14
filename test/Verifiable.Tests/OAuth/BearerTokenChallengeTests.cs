@@ -1,4 +1,3 @@
-using System;
 using Verifiable.OAuth;
 using Verifiable.OAuth.ProtectedResource;
 
@@ -226,7 +225,7 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void AllAbsentThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge());
     }
 
 
@@ -234,7 +233,7 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void ErrorWithDoubleQuoteThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => BearerTokenChallenge.BuildChallenge(error: "invalid\"token"));
     }
 
@@ -243,7 +242,7 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void ErrorDescriptionWithControlCharacterThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => BearerTokenChallenge.BuildChallenge(errorDescription: "line one\nline two"));
     }
 
@@ -252,7 +251,7 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void ErrorDescriptionWithNonAsciiCharacterThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => BearerTokenChallenge.BuildChallenge(errorDescription: "accés refusé"));
     }
 
@@ -261,7 +260,7 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void ScopeWithBackslashThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => BearerTokenChallenge.BuildChallenge(scope: "read\\write"));
     }
 
@@ -273,9 +272,9 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void ScopeDelimiterShapeIsEnforced()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge(scope: " openid"));
-        Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge(scope: "openid "));
-        Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge(scope: "openid  profile"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge(scope: " openid"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge(scope: "openid "));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => BearerTokenChallenge.BuildChallenge(scope: "openid  profile"));
     }
 
 
@@ -283,7 +282,7 @@ internal sealed class BearerTokenChallengeTests
     [TestMethod]
     public void RealmWithControlCharacterThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => BearerTokenChallenge.BuildChallenge(realm: "example\u0007"));
     }
 

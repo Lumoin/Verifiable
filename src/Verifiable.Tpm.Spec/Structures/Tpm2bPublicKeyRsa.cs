@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -97,7 +96,7 @@ public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, Size);
+            return Storage.Memory.Span[..Size];
         }
     }
 
@@ -116,7 +115,7 @@ public sealed class Tpm2bPublicKeyRsa: IDisposable, ITpmWireType
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return Storage.Memory.Slice(0, Size);
+        return Storage.Memory[..Size];
     }
 
     /// <summary>

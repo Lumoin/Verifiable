@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 using Verifiable.Cryptography.Text;
 using Verifiable.OAuth.Client;
@@ -127,7 +126,7 @@ public readonly struct HttpResponseData: IEquatable<HttpResponseData>
     /// successful response (200–299).
     /// </summary>
     public bool IsSuccessStatusCode =>
-        StatusCode >= 200 && StatusCode <= 299;
+        StatusCode is >= 200 and <= 299;
 
 
     /// <summary>

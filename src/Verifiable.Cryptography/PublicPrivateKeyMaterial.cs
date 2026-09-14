@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Verifiable.Cryptography
 {
     /// <summary>
@@ -10,8 +8,8 @@ namespace Verifiable.Cryptography
     /// <param name="keyDataPool">The memory pool for key data allocation.</param>
     /// <returns>The created key material.</returns>
     public delegate PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory> PublicPrivateKeyCreationDelegate<TPublicKeyMemory, TPrivateKeyMemory>(BaseMemoryPool keyDataPool)
-        where TPublicKeyMemory: PublicKeyMemory
-        where TPrivateKeyMemory: PrivateKeyMemory;
+        where TPublicKeyMemory : PublicKeyMemory
+        where TPrivateKeyMemory : PrivateKeyMemory;
 
 
     /// <summary>
@@ -24,8 +22,8 @@ namespace Verifiable.Cryptography
     /// <returns>The created key material.</returns>
     public delegate TPublicPrivateKeyMaterial PublicPrivateKeyCreationDelegateWithPool<TPublicPrivateKeyMaterial, TPublicKeyMemory, TPrivateKeyMemory>(BaseMemoryPool keyDataPool)
         where TPublicPrivateKeyMaterial : PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory>
-        where TPublicKeyMemory: PublicKeyMemory
-        where TPrivateKeyMemory: PrivateKeyMemory;
+        where TPublicKeyMemory : PublicKeyMemory
+        where TPrivateKeyMemory : PrivateKeyMemory;
 
 
     /// <summary>
@@ -76,8 +74,8 @@ namespace Verifiable.Cryptography
     /// <param name="PublicKey">The public key.</param>
     /// <param name="PrivateKey">The private key.</param>
     public record class PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory>(TPublicKeyMemory PublicKey, TPrivateKeyMemory PrivateKey)
-        where TPublicKeyMemory: PublicKeyMemory
-        where TPrivateKeyMemory: PrivateKeyMemory;
+        where TPublicKeyMemory : PublicKeyMemory
+        where TPrivateKeyMemory : PrivateKeyMemory;
 
 
     /// <summary>
@@ -98,8 +96,8 @@ namespace Verifiable.Cryptography
         public static PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory> Create<TPublicKeyMemory, TPrivateKeyMemory>(
             BaseMemoryPool keyDataPool,
             PublicPrivateKeyCreationDelegate<TPublicKeyMemory, TPrivateKeyMemory> keyCreator)
-            where TPublicKeyMemory: PublicKeyMemory
-            where TPrivateKeyMemory: PrivateKeyMemory
+            where TPublicKeyMemory : PublicKeyMemory
+            where TPrivateKeyMemory : PrivateKeyMemory
         {
             ArgumentNullException.ThrowIfNull(keyDataPool);
             ArgumentNullException.ThrowIfNull(keyCreator);
@@ -122,8 +120,8 @@ namespace Verifiable.Cryptography
             BaseMemoryPool keyDataPool,
             PublicPrivateKeyCreationDelegateWithPool<TPublicPrivateKeyMaterial, TPublicKeyMemory, TPrivateKeyMemory> keyCreator)
             where TPublicPrivateKeyMaterial : PublicPrivateKeyMaterial<TPublicKeyMemory, TPrivateKeyMemory>
-            where TPublicKeyMemory: PublicKeyMemory
-            where TPrivateKeyMemory: PrivateKeyMemory
+            where TPublicKeyMemory : PublicKeyMemory
+            where TPrivateKeyMemory : PrivateKeyMemory
         {
             ArgumentNullException.ThrowIfNull(keyDataPool);
             ArgumentNullException.ThrowIfNull(keyCreator);

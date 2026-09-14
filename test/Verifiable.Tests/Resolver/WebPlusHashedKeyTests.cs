@@ -1,5 +1,3 @@
-using System;
-using Verifiable.BouncyCastle;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;

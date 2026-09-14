@@ -68,7 +68,7 @@ internal sealed class PushdownAutomatonTests
     {
         var pda = CreatePda("Start", "Z", (state, input, top, ct) => Null());
 
-        await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
         bool secondStep = await pda.StepAsync("y", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(secondStep);
@@ -81,7 +81,7 @@ internal sealed class PushdownAutomatonTests
         var pda = CreatePda("Start", "Z", (state, input, top, ct) =>
             Transition("Pushed", StackAction<string>.Push("A"), "PushA"));
 
-        await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(2, pda.StackDepth);
         Assert.AreEqual("A", pda.StackTop);
@@ -97,10 +97,10 @@ internal sealed class PushdownAutomatonTests
             _ => Null()
         });
 
-        await pda.StepAsync("p", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("p", TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(2, pda.StackDepth);
 
-        await pda.StepAsync("q", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("q", TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(1, pda.StackDepth);
         Assert.AreEqual("Z", pda.StackTop);
     }
@@ -116,7 +116,7 @@ internal sealed class PushdownAutomatonTests
 
         Assert.IsFalse(stepped);
         Assert.IsTrue(pda.IsFaulted);
-        Assert.IsInstanceOfType<InvalidOperationException>(pda.FaultException);
+        _ = Assert.IsInstanceOfType<InvalidOperationException>(pda.FaultException);
         Assert.AreEqual("Start", pda.CurrentState, "State must not change on fault.");
     }
 
@@ -130,7 +130,7 @@ internal sealed class PushdownAutomatonTests
 
         Assert.IsFalse(stepped);
         Assert.IsTrue(pda.IsFaulted);
-        Assert.IsInstanceOfType<InvalidOperationException>(pda.FaultException);
+        _ = Assert.IsInstanceOfType<InvalidOperationException>(pda.FaultException);
     }
 
     [TestMethod]
@@ -143,8 +143,8 @@ internal sealed class PushdownAutomatonTests
             _ => Null()
         });
 
-        await pda.StepAsync("p", TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync("r", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("p", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("r", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(2, pda.StackDepth);
         Assert.AreEqual("B", pda.StackTop);
@@ -186,7 +186,7 @@ internal sealed class PushdownAutomatonTests
 
         Assert.IsFalse(pda.IsAccepted);
 
-        await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsAccepted);
     }
@@ -207,7 +207,7 @@ internal sealed class PushdownAutomatonTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.RunAsync(["1", "2", "3"], TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.RunAsync(["1", "2", "3"], TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.HasCount(3, entries);
@@ -237,7 +237,7 @@ internal sealed class PushdownAutomatonTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.HasCount(1, entries);
@@ -257,7 +257,7 @@ internal sealed class PushdownAutomatonTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.HasCount(1, entries);
@@ -276,11 +276,11 @@ internal sealed class PushdownAutomatonTests
             _ => Null()
         });
 
-        await pda.StepAsync("ok", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("ok", TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual("Good", pda.CurrentState);
         Assert.AreEqual(2, pda.StackDepth);
 
-        await pda.StepAsync("fail", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("fail", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsFaulted);
         Assert.AreEqual("Good", pda.CurrentState, "State must not change on fault.");
@@ -294,7 +294,7 @@ internal sealed class PushdownAutomatonTests
         var pda = CreatePda("Start", "Z", (state, input, top, ct) =>
             throw new InvalidOperationException("Boom."));
 
-        await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("x", TestContext.CancellationToken).ConfigureAwait(false);
         bool secondStep = await pda.StepAsync("y", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(secondStep);
@@ -313,7 +313,7 @@ internal sealed class PushdownAutomatonTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await pda.StepAsync("x", cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
 
         Assert.IsFalse(pda.IsFaulted, "Cancellation must not be treated as a fault.");
@@ -338,7 +338,7 @@ internal sealed class PushdownAutomatonTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.AreEqual(
@@ -362,7 +362,7 @@ internal sealed class PushdownAutomatonTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.AreEqual("my-run-42", entries[0].RunId);
@@ -381,7 +381,7 @@ internal sealed class PushdownAutomatonTests
         using var listener = new ActivityListener
         {
             ShouldListenTo = _ => true,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+            Sample = (ref _) => ActivitySamplingResult.AllData
         };
         ActivitySource.AddActivityListener(listener);
 
@@ -389,7 +389,7 @@ internal sealed class PushdownAutomatonTests
         using(pda.Subscribe(observer))
         {
             Assert.IsNotNull(activity, "Activity should be created with the listener registered.");
-            await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
         }
 
         Assert.IsNotNull(entries[0].TraceParent, "TraceParent should capture Activity.Current.Id.");
@@ -406,7 +406,7 @@ internal sealed class PushdownAutomatonTests
             _ => Null()
         });
 
-        await original.RunAsync(["1", "2"], TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await original.RunAsync(["1", "2"], TestContext.CancellationToken).ConfigureAwait(false);
 
         //Take a snapshot.
         string[] savedStack = original.GetStack();
@@ -442,7 +442,7 @@ internal sealed class PushdownAutomatonTests
             _ => Null()
         });
 
-        await pda.RunAsync(
+        _ = await pda.RunAsync(
             ["(", "(", ")", "(", ")", ")"],
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -462,7 +462,7 @@ internal sealed class PushdownAutomatonTests
         });
 
         //Extra closing paren — tries to match ')' when top is "Z", no transition defined.
-        await pda.RunAsync(["(", ")", ")"], TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.RunAsync(["(", ")", ")"], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsHalted);
     }
@@ -492,15 +492,15 @@ internal sealed class PushdownAutomatonTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync("NeedDereference", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("NeedDereference", TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual("Dereferencing", pda.CurrentState);
             Assert.AreEqual(2, pda.StackDepth);
 
-            await pda.StepAsync("DereferenceComplete", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("DereferenceComplete", TestContext.CancellationToken).ConfigureAwait(false);
             Assert.AreEqual("Resolving", pda.CurrentState);
             Assert.AreEqual(1, pda.StackDepth);
 
-            await pda.StepAsync("ResolutionComplete", TestContext.CancellationToken).ConfigureAwait(false);
+            _ = await pda.StepAsync("ResolutionComplete", TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(pda.IsAccepted);
         }
 
@@ -551,7 +551,7 @@ internal sealed class PushdownAutomatonTests
         subscription.Dispose();
 
         //Step after unsubscribe — observer should not receive the entry.
-        await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync("a", TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(0, entries);
     }

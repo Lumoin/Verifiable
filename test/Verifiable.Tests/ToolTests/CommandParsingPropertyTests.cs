@@ -1,5 +1,5 @@
-using System.CommandLine;
 using CsCheck;
+using System.CommandLine;
 
 namespace Verifiable.Tests.ToolTests;
 

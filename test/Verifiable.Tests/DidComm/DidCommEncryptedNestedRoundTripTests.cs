@@ -1,15 +1,11 @@
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -34,7 +30,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //The protected-header serializer: the headers are a Dictionary<string, object> the JWE layer hands to
     //this delegate to produce the UTF-8 JSON bytes (mirrors the other encrypted round-trip tests).
@@ -264,7 +260,7 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
         //W6: the nested-signed path REUSES the inner UnpackSignedAsync's own identity-bound proof rather
         //than re-deriving one -- so the outer result is bound via MethodResolved (the signed-path source),
         //never a fresh KeyAgreement binding, regardless of the outer encryption mode.
-        Verified<DidCommMessage> verified = result.Verified!.Value;
+        Verified<DidCommMessage> verified = result.Verified.Value;
         Assert.IsTrue(verified.IsIdentityBound, "The nested-signed proof MUST be identity-bound.");
         BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
         Assert.AreEqual(ResolutionSource.MethodResolved, provenance.Source);
@@ -272,15 +268,15 @@ internal sealed class DidCommEncryptedNestedRoundTripTests
         Assert.AreEqual(AliceSignerKid, provenance.Identity?.Value);
 
         Assert.IsNotNull(result.Message);
-        DidCommMessage message = result.Message!;
+        DidCommMessage message = result.Message;
         Assert.AreEqual(MessageId, message.Id);
         Assert.AreEqual(MessageType, message.Type);
         Assert.AreEqual(AliceDid, message.From);
         Assert.IsNotNull(message.To);
-        Assert.HasCount(1, message.To!);
-        Assert.AreEqual(BobDid, message.To![0]);
+        Assert.HasCount(1, message.To);
+        Assert.AreEqual(BobDid, message.To[0]);
         Assert.IsNotNull(message.Body);
-        Assert.IsTrue(message.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(message.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 

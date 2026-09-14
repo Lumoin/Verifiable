@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Text;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -70,7 +69,7 @@ internal sealed class FlattenedJweMessageTests
 
         using GeneralJweMessage general = two.Message;
 
-        Assert.ThrowsExactly<ArgumentException>(() => FlattenedJweMessage.FromGeneral(general),
+        _ = Assert.ThrowsExactly<ArgumentException>(() => FlattenedJweMessage.FromGeneral(general),
             "FromGeneral must reject a message that does not have exactly one recipient.");
     }
 
@@ -217,7 +216,7 @@ internal sealed class FlattenedJweMessageTests
         //Insert a recipients member right after the opening brace.
         string injected = "{\"recipients\":[]," + flattenedJson[1..];
 
-        Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseFlattenedJson(
+        _ = Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseFlattenedJson(
                 injected,
                 WellKnownJweAlgorithms.EcdhEsA256Kw,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -247,7 +246,7 @@ internal sealed class FlattenedJweMessageTests
 
         string mutated = RemoveTopLevelMember(flattenedJson, memberToRemove);
 
-        Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseFlattenedJson(
+        _ = Assert.ThrowsExactly<FormatException>(() => GeneralJweParsing.ParseFlattenedJson(
                 mutated,
                 WellKnownJweAlgorithms.EcdhEsA256Kw,
                 WellKnownJweEncryptionAlgorithms.A256Gcm,
@@ -335,9 +334,9 @@ internal sealed class FlattenedJweMessageTests
         {
             //header is an object member: "header":{"kid":"..."}.
             int headerStart = json.IndexOf("\"header\":{", StringComparison.Ordinal);
-            int objectEnd = json.IndexOf('}', headerStart);
+            int objectEnd = json.IndexOf('}', headerStart, StringComparison.Ordinal);
             //objectEnd closes the header object; remove from the comma before "header" through it.
-            int commaBefore = json.LastIndexOf(',', headerStart);
+            int commaBefore = json.LastIndexOf(',', headerStart, StringComparison.Ordinal);
 
             return json[..commaBefore] + json[(objectEnd + 1)..];
         }
@@ -345,8 +344,8 @@ internal sealed class FlattenedJweMessageTests
         //String members: "<member>":"<value>". Remove the member and one adjacent comma.
         string token = $"\"{member}\":";
         int memberStart = json.IndexOf(token, StringComparison.Ordinal);
-        int valueQuoteStart = json.IndexOf('"', memberStart + token.Length);
-        int valueQuoteEnd = json.IndexOf('"', valueQuoteStart + 1);
+        int valueQuoteStart = json.IndexOf('"', memberStart + token.Length, StringComparison.Ordinal);
+        int valueQuoteEnd = json.IndexOf('"', valueQuoteStart + 1, StringComparison.Ordinal);
 
         //Prefer to consume the comma that follows the member; if it is the last member,
         //consume the comma that precedes it.
@@ -356,7 +355,7 @@ internal sealed class FlattenedJweMessageTests
             return json[..memberStart] + json[(afterValue + 1)..];
         }
 
-        int commaPrev = json.LastIndexOf(',', memberStart);
+        int commaPrev = json.LastIndexOf(',', memberStart, StringComparison.Ordinal);
 
         return json[..commaPrev] + json[afterValue..];
     }

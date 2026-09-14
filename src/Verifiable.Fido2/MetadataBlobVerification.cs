@@ -1,9 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security;
 using System.Security.Cryptography;
-using Verifiable.Core;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 

@@ -1,12 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -58,9 +54,6 @@ internal sealed class ArchiveTimestampV3Tests
 
     /// <summary>An attribute type the tests append material under, chosen from the CAdES unsigned attributes.</summary>
     private static string FirstAppendedAttributeType { get; } = CAdESSignatureFacts.CertificateValuesAttributeOid;
-
-    /// <summary>A second attribute type the tests append material under.</summary>
-    private static string SecondAppendedAttributeType { get; } = CAdESSignatureFacts.RevocationValuesAttributeOid;
 
 
     /// <summary>The MSTest context, carrying the cancellation token every asynchronous call observes.</summary>
@@ -205,10 +198,10 @@ internal sealed class ArchiveTimestampV3Tests
             world.Token, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(tokenInfo.IsRead, "Grafting the ats-hash-index-v3 attribute into the token leaves the token's own signature verifiable.");
         Assert.IsTrue(
-            await tokenInfo.VerifyMessageImprintAsync(coverage.MessageImprintInput!.AsReadOnlyMemory(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
+            await tokenInfo.VerifyMessageImprintAsync(coverage.MessageImprintInput.AsReadOnlyMemory(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "Clause 5.5.3: the imprint recomputed at validation is the one the token was created over.");
 
-        AtsHashIndexCoverage objects = coverage.ProtectedObjects!;
+        AtsHashIndexCoverage objects = coverage.ProtectedObjects;
         Assert.IsTrue(objects.EveryIndexEntryMatched, "Every entry of the index matches material the signature still carries.");
         Assert.HasCount(1, objects.Certificates, "The signature carries the signer's certificate.");
         Assert.IsTrue(objects.Certificates[0].IsCovered, "The certificate present when the index was built is covered by it.");
@@ -528,7 +521,7 @@ internal sealed class ArchiveTimestampV3Tests
         using AtsHashIndexV3 hashIndex = await ArchiveTimestampV3.ComputeHashIndexAsync(
             detached, signerIndex: 0, PkiDigestAlgorithm.Sha256, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => await ArchiveTimestampV3.BuildMessageImprintInputAsync(
                 new ArchiveTimestampImprintContext { SignedData = detached, HashIndex = hashIndex, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256 },
                 BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
@@ -565,7 +558,7 @@ internal sealed class ArchiveTimestampV3Tests
             Content, PkiDigestAlgorithm.Sha384.OutputByteLength, PkiDigestAlgorithm.Sha384.DigestTag, BaseMemoryPool.Shared,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => await ArchiveTimestampV3.BuildMessageImprintInputAsync(
                 new ArchiveTimestampImprintContext
                 {
@@ -605,16 +598,16 @@ internal sealed class ArchiveTimestampV3Tests
 
         byte[] encoded = hashIndex.AsReadOnlySpan().ToArray();
 
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => AtsHashIndexV3.Read([.. encoded, 0x00], BaseMemoryPool.Shared),
             "Octets after the structure are rejected rather than ignored.");
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => AtsHashIndexV3.Read(encoded.AsSpan()[..^2], BaseMemoryPool.Shared),
             "A truncated structure is refused.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AtsHashIndexV3.Read(ReadOnlySpan<byte>.Empty, BaseMemoryPool.Shared),
             "An empty attribute value is not an ATSHashIndexV3.");
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => AtsHashIndexV3.Read(signerCertificate.RawData, BaseMemoryPool.Shared),
             "A structure that is not an ATSHashIndexV3 at all is refused.");
     }
@@ -650,11 +643,11 @@ internal sealed class ArchiveTimestampV3Tests
         Assert.AreEqual(ArchiveTimestampCoverageStatus.SignedDataMalformed, fromForeign.Status, "A structure that is not a CMS SignedData states no coverage.");
         Assert.IsNull(fromTruncated.MessageImprintInput, "Nothing is stated, so nothing is handed onward.");
 
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => await ArchiveTimestampV3.ComputeHashIndexAsync(
                 notSignedData, signerIndex: 0, PkiDigestAlgorithm.Sha256, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A generator handed something that is not a CMS SignedData has made a composition error, which is reported as one.").ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => await ArchiveTimestampV3.ComputeHashIndexAsync(
                 world.Signature, signerIndex: 1, PkiDigestAlgorithm.Sha256, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "A single-signer signature has no second SignerInfo to archive time-stamp.").ConfigureAwait(false);
@@ -696,11 +689,11 @@ internal sealed class ArchiveTimestampV3Tests
             "The DER-only scope documented at ReadMaterial states no coverage for an indefinite-length Signed Data Object rather than accepting and mishandling it.");
         Assert.IsNull(coverage.MessageImprintInput, "Nothing is stated, so nothing is handed onward.");
 
-        await Assert.ThrowsExactlyAsync<AsnContentException>(
+        _ = await Assert.ThrowsExactlyAsync<AsnContentException>(
             async () => await ArchiveTimestampV3.ComputeHashIndexAsync(
                 indefiniteLength, signerIndex: 0, PkiDigestAlgorithm.Sha256, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),
             "The generator-facing hash-index computation refuses the same indefinite-length structure with a typed parse exception.").ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<AsnContentException>(
+        _ = await Assert.ThrowsExactlyAsync<AsnContentException>(
             async () => await ArchiveTimestampV3.BuildMessageImprintInputAsync(
                 new ArchiveTimestampImprintContext { SignedData = indefiniteLength, HashIndex = world.HashIndex, MessageImprintAlgorithm = PkiDigestAlgorithm.Sha256 },
                 BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false),

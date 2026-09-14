@@ -3,7 +3,6 @@ using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -65,7 +64,7 @@ internal static class CredentialEndpointDpopValidation
             .ConfigureAwait(false);
 
         string? dpopProof = null;
-        context.IncomingRequest?.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoP, out dpopProof);
+        _ = (context.IncomingRequest?.Headers.TryGetSingle(WellKnownHttpHeaderNames.DPoP, out dpopProof));
         if(dpopProof is null)
         {
             string freshNonce = await oauth.IssueDpopNonceAsync(
@@ -142,6 +141,7 @@ internal static class CredentialEndpointDpopValidation
 
         return jtiOutcome switch
         {
+            JtiReplayOutcome.FirstUse => null,
             JtiReplayOutcome.Replayed => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof, "The DPoP proof jti has been presented previously."),
             JtiReplayOutcome.Unacceptable => ServerHttpResponse.BadRequest(
@@ -150,6 +150,7 @@ internal static class CredentialEndpointDpopValidation
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "DPoP proof jti replay defense is required by policy but no jti store is configured."),
+
             _ => null
         };
     }

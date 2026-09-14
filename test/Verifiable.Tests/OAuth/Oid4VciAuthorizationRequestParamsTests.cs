@@ -1,15 +1,12 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -169,7 +166,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
@@ -246,8 +243,8 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
         Assert.IsNotNull(seenResource);
-        Assert.HasCount(1, seenResource!);
-        Assert.AreEqual(IssuerResource, seenResource![0]);
+        Assert.HasCount(1, seenResource);
+        Assert.AreEqual(IssuerResource, seenResource[0]);
     }
 
 
@@ -280,9 +277,9 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             host, material, issuerState: null, resources: [IssuerResource, secondResource]).ConfigureAwait(false);
         Assert.AreEqual(302, multi.StatusCode, multi.Body);
         Assert.IsNotNull(seenResource);
-        Assert.HasCount(2, seenResource!);
-        Assert.AreEqual(IssuerResource, seenResource![0]);
-        Assert.AreEqual(secondResource, seenResource![1]);
+        Assert.HasCount(2, seenResource);
+        Assert.AreEqual(IssuerResource, seenResource[0]);
+        Assert.AreEqual(secondResource, seenResource[1]);
 
         seenResource = null;
         ServerHttpResponse none = await RunToAuthorizeAsync(host, material).ConfigureAwait(false);
@@ -347,7 +344,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -358,7 +355,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
 
         return await host.DispatchAtEndpointAsync(
@@ -392,7 +389,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
@@ -402,7 +399,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -422,7 +419,7 @@ internal sealed class Oid4VciAuthorizationRequestParamsTests
 
         return await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

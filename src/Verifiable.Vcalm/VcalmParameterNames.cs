@@ -101,7 +101,12 @@ public static class VcalmParameterNames
     /// </summary>
     public static string Verified { get; } = Utf8Constants.ToInternedString(VerifiedUtf8);
 
-    /// <summary>The UTF-8 source literal of <see cref="Credential"/>.</summary>
+    /// <summary>
+    /// The UTF-8 source literal of <see cref="Credential"/>; also the §3.6.1
+    /// <c>{"credential": {...}}</c> wrapper member a <c>jsonata</c> template following the POST
+    /// <c>/credentials/issue</c> body shape (VCALM 1.0 Example 13) renders, which
+    /// <c>VcalmWorkflowStepEngine</c> unwraps before signing.
+    /// </summary>
     public static ReadOnlySpan<byte> CredentialUtf8 => "credential"u8;
 
     /// <summary>The §3.3.1 response echo member returned when <see cref="ReturnCredential"/> is set.</summary>

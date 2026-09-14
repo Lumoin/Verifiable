@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Verifiable.OAuth.Federation;
 
 /// <summary>

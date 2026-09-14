@@ -2,7 +2,6 @@ using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -205,7 +204,7 @@ internal sealed class ProtectedResourceMetadataTests
         //The SSF transmitter is the resource server: its stream endpoint
         //requires a bearer token, and its RFC 9728 document advertises the
         //SSF scopes — the CAEP interop scope-discovery story.
-        app.Server.OAuth().UseDefaultSsfJsonParsing();
+        _ = app.Server.OAuth().UseDefaultSsfJsonParsing();
         app.Server.OAuth().CreateSsfStreamAsync = static (request, registration, context, ct) =>
             ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
         app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
@@ -278,7 +277,7 @@ internal sealed class ProtectedResourceMetadataTests
                 WellKnownCapabilityIdentifiers.SsfTransmitter,
                 WellKnownCapabilityIdentifiers.OAuthJwksEndpoint));
 
-        app.Server.OAuth().UseDefaultSsfJsonParsing();
+        _ = app.Server.OAuth().UseDefaultSsfJsonParsing();
         app.Server.OAuth().CreateSsfStreamAsync = static (request, registration, context, ct) =>
             ValueTask.FromResult(SsfStreamWriteResult.Failed(SsfStreamWriteOutcome.Forbidden));
         app.Server.OAuth().AuthorizeSsfRequestAsync = static (request, requiredScope, registration, context, ct) =>
@@ -363,7 +362,7 @@ internal sealed class ProtectedResourceMetadataTests
         ProtectedResourceMetadata? metadata = ProtectedResourceMetadataJsonParsing.ParseProtectedResourceMetadata(
             """{"resource": "https://r.example.com", "x-extension": {"nested": true}}""");
         Assert.IsNotNull(metadata);
-        Assert.AreEqual("https://r.example.com", metadata!.Resource);
+        Assert.AreEqual("https://r.example.com", metadata.Resource);
     }
 
 

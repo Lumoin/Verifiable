@@ -1,11 +1,10 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
@@ -106,7 +105,7 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
         //POSTs wallet_metadata + wallet_nonce, gets the encrypted JAR, decrypts it,
         //resolves the leaf key from the decrypted x5c against the context anchors,
         //verifies, presents, and POSTs the encrypted response.
-        ExchangeContext exchangeContext = new();
+        ExchangeContext exchangeContext = [];
         scheme.PlaceTrustMaterial(exchangeContext);
 
         //The wallet's sends route through the guarded chokepoint; the test
@@ -127,7 +126,7 @@ internal sealed class Oid4VpX509RequestUriPostFlowTests
             exchangeContext,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after resolving the x509 leaf key from the " +
             "decrypted JAR's x5c over the §5.10 POST round-trip.");
 

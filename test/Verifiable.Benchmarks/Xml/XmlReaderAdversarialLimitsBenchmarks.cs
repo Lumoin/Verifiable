@@ -1,6 +1,6 @@
+using BenchmarkDotNet.Attributes;
 using System.Globalization;
 using System.Text;
-using BenchmarkDotNet.Attributes;
 using Verifiable.Xml;
 
 namespace Verifiable.Benchmarks.Xml;
@@ -46,13 +46,13 @@ internal class XmlReaderAdversarialLimitsBenchmarks
         eightMebibyteElementNameDocument[2 + NameLength] = (byte)'>';
 
         var builder = new StringBuilder(AttributeCount * 16);
-        builder.Append("<a");
+        _ = builder.Append("<a");
         for(int i = 0; i < AttributeCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $" a{i}=\"v\"");
+            _ = builder.Append(CultureInfo.InvariantCulture, $" a{i}=\"v\"");
         }
 
-        builder.Append(" a0=\"duplicate\"/>");
+        _ = builder.Append(" a0=\"duplicate\"/>");
         twentyThousandAttributesDocument = Encoding.UTF8.GetBytes(builder.ToString());
     }
 
@@ -61,7 +61,7 @@ internal class XmlReaderAdversarialLimitsBenchmarks
     [Benchmark]
     public void EightMebibyteAttributeValueParses()
     {
-        XmlNodeTable.TryParse(eightMebibyteAttributeValueDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
+        _ = XmlNodeTable.TryParse(eightMebibyteAttributeValueDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
         using(table)
         {
         }
@@ -72,7 +72,7 @@ internal class XmlReaderAdversarialLimitsBenchmarks
     [Benchmark]
     public void EightMebibyteElementNameParses()
     {
-        XmlNodeTable.TryParse(eightMebibyteElementNameDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
+        _ = XmlNodeTable.TryParse(eightMebibyteElementNameDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
         using(table)
         {
         }
@@ -83,7 +83,7 @@ internal class XmlReaderAdversarialLimitsBenchmarks
     [Benchmark]
     public void TwentyThousandAttributesWithTrailingDuplicateAreRefused()
     {
-        XmlNodeTable.TryParse(twentyThousandAttributesDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
+        _ = XmlNodeTable.TryParse(twentyThousandAttributesDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
         using(table)
         {
         }

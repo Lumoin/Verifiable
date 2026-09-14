@@ -1,15 +1,12 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -34,7 +31,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string ExampleDidPrefix = "did:example";
 
@@ -237,7 +234,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
         Assert.IsTrue(result.IsRecipientAddressedInTo, "The C.3 example 4 recipient (did:example:bob) is listed in 'to' and MUST be flagged as addressed.");
 
         Assert.IsNotNull(result.Message);
-        DidCommMessage message = result.Message!;
+        DidCommMessage message = result.Message;
         Assert.AreEqual(ExpectedId, message.Id);
         Assert.AreEqual(ExpectedType, message.Type);
         Assert.AreEqual(ExpectedFrom, message.From);
@@ -245,11 +242,11 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
         Assert.AreEqual<long?>(ExpectedExpiresTime, message.ExpiresTime);
 
         Assert.IsNotNull(message.To);
-        Assert.HasCount(1, message.To!);
-        Assert.AreEqual(ExpectedTo, message.To![0]);
+        Assert.HasCount(1, message.To);
+        Assert.AreEqual(ExpectedTo, message.To[0]);
 
         Assert.IsNotNull(message.Body);
-        Assert.IsTrue(message.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(message.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 
@@ -266,7 +263,7 @@ internal sealed class DidCommEncryptedAuthcryptVectorTests
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(wire, "protected"u8);
         Assert.IsNotNull(protectedEncoded, "The vector MUST carry a 'protected' member.");
 
-        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded!, Pool);
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);
 
         return JwkJsonReader.ExtractStringValue(headerOwner.Memory.Span, member);
     }

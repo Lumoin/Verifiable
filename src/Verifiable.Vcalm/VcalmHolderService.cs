@@ -47,7 +47,7 @@ public static class VcalmHolderService
         {
             if(CredentialPath.TryFromJsonPointer(pointer, out CredentialPath path))
             {
-                requestedPaths.Add(path);
+                _ = requestedPaths.Add(path);
             }
         }
 

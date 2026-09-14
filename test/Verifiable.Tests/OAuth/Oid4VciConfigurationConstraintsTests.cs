@@ -1,15 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text.Json;
-using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -34,8 +30,6 @@ internal sealed class Oid4VciConfigurationConstraintsTests
     private const string ConfigurationScope = "UniversityDegree";
     private const string IssuedCredential = "eyJhbGciOiJFUzI1NiJ9.body.sig";
 
-    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
-
     private static ImmutableHashSet<CapabilityIdentifier> IssuanceCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.OAuthAuthorizationCode,
@@ -51,7 +45,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         WireCatalog(host, configurationScope: ConfigurationScope, batchSize: null);
 
         //The token is granted exactly the configuration's scope.
-        string accessToken = await MintAccessTokenAsync(host, material, credentialScope:ConfigurationScope)
+        string accessToken = await MintAccessTokenAsync(host, material, credentialScope: ConfigurationScope)
             .ConfigureAwait(false);
         ServerHttpResponse response = await DispatchCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1")).ConfigureAwait(false);
@@ -68,7 +62,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         WireCatalog(host, configurationScope: ConfigurationScope, batchSize: null);
 
         //The token is granted a DIFFERENT scope than the requested configuration declares.
-        string accessToken = await MintAccessTokenAsync(host, material, credentialScope:"SomeOtherCredential")
+        string accessToken = await MintAccessTokenAsync(host, material, credentialScope: "SomeOtherCredential")
             .ConfigureAwait(false);
         ServerHttpResponse response = await DispatchCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1")).ConfigureAwait(false);
@@ -85,7 +79,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         using VerifierKeyMaterial material = RegisterIssuer(host);
         WireCatalog(host, configurationScope: ConfigurationScope, batchSize: 3);
 
-        string accessToken = await MintAccessTokenAsync(host, material, credentialScope:ConfigurationScope)
+        string accessToken = await MintAccessTokenAsync(host, material, credentialScope: ConfigurationScope)
             .ConfigureAwait(false);
         ServerHttpResponse response = await DispatchCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1", "proof-2", "proof-3"))
@@ -102,7 +96,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         using VerifierKeyMaterial material = RegisterIssuer(host);
         WireCatalog(host, configurationScope: ConfigurationScope, batchSize: 2);
 
-        string accessToken = await MintAccessTokenAsync(host, material, credentialScope:ConfigurationScope)
+        string accessToken = await MintAccessTokenAsync(host, material, credentialScope: ConfigurationScope)
             .ConfigureAwait(false);
         ServerHttpResponse response = await DispatchCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1", "proof-2", "proof-3"))
@@ -121,7 +115,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
         //No batch_credential_issuance advertised.
         WireCatalog(host, configurationScope: ConfigurationScope, batchSize: null);
 
-        string accessToken = await MintAccessTokenAsync(host, material, credentialScope:ConfigurationScope)
+        string accessToken = await MintAccessTokenAsync(host, material, credentialScope: ConfigurationScope)
             .ConfigureAwait(false);
         ServerHttpResponse response = await DispatchCredentialAsync(
             host, material, accessToken, CredentialRequestBody("proof-1", "proof-2"))
@@ -136,7 +130,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
     {
         VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
 
@@ -198,7 +192,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
             new RequestFields(),
             BearerHeaders(accessToken),
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -227,7 +221,7 @@ internal sealed class Oid4VciConfigurationConstraintsTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, tokenResponse.StatusCode, tokenResponse.Body);

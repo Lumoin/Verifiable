@@ -41,8 +41,8 @@ internal sealed class Fido2OwnershipTypeEqualityTests
         byte[] attestedCredentialDataA = BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKey);
         byte[] attestedCredentialDataB = BuildAttestedCredentialData(aaguid, (byte[])credentialId.Clone(), (byte[])credentialPublicKey.Clone());
 
-        byte[] bufferA = BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit), signCount: 7, attestedCredentialDataA, extensions);
-        byte[] bufferB = BuildAuthenticatorData((byte[])rpIdHash.Clone(), flags: (byte)(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit), signCount: 7, attestedCredentialDataB, (byte[])extensions.Clone());
+        byte[] bufferA = BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit, signCount: 7, attestedCredentialDataA, extensions);
+        byte[] bufferB = BuildAuthenticatorData((byte[])rpIdHash.Clone(), flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit, signCount: 7, attestedCredentialDataB, (byte[])extensions.Clone());
 
         using AuthenticatorData parsedA = AuthenticatorDataReader.Read(bufferA, TestCredentialPublicKeyReader, BaseMemoryPool.Shared);
         using AuthenticatorData parsedB = AuthenticatorDataReader.Read(bufferB, TestCredentialPublicKeyReader, BaseMemoryPool.Shared);

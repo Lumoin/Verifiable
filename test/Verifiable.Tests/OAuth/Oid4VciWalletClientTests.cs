@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -255,7 +253,7 @@ internal sealed class Oid4VciWalletClientTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        WireIssuerSeams(host);
+        _ = WireIssuerSeams(host);
 
         const string NotificationId = "notif-batch-7Qm2";
         const string FirstCredential = "issued-credential-1";
@@ -303,7 +301,7 @@ internal sealed class Oid4VciWalletClientTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        WireIssuerSeams(host);
+        _ = WireIssuerSeams(host);
 
         const string TransactionId = "txn-deferred-7Qm2";
         const string NotificationId = "notif-deferred-7Qm2";
@@ -362,7 +360,7 @@ internal sealed class Oid4VciWalletClientTests
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        WireIssuerSeams(host);
+        _ = WireIssuerSeams(host);
 
         const string NotificationId = "notif-accept-7Qm2";
         host.Server.OAuth().IssueCredentialAsync = (_, _, _, _, _) =>
@@ -562,7 +560,7 @@ internal sealed class Oid4VciWalletClientTests
 
         foreach(KeyValuePair<string, string> header in headers)
         {
-            request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            _ = request.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
         using HttpResponseMessage response = await httpClient.SendAsync(
@@ -582,7 +580,7 @@ internal sealed class Oid4VciWalletClientTests
         IssuerSeamObservations observations = new();
         string? mintedNonce = null;
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         host.Server.OAuth().ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
             ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
@@ -669,7 +667,7 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsNotNull(enc, "JWE protected header must carry 'enc'.");
 
         using AeadMessage parsedJwe = JweParsing.ParseCompact(
-            compactJwe, WellKnownJweAlgorithms.EcdhEs, enc!, TestSetup.Base64UrlDecoder, Pool);
+            compactJwe, WellKnownJweAlgorithms.EcdhEs, enc, TestSetup.Base64UrlDecoder, Pool);
         using DecryptedContent decrypted = await parsedJwe.DecryptAsync(
             recipientPrivate,
             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
@@ -691,7 +689,7 @@ internal sealed class Oid4VciWalletClientTests
         Assert.IsNotNull(jwk);
 
         var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            jwk!, Pool, TestSetup.Base64UrlDecoder);
+            jwk, Pool, TestSetup.Base64UrlDecoder);
         Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
         PublicKeyMemory proofKey = new(keyBytes, proofTag);
 

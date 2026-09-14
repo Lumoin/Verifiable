@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Spec.Algorithms;
 
@@ -102,7 +100,7 @@ internal sealed class TpmtTkVerifiedV185Tests
         Assert.AreEqual(TpmStConstants.TPM_ST_DIGEST_VERIFIED, ticket.Tag);
         Assert.AreEqual(TpmiRhHierarchy.Platform, ticket.Hierarchy);
         Assert.IsTrue(ticket.Metadata.HasValue, "TPM_ST_DIGEST_VERIFIED selects the digestVerified arm, a real TPMI_ALG_HASH.");
-        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_SHA256, ticket.Metadata!.Value.Value);
+        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_SHA256, ticket.Metadata.Value.Value);
         Assert.AreSequenceEqual(new byte[] { 0x11, 0x22 }, ticket.Hmac.ToArray());
         Assert.AreEqual(wire.Length, ticket.SerializedSize);
 
@@ -218,7 +216,7 @@ internal sealed class TpmtTkVerifiedV185Tests
         Assert.AreEqual(TpmStConstants.TPM_ST_DIGEST_VERIFIED, ticket.Tag);
         Assert.IsTrue(ticket.IsNull);
         Assert.IsTrue(ticket.Metadata.HasValue, "Table 111's digestVerified arm admits no NULL selector, even for a NULL ticket.");
-        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_SHA384, ticket.Metadata!.Value.Value);
+        Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_SHA384, ticket.Metadata.Value.Value);
         Assert.AreEqual(wire.Length, ticket.SerializedSize);
 
         byte[] rewritten = new byte[wire.Length];

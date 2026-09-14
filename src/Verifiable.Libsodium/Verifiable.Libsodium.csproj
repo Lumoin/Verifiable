@@ -3,17 +3,23 @@
 
   <PropertyGroup>
     <Title>An adapter for Verifiable to use libsodium</Title>
-    <Description>An adapter for Verifiable to use libsodium</Description>
+    <Description>An adapter for Verifiable to use libsodium. Ed25519 secret-key scratch memory is sodium-guarded native memory on every platform except browser-wasm, where it is a pinned, zero-on-return managed buffer because WebAssembly's linear memory has no guard-page or memory-locking primitive: for the duration of the operation the expanded secret key sits in the page's JS-visible linear memory, zeroed on release.</Description>
     <PackageTags>DID VC decentralized-identifier verifiable credential, signing, encryption</PackageTags>
     <!--
-      Ed25519 secret-key scratch memory is allocated via SodiumGuardedScratchPool (this project's own
-      MemoryPool<byte> adapter over Lumoin.Base.Libsodium's SodiumBacking.Allocate) and consumed by
-      pinning its IMemoryOwner<byte>.Memory: reading the resulting MemoryHandle.Pointer (a void*) to
-      obtain the nint that LibsodiumCrypto's SignSeedKeypair/SignDetached/SecretKeyToCurve25519 expect
-      requires unsafe context.
+      Ed25519 secret-key scratch memory is allocated via SodiumScratchPool (this project's own
+      MemoryPool<byte> adapter, sodium-guarded native memory off browser-wasm and a pinned managed
+      buffer on it) and consumed by pinning its IMemoryOwner<byte>.Memory: reading the resulting
+      MemoryHandle.Pointer (a void*) to obtain the nint that LibsodiumCrypto's
+      SignSeedKeypair/SignDetached/SecretKeyToCurve25519 expect requires unsafe context.
     -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <!-- Directory.Build.props adds SupportedPlatform browser to this project: the Ed25519/X25519 crypto
+       surface is satisfied on browser-wasm by the Lumoin.Base.Libsodium
+       package's own buildTransitive targets, which statically link its runtimes/browser-wasm archive
+       into dotnet.wasm at a consumer's publish; SodiumScratchPool routes the guarded-memory-only part
+       of the surface around SodiumBacking (itself [UnsupportedOSPlatform("browser")]) on that RID. -->
 
   <ItemGroup>
     <PackageReference Include="Lumoin.Base.Libsodium" />

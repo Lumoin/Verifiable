@@ -1,10 +1,8 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -80,15 +78,15 @@ internal static class CmsAlgorithmProtectionTestFactory
         //CmsSigner omit signedAttrs entirely (a bare signature over the content, RFC 5652 §5.4's "field is
         //absent" branch), which would leave no message-digest attribute for ManagedCmsVerification to read —
         //an artifact of this fixture-minting shape, not of the attribute under test.
-        signer.SignedAttributes.Add(new Pkcs9SigningTime());
+        _ = signer.SignedAttributes.Add(new Pkcs9SigningTime());
 
         byte[] attributeValue = rawAttributeValue ?? BuildCmsAlgorithmProtectionValue(digestAlgorithmOid, signatureAlgorithmOid);
         if(asSignedAttribute)
         {
-            signer.SignedAttributes.Add(new AsnEncodedData(new Oid(CmsAlgorithmProtectionOid), attributeValue));
+            _ = signer.SignedAttributes.Add(new AsnEncodedData(new Oid(CmsAlgorithmProtectionOid), attributeValue));
             if(duplicateAttributeValue)
             {
-                signer.SignedAttributes.Add(new AsnEncodedData(new Oid(CmsAlgorithmProtectionOid), attributeValue));
+                _ = signer.SignedAttributes.Add(new AsnEncodedData(new Oid(CmsAlgorithmProtectionOid), attributeValue));
             }
         }
 

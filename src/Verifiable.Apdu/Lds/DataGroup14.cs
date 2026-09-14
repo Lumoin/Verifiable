@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -352,6 +350,11 @@ public sealed class DataGroup14: IDisposable
         EllipticCurveTypes.P256 => CryptoTags.P256ExchangePublicKey,
         EllipticCurveTypes.P384 => CryptoTags.P384ExchangePublicKey,
         EllipticCurveTypes.P521 => CryptoTags.P521ExchangePublicKey,
+        EllipticCurveTypes.None => throw new InvalidOperationException("DG14 ChipAuthenticationPublicKeyInfo uses an elliptic curve not supported for Chip Authentication."),
+        EllipticCurveTypes.Secp256k1 => throw new InvalidOperationException("DG14 ChipAuthenticationPublicKeyInfo uses an elliptic curve not supported for Chip Authentication."),
+        EllipticCurveTypes.NistCurves => throw new InvalidOperationException("DG14 ChipAuthenticationPublicKeyInfo uses an elliptic curve not supported for Chip Authentication."),
+        EllipticCurveTypes.Curve25519 => throw new InvalidOperationException("DG14 ChipAuthenticationPublicKeyInfo uses an elliptic curve not supported for Chip Authentication."),
+        EllipticCurveTypes.BrainpoolCurves => throw new InvalidOperationException("DG14 ChipAuthenticationPublicKeyInfo uses an elliptic curve not supported for Chip Authentication."),
         EllipticCurveTypes.BrainpoolP224r1 => CryptoTags.BrainpoolP224r1ExchangePublicKey,
         EllipticCurveTypes.BrainpoolP256r1 => CryptoTags.BrainpoolP256r1ExchangePublicKey,
         EllipticCurveTypes.BrainpoolP320r1 => CryptoTags.BrainpoolP320r1ExchangePublicKey,

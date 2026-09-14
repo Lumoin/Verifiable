@@ -25,6 +25,6 @@ internal sealed class ClientDataJsonReaderCrossOriginTests
         ClientData clientData = ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json));
 
         Assert.IsNotNull(clientData.CrossOrigin);
-        Assert.IsFalse(clientData.CrossOrigin!.Value);
+        Assert.IsFalse(clientData.CrossOrigin.Value);
     }
 }

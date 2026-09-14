@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Security;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -157,7 +152,7 @@ internal sealed class SignatureValidationBuildingBlockGapTests
     public async Task ReportsSignaturePolicyNotAvailableWhenTheResolverCannotAccessTheDocument()
     {
         using SignatureFacts signature = DeclaringPolicy("urn:test:policy:resolved");
-        ResolveSignatureValidationPolicyAsyncDelegate resolver = (context, pool, cancellationToken) =>
+        static ValueTask<SignaturePolicyResolution> resolver(SignaturePolicyResolutionContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(new SignaturePolicyResolution { Status = SignaturePolicyResolutionStatus.NotAvailable });
 
         ValidationContextInitializationResult result = await ValidationContextInitialization.InitializeAsync(
@@ -179,7 +174,7 @@ internal sealed class SignatureValidationBuildingBlockGapTests
     public async Task ReportsPolicyProcessingErrorWhenTheResolverCannotProcessTheDocument()
     {
         using SignatureFacts signature = DeclaringPolicy("urn:test:policy:resolved");
-        ResolveSignatureValidationPolicyAsyncDelegate resolver = (context, pool, cancellationToken) =>
+        static ValueTask<SignaturePolicyResolution> resolver(SignaturePolicyResolutionContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("the policy document could not be parsed");
 
         ValidationContextInitializationResult result = await ValidationContextInitialization.InitializeAsync(
@@ -189,7 +184,7 @@ internal sealed class SignatureValidationBuildingBlockGapTests
         Assert.AreEqual(BuildingBlockIndication.Indeterminate, result.Conclusion.Indication);
         Assert.Contains(SignatureValidationSubIndication.PolicyProcessingError, result.Conclusion.SubIndications,
             "Clause 5.2.4.4: a policy document that cannot be parsed or processed for any reason is POLICY_PROCESSING_ERROR.");
-        Assert.IsInstanceOfType<PolicyProcessingErrorReportData>(result.Conclusion.ReportData[0], "Table 11 asks for additional information on the problem.");
+        _ = Assert.IsInstanceOfType<PolicyProcessingErrorReportData>(result.Conclusion.ReportData[0], "Table 11 asks for additional information on the problem.");
     }
 
 
@@ -240,7 +235,7 @@ internal sealed class SignatureValidationBuildingBlockGapTests
             Assert.AreEqual(BuildingBlockIndication.Indeterminate, obsolete.Conclusion.Indication,
                 "Step 6): a table whose trusted-until instant has passed fails the chain, not merely an entry the table omits.");
             Assert.Contains(SignatureValidationSubIndication.CryptographicConstraintsFailureNoProofOfExistence, obsolete.Conclusion.SubIndications);
-            Assert.IsInstanceOfType<CryptographicConstraintsFailureReportData>(obsolete.Conclusion.ReportData[0], "Table 13 mandates the offending material and, if known, its trusted-until instant.");
+            _ = Assert.IsInstanceOfType<CryptographicConstraintsFailureReportData>(obsolete.Conclusion.ReportData[0], "Table 13 mandates the offending material and, if known, its trusted-until instant.");
             Assert.AreEqual(BuildingBlockIndication.Passed, current.Conclusion.Indication, "The same chain against a table that still trusts the algorithm reaches step 9).");
         }
         finally

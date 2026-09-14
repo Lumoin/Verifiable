@@ -1,7 +1,6 @@
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.States;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp;
 

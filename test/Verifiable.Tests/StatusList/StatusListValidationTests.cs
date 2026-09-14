@@ -1,8 +1,5 @@
-using System.Buffers;
-using Lumoin.Base;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.StatusList;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -18,24 +15,24 @@ internal sealed class StatusListValidationTests
     /// Gets the index of the suspended credential used for testing purposes.
     /// </summary>
     private int SuspendedCredentialIndex { get; } = StatusListTestConstants.SuspendedCredentialIndex;
-    
+
     /// <summary>
     /// Gets the default capacity for a medium-sized list used in status list tests.
     /// </summary>
     private int MediumListCapacity { get; } = StatusListTestConstants.MediumListCapacity;
-    
+
     /// <summary>
     /// Gets the example subject value used for token generation in test scenarios.
     /// </summary>
     /// <remarks>This property is intended for use in testing contexts where a consistent token subject is
     /// required. The value is predefined and should not be modified.</remarks>
     private string ExampleTokenSubject { get; } = StatusListTestConstants.ExampleTokenSubject;
-    
+
     /// <summary>
     /// Gets the subject value that does not match the expected criteria for testing purposes.
     /// </summary>
     private string MismatchedSubject { get; } = StatusListTestConstants.MismatchedSubject;
-    
+
     /// <summary>
     /// Represents the base point in time used for status list tests.
     /// </summary>
@@ -75,7 +72,7 @@ internal sealed class StatusListValidationTests
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
         var reference = new StatusListReference(0, MismatchedSubject);
 
-        Assert.ThrowsExactly<StatusListValidationException>(() =>
+        _ = Assert.ThrowsExactly<StatusListValidationException>(() =>
             StatusListValidation.GetStatus(token, reference, timeProvider.GetUtcNow()));
     }
 
@@ -93,7 +90,7 @@ internal sealed class StatusListValidationTests
         //Advance time past expiration.
         timeProvider.Advance(TimeSpan.FromHours(2));
 
-        Assert.ThrowsExactly<StatusListValidationException>(() =>
+        _ = Assert.ThrowsExactly<StatusListValidationException>(() =>
             StatusListValidation.GetStatus(token, reference, timeProvider.GetUtcNow()));
     }
 
@@ -124,7 +121,7 @@ internal sealed class StatusListValidationTests
         var token = new StatusListToken(ExampleTokenSubject, BaseTime, list);
         var reference = new StatusListReference(10, ExampleTokenSubject);
 
-        Assert.ThrowsExactly<StatusListValidationException>(() =>
+        _ = Assert.ThrowsExactly<StatusListValidationException>(() =>
             StatusListValidation.GetStatus(token, reference, timeProvider.GetUtcNow()));
     }
 
@@ -134,7 +131,7 @@ internal sealed class StatusListValidationTests
         var timeProvider = new FakeTimeProvider(BaseTime);
         var reference = new StatusListReference(0, ExampleTokenSubject);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             StatusListValidation.GetStatus(null!, reference, timeProvider.GetUtcNow()));
     }
 

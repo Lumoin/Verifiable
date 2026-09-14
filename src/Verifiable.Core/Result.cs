@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Core;
@@ -18,7 +16,7 @@ public static class Result
     /// <summary>
     /// Creates a failed result with the specified error.
     /// </summary>
-    public static Result<TValue, TError> Failure<TValue, TError>(TError error) => Result<TValue, TError>.Failure(error);    
+    public static Result<TValue, TError> Failure<TValue, TError>(TError error) => Result<TValue, TError>.Failure(error);
 }
 
 
@@ -80,7 +78,7 @@ public readonly struct Result<TValue, TError>: IEquatable<Result<TValue, TError>
     /// </summary>
     public static Result<TValue, TError> Success(TValue value) => new(true, value, default);
 
-    
+
     /// <summary>
     /// Creates a failed result with the specified error.
     /// </summary>

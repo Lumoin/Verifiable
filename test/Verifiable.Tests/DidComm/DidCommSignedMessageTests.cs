@@ -1,14 +1,11 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -29,7 +26,7 @@ internal sealed class DidCommSignedMessageTests
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string ExampleDidPrefix = "did:example";
 
@@ -81,13 +78,13 @@ internal sealed class DidCommSignedMessageTests
         Assert.IsTrue(result.Verified.HasValue, "A verified signed message MUST carry a Verified<T> authenticity proof.");
         Assert.AreSame(result.Message, result.Verified.GetValueOrDefault().Value, "The Verified proof MUST wrap the verified message.");
         Assert.IsNotNull(result.Message);
-        Assert.AreEqual("1234567890", result.Message!.Id);
+        Assert.AreEqual("1234567890", result.Message.Id);
         Assert.AreEqual("did:example:alice", result.Message.From);
         Assert.IsTrue(result.IsToHeaderPresent);
 
         //W6: the proof is IDENTITY-BOUND, not a bare asserted label -- BoundProvenance.TryBindByResolvedMethod
         //witnessed that the signer kid names exactly the four-gate-resolved authentication method.
-        Verified<DidCommMessage> verified = result.Verified!.Value;
+        Verified<DidCommMessage> verified = result.Verified.Value;
         Assert.IsTrue(verified.IsIdentityBound, "The signed-path proof MUST be identity-bound.");
         BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
         Assert.AreEqual(ResolutionSource.MethodResolved, provenance.Source);
@@ -150,7 +147,7 @@ internal sealed class DidCommSignedMessageTests
 
         using PrivateKeyMemory signingKey = AliceKey1Private();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await PackAsync(message, signingKey, EdDsaKid, JoseSerializationFormat.GeneralJson).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -268,7 +265,7 @@ internal sealed class DidCommSignedMessageTests
         Assert.IsTrue(result.IsVerified, $"Round trip ({format}) MUST verify. Error: {result.Error}.");
         Assert.AreEqual(EdDsaKid, result.SignerKid);
         Assert.IsNotNull(result.Message);
-        Assert.AreEqual("1234567890", result.Message!.Id);
+        Assert.AreEqual("1234567890", result.Message.Id);
         Assert.AreEqual("did:example:alice", result.Message.From);
     }
 
@@ -568,7 +565,7 @@ internal sealed class DidCommSignedMessageTests
 
         using PrivateKeyMemory signingKey = AliceKey1Private();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await PackAsync(message, signingKey, EdDsaKid, JoseSerializationFormat.Compact).ConfigureAwait(false)).ConfigureAwait(false);
     }
 

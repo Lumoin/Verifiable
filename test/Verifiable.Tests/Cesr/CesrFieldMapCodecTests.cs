@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 
@@ -191,7 +188,7 @@ internal sealed class CesrFieldMapCodecTests
         Assert.AreEqual(hard, sizing.HardSize);
         Assert.AreEqual(soft, sizing.SoftSize);
         Assert.AreEqual(extra, sizing.ExtraSize);
-        Assert.AreEqual(full == -1 ? (int?)null : full, sizing.FullSize);
+        Assert.AreEqual(full == -1 ? null : full, sizing.FullSize);
         Assert.AreEqual(lead, sizing.LeadSize);
     }
 
@@ -203,7 +200,7 @@ internal sealed class CesrFieldMapCodecTests
     [TestMethod]
     public void RejectsGroupAsValuePrimitive()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeValuePrimitive("-IAA", BaseMemoryPool.Shared, out _));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeValuePrimitive("-IAA", BaseMemoryPool.Shared, out _));
     }
 
 
@@ -214,7 +211,7 @@ internal sealed class CesrFieldMapCodecTests
     [TestMethod]
     public void RejectsNonLabelCodeAsLabel()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeLabel("6HABAAA1", BaseMemoryPool.Shared, out _));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeLabel("6HABAAA1", BaseMemoryPool.Shared, out _));
     }
 
 
@@ -295,7 +292,7 @@ internal sealed class CesrFieldMapCodecTests
     {
         using AsciiText native = RentAscii("-JAA");
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
     }
 
 
@@ -307,7 +304,7 @@ internal sealed class CesrFieldMapCodecTests
     {
         using AsciiText native = RentAscii(FlatFieldMapVector + "1AAK");
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
     }
 
 
@@ -399,7 +396,7 @@ internal sealed class CesrFieldMapCodecTests
     [TestMethod]
     public void EncodesEmptyFieldMap()
     {
-        Assert.AreEqual("-IAA", Encode(new MessageFieldMap(StringComparer.Ordinal)));
+        Assert.AreEqual("-IAA", Encode(new(StringComparer.Ordinal)));
     }
 
 
@@ -482,7 +479,7 @@ internal sealed class CesrFieldMapCodecTests
     {
         int length = Encoding.ASCII.GetByteCount(serialization);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.ASCII.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(serialization, owner.Memory.Span);
 
         return new AsciiText(owner, length);
     }

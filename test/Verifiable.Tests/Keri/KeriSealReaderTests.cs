@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Json;
@@ -28,7 +27,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.Digest, Said)));
 
-        Assert.IsInstanceOfType<KeriDigestSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriDigestSeal>(seal);
         Assert.AreEqual(Said, ((KeriDigestSeal)seal).Digest);
     }
 
@@ -41,7 +40,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.MerkleRootDigest, Said)));
 
-        Assert.IsInstanceOfType<KeriMerkleRootSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriMerkleRootSeal>(seal);
         Assert.AreEqual(Said, ((KeriMerkleRootSeal)seal).RootDigest);
     }
 
@@ -54,7 +53,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.SequenceNumber, "e"), (KeriSealFields.Digest, Said)));
 
-        Assert.IsInstanceOfType<KeriSourceEventSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriSourceEventSeal>(seal);
         var sourceEvent = (KeriSourceEventSeal)seal;
         Assert.AreEqual(14, sourceEvent.SequenceNumber, "Sequence number 'e' is hexadecimal 14.");
         Assert.AreEqual(Said, sourceEvent.Said);
@@ -69,7 +68,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.Prefix, Aid), (KeriSealFields.SequenceNumber, "1"), (KeriSealFields.Digest, Said)));
 
-        Assert.IsInstanceOfType<KeriKeyEventSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriKeyEventSeal>(seal);
         var keyEvent = (KeriKeyEventSeal)seal;
         Assert.AreEqual(Aid, keyEvent.Prefix);
         Assert.AreEqual(1, keyEvent.SequenceNumber);
@@ -85,7 +84,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.Prefix, Aid)));
 
-        Assert.IsInstanceOfType<KeriLatestEstablishmentEventSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriLatestEstablishmentEventSeal>(seal);
         Assert.AreEqual(Aid, ((KeriLatestEstablishmentEventSeal)seal).Prefix);
     }
 
@@ -98,7 +97,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.BackerIdentifier, Aid), (KeriSealFields.Digest, Said)));
 
-        Assert.IsInstanceOfType<KeriRegistrarBackerSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriRegistrarBackerSeal>(seal);
         var backer = (KeriRegistrarBackerSeal)seal;
         Assert.AreEqual(Aid, backer.BackerIdentifier);
         Assert.AreEqual(Said, backer.Said);
@@ -113,7 +112,7 @@ internal sealed class KeriSealReaderTests
     {
         var seal = KeriSealReader.Read(Map((KeriSealFields.SealType, "YCSMTCAA"), (KeriSealFields.Digest, Said)));
 
-        Assert.IsInstanceOfType<KeriTypedSeal>(seal);
+        _ = Assert.IsInstanceOfType<KeriTypedSeal>(seal);
         var typed = (KeriTypedSeal)seal;
         Assert.AreEqual("YCSMTCAA", typed.SealType);
         Assert.AreEqual(Said, typed.Digest);
@@ -127,7 +126,7 @@ internal sealed class KeriSealReaderTests
     public void RejectsUnknownSealShape()
     {
         //An identifier together with a digest but no sequence number matches no seal type.
-        Assert.ThrowsExactly<KeriException>(() => KeriSealReader.Read(Map((KeriSealFields.Prefix, Aid), (KeriSealFields.Digest, Said))));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriSealReader.Read(Map((KeriSealFields.Prefix, Aid), (KeriSealFields.Digest, Said))));
     }
 
 
@@ -137,7 +136,7 @@ internal sealed class KeriSealReaderTests
     [TestMethod]
     public void RejectsEmptySeal()
     {
-        Assert.ThrowsExactly<KeriException>(() => KeriSealReader.Read(new Dictionary<string, object?>(StringComparer.Ordinal)));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriSealReader.Read(new Dictionary<string, object?>(StringComparer.Ordinal)));
     }
 
 
@@ -147,7 +146,7 @@ internal sealed class KeriSealReaderTests
     [TestMethod]
     public void RejectsNonHexadecimalSequenceNumber()
     {
-        Assert.ThrowsExactly<KeriException>(() => KeriSealReader.Read(Map((KeriSealFields.SequenceNumber, "xyz"), (KeriSealFields.Digest, Said))));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriSealReader.Read(Map((KeriSealFields.SequenceNumber, "xyz"), (KeriSealFields.Digest, Said))));
     }
 
 
@@ -157,7 +156,7 @@ internal sealed class KeriSealReaderTests
     [TestMethod]
     public void RejectsNonListAnchors()
     {
-        Assert.ThrowsExactly<KeriException>(() => KeriSealReader.ReadList("not a list"));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriSealReader.ReadList("not a list"));
     }
 
 
@@ -181,11 +180,11 @@ internal sealed class KeriSealReaderTests
         IReadOnlyList<KeriSeal> seals = KeriSealReader.ReadList(fields[KeriMessageFields.Anchors]);
 
         Assert.HasCount(4, seals);
-        Assert.IsInstanceOfType<KeriDigestSeal>(seals[0]);
-        Assert.IsInstanceOfType<KeriKeyEventSeal>(seals[1]);
+        _ = Assert.IsInstanceOfType<KeriDigestSeal>(seals[0]);
+        _ = Assert.IsInstanceOfType<KeriKeyEventSeal>(seals[1]);
         Assert.AreEqual(2, ((KeriKeyEventSeal)seals[1]).SequenceNumber);
-        Assert.IsInstanceOfType<KeriTypedSeal>(seals[2]);
-        Assert.IsInstanceOfType<KeriLatestEstablishmentEventSeal>(seals[3]);
+        _ = Assert.IsInstanceOfType<KeriTypedSeal>(seals[2]);
+        _ = Assert.IsInstanceOfType<KeriLatestEstablishmentEventSeal>(seals[3]);
     }
 
 

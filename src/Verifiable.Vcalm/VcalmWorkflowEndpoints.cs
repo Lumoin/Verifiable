@@ -3,8 +3,6 @@ using Verifiable.Core;
 using Verifiable.Core.Transport;
 using Verifiable.JCose;
 
-using static Verifiable.Server.EndpointInput;
-
 namespace Verifiable.Vcalm;
 
 /// <summary>

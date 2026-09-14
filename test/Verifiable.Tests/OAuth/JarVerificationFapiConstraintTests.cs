@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -64,7 +63,7 @@ internal sealed class JarVerificationFapiConstraintTests
 
         JarVerificationResult result = await VerifyAsync(jar, verificationKey).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JarVerified>(result);
+        _ = Assert.IsInstanceOfType<JarVerified>(result);
     }
 
 
@@ -85,7 +84,7 @@ internal sealed class JarVerificationFapiConstraintTests
 
         JarVerificationResult result = await VerifyAsync(jar, verificationKey).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JarRejected>(result);
+        _ = Assert.IsInstanceOfType<JarRejected>(result);
         Assert.AreEqual(OAuthErrors.InvalidRequestObject, ((JarRejected)result).ErrorCode);
     }
 
@@ -107,7 +106,7 @@ internal sealed class JarVerificationFapiConstraintTests
 
         JarVerificationResult result = await VerifyAsync(jar, verificationKey).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JarRejected>(result);
+        _ = Assert.IsInstanceOfType<JarRejected>(result);
         Assert.Contains("nbf", ((JarRejected)result).Reason);
     }
 
@@ -133,7 +132,7 @@ internal sealed class JarVerificationFapiConstraintTests
 
         JarVerificationResult result = await VerifyAsync(jar, verificationKey).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JarRejected>(result);
+        _ = Assert.IsInstanceOfType<JarRejected>(result);
         Assert.Contains(WellKnownMediaTypes.Jwt.OauthAuthzReqJwt, ((JarRejected)result).Reason);
     }
 

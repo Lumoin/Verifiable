@@ -12,7 +12,6 @@ $projects = @(
     'Verifiable.Foundation',
     'Verifiable.JCose',
     'Verifiable.Json',
-    'Verifiable.JsonPointer',
     'Verifiable.Keri',
     'Verifiable.Libsodium',
     'Verifiable.Microsoft',

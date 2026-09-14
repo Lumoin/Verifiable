@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
@@ -163,7 +158,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionGrantedProviderSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-granted",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-granted", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x71), TestContext.CancellationToken);
@@ -271,7 +266,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialExcludeListOfNineReturnsLimitExceeded()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-nine",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-nine", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> excludeList = BuildDummyDescriptors(pool, count: 9, seed: 0x80);
@@ -286,7 +281,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task MakeCredentialExcludeListOfEightSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-eight",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-mc-excludelist-eight", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> excludeList = BuildDummyDescriptors(pool, CtapAuthenticatorState.MaxCredentialCountInListCapacity, seed: 0x90);
@@ -301,7 +296,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionAllowListOfNineReturnsLimitExceeded()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-nine",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-nine", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         List<PublicKeyCredentialDescriptor> allowList = BuildDummyDescriptors(pool, count: 9, seed: 0xA0);
@@ -316,7 +311,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task GetAssertionAllowListOfEightWithRealCredentialSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-eight",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-ga-allowlist-eight", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] realCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0x73), TestContext.CancellationToken, resident: false);
@@ -647,7 +642,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task PollDeferredTransceiveWithNothingPendingThrows()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-nothing-pending",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-poll-nothing-pending", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
@@ -659,7 +654,7 @@ internal sealed class CtapUserPresenceTests
     [TestMethod]
     public async Task CancelDeferredTransceiveWithNothingPendingThrows()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-cancel-nothing-pending",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("up-cancel-nothing-pending", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(

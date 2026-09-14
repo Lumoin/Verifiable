@@ -1,17 +1,10 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
-using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
-using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
@@ -99,7 +92,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
         var request = new CtapClientPinRequest(
             SubCommand: WellKnownCtapClientPinSubCommands.GetPinToken, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two,
             KeyAgreement: session.PlatformPublicKeyCose, PinHashEnc: pinHashEnc);
-        await SendAsync(simulator, request, pool);
+        _ = await SendAsync(simulator, request, pool);
 
         Assert.AreEqual(8, await GetPinRetriesAsync(simulator, pool), "a success must mirror the custody verdict's reset-to-maximum RetriesRemaining.");
     }
@@ -205,7 +198,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
             simulator.TransceiveAsync, CtapPinUvAuthProtocolId.Two, pool, TestContext.CancellationToken);
         (byte[] newPinEnc, byte[] pinHashEnc, byte[] pinUvAuthParam) =
             await session.BuildChangePinMessagesAsync("5678", "1234", TestContext.CancellationToken);
-        await SendAsync(simulator, BuildChangePinRequest(session, newPinEnc, pinHashEnc, pinUvAuthParam), pool);
+        _ = await SendAsync(simulator, BuildChangePinRequest(session, newPinEnc, pinHashEnc, pinUvAuthParam), pool);
 
         Assert.HasCount(2, pinStore.ProvisionedPinHashes, "a successful changePIN must provision the persistent tier again.");
         AssertHashEquals("5678", pinStore.ProvisionedPinHashes[1], pool);
@@ -357,7 +350,7 @@ internal sealed class CtapAuthenticatorPinRetriesCustodyTests
             SubCommand: WellKnownCtapClientPinSubCommands.SetPin, PinUvAuthProtocol: (int)CtapPinUvAuthProtocolId.Two,
             KeyAgreement: session.PlatformPublicKeyCose, PinUvAuthParam: pinUvAuthParam, NewPinEnc: newPinEnc);
 
-        await CtapAuthenticatorClientPinClient.ClientPinAsync(
+        _ = await CtapAuthenticatorClientPinClient.ClientPinAsync(
             simulator.TransceiveAsync, CtapClientPinRequestCborWriter.Write, request, CtapClientPinResponseCborReader.Read, pool, CancellationToken.None);
     }
 

@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
@@ -14,7 +9,6 @@ using Verifiable.DidComm.MessagePickup;
 using Verifiable.DidComm.ProblemReports;
 using Verifiable.DidComm.ReturnRoute;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -243,8 +237,8 @@ internal sealed class DidCommMessagePickupTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await message.ExchangeAsync(request, Endpoint, new ExchangeContext(), exchange, cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await message.ExchangeAsync(request, Endpoint, [], exchange, cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -302,7 +296,7 @@ internal sealed class DidCommMessagePickupTests
     {
         var transport = new FakeExchangeTransport(statusCode: 200);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DidCommHttpTransport.CreateExchangeDelegate(transport.SendAsync, Pool, maxReplyBytes));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DidCommHttpTransport.CreateExchangeDelegate(transport.SendAsync, Pool, maxReplyBytes));
     }
 
 
@@ -313,7 +307,7 @@ internal sealed class DidCommMessagePickupTests
     [TestMethod]
     public void CreateExchangeDelegateRejectsNullTransport()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => DidCommHttpTransport.CreateExchangeDelegate(null!, Pool));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => DidCommHttpTransport.CreateExchangeDelegate(null!, Pool));
     }
 
 
@@ -333,8 +327,8 @@ internal sealed class DidCommMessagePickupTests
 
         DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(transport.SendAsync, Pool);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
-            async () => await message.ExchangeAsync(requestWithoutReturnRoute, Endpoint, new ExchangeContext(), exchange, default).ConfigureAwait(false)).ConfigureAwait(false);
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
+            async () => await message.ExchangeAsync(requestWithoutReturnRoute, Endpoint, [], exchange, default).ConfigureAwait(false)).ConfigureAwait(false);
         Assert.IsEmpty(transport.Calls, "A rejected exchange MUST NOT contact the transport.");
     }
 
@@ -359,8 +353,8 @@ internal sealed class DidCommMessagePickupTests
 
         using DidCommPlaintextMessage plaintext = DidCommPlaintextMessage.Create("{\"id\":\"1\",\"type\":\"t\"}"u8, BufferTags.Json, Pool);
         DidCommMessage plaintextRequestWithoutReturnRoute = new() { Id = "1", Type = "t" };
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
-            async () => await plaintext.ExchangeAsync(plaintextRequestWithoutReturnRoute, Endpoint, new ExchangeContext(), exchange, default).ConfigureAwait(false)).ConfigureAwait(false);
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
+            async () => await plaintext.ExchangeAsync(plaintextRequestWithoutReturnRoute, Endpoint, [], exchange, default).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -380,7 +374,7 @@ internal sealed class DidCommMessagePickupTests
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
 
-    private static ExchangeContext UnpackContext { get; } = new();
+    private static ExchangeContext UnpackContext { get; } = [];
 
 
     //A fresh context whose policy permits loopback, mirroring DidCommHttpTransportRealWireFlowTests.NewLoopbackContext.
@@ -691,7 +685,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage ack = MessagePickupExtensions.CreateMessagesReceived("mr-1", ["123", "456"]);
 
         Assert.IsTrue(ack.TryReadMessagesReceivedIds(out IReadOnlyList<string>? confirmedIds));
-        Assert.HasCount(2, confirmedIds!, "Confirming receipt is expressible purely as reading back the acknowledged ids; actually clearing the mediator's queue is its own storage action, out of this library's scope.");
+        Assert.HasCount(2, confirmedIds, "Confirming receipt is expressible purely as reading back the acknowledged ids; actually clearing the mediator's queue is its own storage action, out of this library's scope.");
 
         DidCommMessage proseSpelledType = new() { Id = "mr-2", Type = "https://didcomm.org/messagepickup/3.0/message-received" };
         Assert.IsFalse(proseSpelledType.IsMessagesReceived(), "'message-received' (singular) is prose, not the wire token — a message actually typed that way is NOT a messages-received.");
@@ -804,7 +798,7 @@ internal sealed class DidCommMessagePickupTests
         //messages — that filtering happens in mediator storage this library holds no state for. What IS
         //enforced is the mediator's OUTGOING status: it cannot claim to answer this request while echoing a
         //DIFFERENT recipient_did.
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             MessagePickupExtensions.CreateStatus("s-1", new MessagePickupStatus { MessageCount = 1, RecipientDid = "did:example:someone-else" }, inResponseTo: requestForAlice));
     }
 
@@ -821,7 +815,7 @@ internal sealed class DidCommMessagePickupTests
 
         Assert.AreEqual(discoveryRequest.Id, discoveryReply.ThreadId);
         Assert.IsTrue(discoveryReply.TryReadStatus(out MessagePickupStatus? status));
-        Assert.AreEqual(3L, status!.MessageCount);
+        Assert.AreEqual(3L, status.MessageCount);
         Assert.AreEqual("did:example:alice", status.RecipientDid);
     }
 
@@ -852,7 +846,7 @@ internal sealed class DidCommMessagePickupTests
 
         DidCommMessage present = MessagePickupExtensions.CreateStatus("s-3", new MessagePickupStatus { MessageCount = 7 });
         Assert.IsTrue(present.TryReadStatus(out MessagePickupStatus? status));
-        Assert.AreEqual(7L, status!.MessageCount);
+        Assert.AreEqual(7L, status.MessageCount);
     }
 
 
@@ -866,7 +860,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage onlyRequired = MessagePickupExtensions.CreateStatus("s-1", new MessagePickupStatus { MessageCount = 5 });
 
         Assert.IsTrue(onlyRequired.TryReadStatus(out MessagePickupStatus? status));
-        Assert.AreEqual(5L, status!.MessageCount);
+        Assert.AreEqual(5L, status.MessageCount);
         Assert.IsNull(status.RecipientDid);
         Assert.IsNull(status.LongestWaitedSeconds);
         Assert.IsNull(status.NewestReceivedTime);
@@ -886,7 +880,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage status = MessagePickupExtensions.CreateStatus("s-1", new MessagePickupStatus { MessageCount = 1, LongestWaitedSeconds = 3600 });
 
         Assert.IsTrue(status.TryReadStatus(out MessagePickupStatus? readBack));
-        Assert.AreEqual(3600L, readBack!.LongestWaitedSeconds);
+        Assert.AreEqual(3600L, readBack.LongestWaitedSeconds);
     }
 
 
@@ -906,7 +900,7 @@ internal sealed class DidCommMessagePickupTests
             Body = new Dictionary<string, object> { [WellKnownMessagePickupNames.MessageCount] = 1, [WellKnownMessagePickupNames.NewestReceivedTime] = 1658085169 }
         };
         Assert.IsTrue(intForm.TryReadStatus(out MessagePickupStatus? intStatus));
-        Assert.AreEqual(1658085169L, intStatus!.NewestReceivedTime);
+        Assert.AreEqual(1658085169L, intStatus.NewestReceivedTime);
 
         DidCommMessage longForm = new()
         {
@@ -915,7 +909,7 @@ internal sealed class DidCommMessagePickupTests
             Body = new Dictionary<string, object> { [WellKnownMessagePickupNames.MessageCount] = 1, [WellKnownMessagePickupNames.OldestReceivedTime] = 1658084293L }
         };
         Assert.IsTrue(longForm.TryReadStatus(out MessagePickupStatus? longStatus));
-        Assert.AreEqual(1658084293L, longStatus!.OldestReceivedTime);
+        Assert.AreEqual(1658084293L, longStatus.OldestReceivedTime);
 
         DidCommMessage fractionalForm = new()
         {
@@ -944,7 +938,7 @@ internal sealed class DidCommMessagePickupTests
         };
 
         Assert.IsTrue(status.TryReadStatus(out MessagePickupStatus? readBack));
-        Assert.AreEqual(ThreeGigabytes, readBack!.TotalBytes);
+        Assert.AreEqual(ThreeGigabytes, readBack.TotalBytes);
     }
 
 
@@ -958,12 +952,12 @@ internal sealed class DidCommMessagePickupTests
     {
         DidCommMessage requestWithDid = StatusRequest("sr-1", recipientDid: "did:example:alice");
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             MessagePickupExtensions.CreateStatus("s-1", new MessagePickupStatus { MessageCount = 1, RecipientDid = "did:example:bob" }, inResponseTo: requestWithDid));
 
         DidCommMessage matching = MessagePickupExtensions.CreateStatus("s-2", new MessagePickupStatus { MessageCount = 1, RecipientDid = "did:example:alice" }, inResponseTo: requestWithDid);
         Assert.IsTrue(matching.TryReadStatus(out MessagePickupStatus? readBack));
-        Assert.AreEqual("did:example:alice", readBack!.RecipientDid);
+        Assert.AreEqual("did:example:alice", readBack.RecipientDid);
     }
 
 
@@ -1161,7 +1155,7 @@ internal sealed class DidCommMessagePickupTests
 
         Assert.AreEqual(deliveryRequest.Id, emptyQueueStatus.ThreadId);
         Assert.IsTrue(emptyQueueStatus.TryReadStatus(out MessagePickupStatus? status));
-        Assert.AreEqual(0L, status!.MessageCount);
+        Assert.AreEqual(0L, status.MessageCount);
     }
 
 
@@ -1232,10 +1226,10 @@ internal sealed class DidCommMessagePickupTests
     [TestMethod]
     public void EveryDeliveryAttachmentIdIsRequiredForReceiptConfirmation()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             MessagePickupExtensions.CreateDelivery("d-1", "dr-1", [new Attachment { Id = "", Data = new AttachmentData { Base64 = "eA" } }]));
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             MessagePickupExtensions.CreateDelivery("d-2", "dr-1", [new Attachment { Id = null, Data = new AttachmentData { Base64 = "eA" } }]));
     }
 
@@ -1250,7 +1244,7 @@ internal sealed class DidCommMessagePickupTests
     [TestMethod]
     public void DuplicateAttachmentIdsWithinABatchAreRefused()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             MessagePickupExtensions.CreateDelivery("d-1", "dr-1", [BuildAttachment("att-1"), BuildAttachment("att-1")]));
     }
 
@@ -1304,13 +1298,13 @@ internal sealed class DidCommMessagePickupTests
         Assert.AreEqual(genuineBase64, delivery.Attachments![0].Data!.Base64, "A genuinely-packed encrypted envelope's base64 flows through the shape check untouched.");
 
         Attachment jsonAlternative = new() { Id = "att-2", Data = new AttachmentData { Base64 = genuineBase64, Json = new Dictionary<string, object>() } };
-        Assert.ThrowsExactly<ArgumentException>(() => MessagePickupExtensions.CreateDelivery("d-2", "dr-1", [jsonAlternative]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => MessagePickupExtensions.CreateDelivery("d-2", "dr-1", [jsonAlternative]));
 
         Attachment linksAlternative = new() { Id = "att-3", Data = new AttachmentData { Links = ["https://example.com/blob"], Hash = "sha256-x" } };
-        Assert.ThrowsExactly<ArgumentException>(() => MessagePickupExtensions.CreateDelivery("d-3", "dr-1", [linksAlternative]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => MessagePickupExtensions.CreateDelivery("d-3", "dr-1", [linksAlternative]));
 
         Attachment noData = new() { Id = "att-4", Data = null };
-        Assert.ThrowsExactly<ArgumentException>(() => MessagePickupExtensions.CreateDelivery("d-4", "dr-1", [noData]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => MessagePickupExtensions.CreateDelivery("d-4", "dr-1", [noData]));
     }
 
 
@@ -1352,7 +1346,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage ack = MessagePickupExtensions.CreateMessagesReceived("mr-1", ["123", "456"]);
 
         Assert.IsTrue(ack.TryReadMessagesReceivedIds(out IReadOnlyList<string>? ids));
-        Assert.HasCount(2, ids!);
+        Assert.HasCount(2, ids);
         Assert.AreEqual("123", ids[0]);
         Assert.AreEqual("456", ids[1]);
     }
@@ -1369,7 +1363,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage ack = MessagePickupExtensions.CreateMessagesReceived("mr-1", ["a", "b", "c"]);
 
         Assert.IsTrue(ack.TryReadMessagesReceivedIds(out IReadOnlyList<string>? confirmedIds));
-        Assert.HasCount(3, confirmedIds!, "The recovered id set is exactly what was acknowledged — nothing here adds, drops, or reorders entries; the actual removal from storage is the mediator's own action, out of this library's scope.");
+        Assert.HasCount(3, confirmedIds, "The recovered id set is exactly what was acknowledged — nothing here adds, drops, or reorders entries; the actual removal from storage is the mediator's own action, out of this library's scope.");
     }
 
 
@@ -1405,8 +1399,8 @@ internal sealed class DidCommMessagePickupTests
         //recipient's queue independent; actually holding two independent per-recipient message stores is the
         //mediator's own storage responsibility, not modeled by this library.
         Assert.AreNotEqual(aliceStatus.ThreadId, bobStatus.ThreadId);
-        Assert.IsTrue(aliceStatus.TryReadStatus(out MessagePickupStatus? a) && a!.RecipientDid == "did:example:alice");
-        Assert.IsTrue(bobStatus.TryReadStatus(out MessagePickupStatus? b) && b!.RecipientDid == "did:example:bob");
+        Assert.IsTrue(aliceStatus.TryReadStatus(out MessagePickupStatus? a) && a.RecipientDid == "did:example:alice");
+        Assert.IsTrue(bobStatus.TryReadStatus(out MessagePickupStatus? b) && b.RecipientDid == "did:example:bob");
     }
 
 
@@ -1427,8 +1421,8 @@ internal sealed class DidCommMessagePickupTests
         //copies until each acks is the mediator's own storage responsibility.
         Assert.IsTrue(aliceAck.TryReadMessagesReceivedIds(out IReadOnlyList<string>? aliceIds));
         Assert.IsTrue(bobAck.TryReadMessagesReceivedIds(out IReadOnlyList<string>? bobIds));
-        Assert.AreEqual("shared-msg-1", aliceIds![0]);
-        Assert.AreEqual("shared-msg-1", bobIds![0]);
+        Assert.AreEqual("shared-msg-1", aliceIds[0]);
+        Assert.AreEqual("shared-msg-1", bobIds[0]);
         Assert.AreNotSame(aliceAck, bobAck);
     }
 
@@ -1442,7 +1436,7 @@ internal sealed class DidCommMessagePickupTests
     {
         DidCommMessage statusWithNoLiveDeliveryMember = MessagePickupExtensions.CreateStatus("s-1", new MessagePickupStatus { MessageCount = 0 });
         Assert.IsTrue(statusWithNoLiveDeliveryMember.TryReadStatus(out MessagePickupStatus? status));
-        Assert.IsNull(status!.LiveDelivery, "Absence of live_delivery is not itself an 'on' signal.");
+        Assert.IsNull(status.LiveDelivery, "Absence of live_delivery is not itself an 'on' signal.");
 
         //The only recipient-issued write surface that can request Live Mode ON is live-delivery-change; there
         //is no mediator-side "ActivateLiveMode" builder — activation is the recipient's exclusive doing.
@@ -1544,7 +1538,7 @@ internal sealed class DidCommMessagePickupTests
             DidCommMessage reply = MessagePickupExtensions.CreateStatus($"status-{i}", new MessagePickupStatus { MessageCount = i }, inResponseTo: poll);
 
             Assert.IsTrue(reply.TryReadStatus(out MessagePickupStatus? status));
-            Assert.AreEqual((long)i, status!.MessageCount);
+            Assert.AreEqual(i, status.MessageCount);
         }
     }
 
@@ -1564,7 +1558,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage ack = MessagePickupExtensions.CreateMessagesReceived("mr-1", [LiveDeliveredMessageId]);
 
         Assert.IsTrue(ack.TryReadMessagesReceivedIds(out IReadOnlyList<string>? ids));
-        Assert.AreEqual(LiveDeliveredMessageId, ids![0], "Nothing distinguishes a live-pushed message's id from a queued delivery's id — the same messages-received surface handles both uniformly.");
+        Assert.AreEqual(LiveDeliveredMessageId, ids[0], "Nothing distinguishes a live-pushed message's id from a queued delivery's id — the same messages-received surface handles both uniformly.");
     }
 
 
@@ -1632,7 +1626,7 @@ internal sealed class DidCommMessagePickupTests
 
         Assert.IsTrue(problemMessage.IsProblemReport());
         Assert.IsTrue(problemMessage.TryInterpretProblemReport(out ProblemReport? recovered));
-        Assert.AreEqual(WellKnownMessagePickupNames.LiveModeNotSupported, recovered!.Code.Value);
+        Assert.AreEqual(WellKnownMessagePickupNames.LiveModeNotSupported, recovered.Code.Value);
     }
 
 
@@ -1841,7 +1835,7 @@ internal sealed class DidCommMessagePickupTests
         DidCommMessage request = ReturnRouteAllRequest();
 
         DidCommExchangeDelegate exchange = DidCommHttpTransport.CreateExchangeDelegate(transport.SendAsync, metered.Pool);
-        DidCommExchangeResult result = await message.ExchangeAsync(request, Endpoint, new ExchangeContext(), exchange, default).ConfigureAwait(false);
+        DidCommExchangeResult result = await message.ExchangeAsync(request, Endpoint, [], exchange, default).ConfigureAwait(false);
 
         Assert.IsTrue(result.HasReply);
         Assert.AreEqual(1L, metered.OutstandingCount, "The reply's lease is outstanding until the caller disposes the result.");

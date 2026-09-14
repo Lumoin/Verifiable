@@ -19,9 +19,12 @@ namespace Verifiable.Server;
 /// host-generic projection.
 /// </para>
 /// <para>
-/// Wire all required delegates at construction time. <see cref="Validate"/> reports any
-/// missing delegate by name in a single error message rather than failing piecemeal at
-/// request time.
+/// The seams are set at construction and altered while serving through the requested,
+/// drained, candidate-validated alteration operation described in
+/// <see href="../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration</see>.
+/// That operation is specified for the following implementation commits; the setters today
+/// provide neither a publication barrier nor validation invalidation. <see cref="Validate"/>
+/// reports missing delegates by name in a single error message.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("ServerIntegration Validated={IsValidated}")]
@@ -47,8 +50,8 @@ public class ServerIntegration
     public SaveServerFlowStateDelegate? SaveFlowStateAsync { get; set; }
 
     /// <summary>
-    /// Deletes a previously-saved flow state, scoped by tenant. Optional; flows that
-    /// never invalidate state can leave this null.
+    /// Deletes a saved flow state, scoped by tenant. Required so token revocation can
+    /// invalidate a claimed live refresh record even when audited-token revocation is unavailable.
     /// </summary>
     public DeleteServerFlowStateDelegate? DeleteFlowStateAsync { get; set; }
 
@@ -58,6 +61,13 @@ public class ServerIntegration
     /// <see cref="ResolveCorrelationKeyAsync"/>.
     /// </summary>
     public LoadServerFlowStateDelegate? LoadFlowStateAsync { get; set; }
+
+    /// <summary>
+    /// Atomically claims one step of a flow before an irreversible effect runs. Required.
+    /// See <see cref="ClaimServerFlowStateDelegate"/> for the exactly-once contract and the
+    /// distributed-store implementation guidance.
+    /// </summary>
+    public ClaimServerFlowStateDelegate? ClaimFlowStateAsync { get; set; }
 
     /// <summary>
     /// Resolves an external correlation handle to the stable internal <c>flowId</c> used
@@ -135,8 +145,8 @@ public class ServerIntegration
         {
             var sb = new StringBuilder(
                 $"{GetType().Name} is missing required delegates: ");
-            sb.AppendJoin(", ", missing);
-            sb.Append('.');
+            _ = sb.AppendJoin(", ", missing);
+            _ = sb.Append('.');
 
             throw new InvalidOperationException(sb.ToString());
         }
@@ -160,9 +170,12 @@ public class ServerIntegration
         if(LoadRegistrationAsync is null) { missing.Add(nameof(LoadRegistrationAsync)); }
         if(SaveFlowStateAsync is null) { missing.Add(nameof(SaveFlowStateAsync)); }
         if(LoadFlowStateAsync is null) { missing.Add(nameof(LoadFlowStateAsync)); }
+        if(ClaimFlowStateAsync is null) { missing.Add(nameof(ClaimFlowStateAsync)); }
+        if(DeleteFlowStateAsync is null) { missing.Add(nameof(DeleteFlowStateAsync)); }
         if(ResolvePolicyAsync is null) { missing.Add(nameof(ResolvePolicyAsync)); }
         if(ResolveCapabilitiesAsync is null) { missing.Add(nameof(ResolveCapabilitiesAsync)); }
         if(InspectAsync is null) { missing.Add(nameof(InspectAsync)); }
         if(GenerateIdentifierAsync is null) { missing.Add(nameof(GenerateIdentifierAsync)); }
+        if(ResolveEndpointUriAsync is null) { missing.Add(nameof(ResolveEndpointUriAsync)); }
     }
 }

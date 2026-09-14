@@ -1,12 +1,12 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
-using Verifiable.Tests.TestInfrastructure;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Mdoc;
 

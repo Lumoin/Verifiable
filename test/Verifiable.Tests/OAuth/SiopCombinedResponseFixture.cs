@@ -1,5 +1,4 @@
 using System.Collections.Immutable;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -7,7 +6,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Wallet;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -158,7 +156,7 @@ internal static class SiopCombinedResponseFixture
                 [AuthorizationResponseParameters.VpToken] = vpToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             cancellationToken).ConfigureAwait(false);
 
         return (response, host.GetFlowState(requestHandle).State);

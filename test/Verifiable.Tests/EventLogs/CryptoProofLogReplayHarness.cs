@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -80,7 +76,7 @@ internal static class CryptoProofLogReplayHarness
         }
 
         Span<byte> recomputed = stackalloc byte[32];
-        SHA256.HashData(entry.CanonicalBytes.Span, recomputed);
+        _ = SHA256.HashData(entry.CanonicalBytes.Span, recomputed);
         bool matches = recomputed.SequenceEqual(entry.Digest.Span);
 
         return ValueTask.FromResult(matches ? null : "The entry digest does not match its canonical bytes.");

@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
@@ -203,7 +199,7 @@ internal sealed class SignatureValidationModelTests
         Assert.AreEqual(CertificateValidityModel.Shell, ZeroInitialized<CertificateValidityModel>(), "The shell model is the RFC 5280 clause 6.1 model clause 5.2.6.4 names first.");
 
         /// <summary>Reads the value a runtime-cleared field of the enumeration type holds.</summary>
-        static T ZeroInitialized<T>() where T: struct, Enum
+        static T ZeroInitialized<T>() where T : struct, Enum
         {
             T[] cleared = new T[1];
 

@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods;
 
 /// <summary>
@@ -8,7 +6,7 @@ namespace Verifiable.Core.Did.Methods;
 /// <remarks>Authoritative definition at <see href="https://atproto.com/specs/did-plc">DID Placeholder (did:plc)</see>.</remarks>
 public record PlaceholderDidMethod: GenericDidMethod
 {
-    public PlaceholderDidMethod(string didString): base(didString)
+    public PlaceholderDidMethod(string didString) : base(didString)
     {
         ArgumentNullException.ThrowIfNull(didString);
 
@@ -31,10 +29,10 @@ public record PlaceholderDidMethod: GenericDidMethod
     }
 
 
-        /// <summary>
-        /// Explicit conversion from <see langword="string"/> to <see cref="PlaceholderDidMethod"/> or derived DID methods.
-        /// </summary>
-        /// <param name="didId"></param>
+    /// <summary>
+    /// Explicit conversion from <see langword="string"/> to <see cref="PlaceholderDidMethod"/> or derived DID methods.
+    /// </summary>
+    /// <param name="didId"></param>
     public static explicit operator PlaceholderDidMethod(string didId)
     {
         ArgumentNullException.ThrowIfNull(didId);

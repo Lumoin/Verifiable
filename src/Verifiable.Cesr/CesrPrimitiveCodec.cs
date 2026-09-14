@@ -127,7 +127,7 @@ public static class CesrPrimitiveCodec
             throw new CesrFormatException("Truncated CESR code.");
         }
 
-        string hard = new string(qb64[..hardSize]);
+        string hard = new(qb64[..hardSize]);
         CesrCodeSizing sizing = LookupSizing(hard);
         int codeSize = sizing.CodeSize;
         int softSize = sizing.SoftSize;
@@ -141,9 +141,9 @@ public static class CesrPrimitiveCodec
 
         ReadOnlySpan<char> softSpan = qb64.Slice(hardSize, softSize);
         VerifyExtraPad(softSpan[..extraSize]);
-        string soft = new string(softSpan[extraSize..]);
+        string soft = new(softSpan[extraSize..]);
 
-        int fullSize = sizing.FullSize ?? (int)(CesrTextCodec.Base64ToInt(soft) * 4 + codeSize);
+        int fullSize = sizing.FullSize ?? (int)((CesrTextCodec.Base64ToInt(soft) * 4) + codeSize);
         if(qb64.Length < fullSize)
         {
             throw new CesrFormatException("Truncated CESR primitive.");
@@ -236,9 +236,9 @@ public static class CesrPrimitiveCodec
         string both = CesrTextCodec.ReadCodeText(qb2, codeSize);
         ReadOnlySpan<char> softSpan = both.AsSpan(sizing.HardSize, sizing.SoftSize);
         VerifyExtraPad(softSpan[..extraSize]);
-        string soft = new string(softSpan[extraSize..]);
+        string soft = new(softSpan[extraSize..]);
 
-        int fullSize = sizing.FullSize ?? (int)(CesrTextCodec.Base64ToInt(soft) * 4 + codeSize);
+        int fullSize = sizing.FullSize ?? (int)((CesrTextCodec.Base64ToInt(soft) * 4) + codeSize);
         int fullBytes = CesrTextCodec.CodeBinaryLength(fullSize);
         if(qb2.Length < fullBytes)
         {

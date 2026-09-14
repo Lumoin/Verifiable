@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Numerics;
 using Lumoin.Veritas.Cbor;
 using Lumoin.Veritas.Cbor.Converters;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 
 namespace Verifiable.Cbor;
 
@@ -346,7 +343,7 @@ public static class CborValueConverter
     private static object ReadNegativeInteger(ref CborReader reader)
     {
         long value = reader.ReadInt64();
-        if(value >= int.MinValue && value <= int.MaxValue)
+        if(value is >= int.MinValue and <= int.MaxValue)
         {
             return (int)value;
         }
@@ -556,7 +553,7 @@ public static class CborValueConverter
     private static void WriteDecimalFraction(CborWriter writer, decimal value)
     {
         Span<int> bits = stackalloc int[4];
-        decimal.GetBits(value, bits);
+        _ = decimal.GetBits(value, bits);
 
         int scale = (bits[3] >> 16) & 0x7F;
         bool isNegative = bits[3] < 0;

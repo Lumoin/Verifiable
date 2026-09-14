@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -54,7 +53,7 @@ public abstract record AdESDigestAlgorithmIdentifier
 /// </summary>
 /// <param name="Value">The integer digest-algorithm identifier.</param>
 [DebuggerDisplay("AdESDigestAlgorithmIntegerIdentifier: {Value}")]
-public sealed record AdESDigestAlgorithmIntegerIdentifier(int Value) : AdESDigestAlgorithmIdentifier;
+public sealed record AdESDigestAlgorithmIntegerIdentifier(int Value): AdESDigestAlgorithmIdentifier;
 
 
 /// <summary>
@@ -63,7 +62,7 @@ public sealed record AdESDigestAlgorithmIntegerIdentifier(int Value) : AdESDiges
 /// (JA-5.2.2.2-06) — see <see cref="AdESDigestAlgorithmIdentifier"/>.
 /// </summary>
 [DebuggerDisplay("AdESDigestAlgorithmTextIdentifier: {Value}")]
-public sealed record AdESDigestAlgorithmTextIdentifier : AdESDigestAlgorithmIdentifier
+public sealed record AdESDigestAlgorithmTextIdentifier: AdESDigestAlgorithmIdentifier
 {
     /// <summary>
     /// Initializes the textual arm.

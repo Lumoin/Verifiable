@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 
 namespace Verifiable.Tests.Serialization;
@@ -251,7 +250,7 @@ internal sealed class CborRoundTripTests
 
         var reader = new CborReader(cbor, CborOptions.Strict);
 
-        Assert.Throws<CborContentException>(() =>
+        _ = Assert.Throws<CborContentException>(() =>
         {
             reader.ReadStartArrayExpectLength(5);
         });

@@ -1,5 +1,3 @@
-using System.Buffers;
-using System.Collections.Generic;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.JCose;

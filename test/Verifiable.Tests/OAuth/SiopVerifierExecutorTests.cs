@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -51,7 +49,7 @@ internal sealed class SiopVerifierExecutorTests
 
         FlowInput input = await executor.ExecuteAsync(
             new ValidateSelfIssuedIdToken(idToken, ClientId, Nonce, AllowedAlgorithms),
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
         SelfIssuedAuthenticationVerified verified = (SelfIssuedAuthenticationVerified)input;
         Assert.AreEqual(Nonce, verified.Nonce);
@@ -71,9 +69,9 @@ internal sealed class SiopVerifierExecutorTests
 
         FlowInput input = await executor.ExecuteAsync(
             new ValidateSelfIssuedIdToken(idToken, ClientId, "a-different-nonce", AllowedAlgorithms),
-            new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            [], TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<SiopFlowFailed>(input);
+        _ = Assert.IsInstanceOfType<SiopFlowFailed>(input);
         Assert.Contains("nonce=False", ((SiopFlowFailed)input).Reason);
     }
 

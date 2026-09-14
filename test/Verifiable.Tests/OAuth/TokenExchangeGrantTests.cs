@@ -1,13 +1,10 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
@@ -2041,7 +2038,7 @@ internal sealed class TokenExchangeGrantTests
         string segment = material.Registration.TenantId.Value;
         ClientRecord previous = host.Registrations[segment];
         Dictionary<string, IReadOnlyList<string>> scopeToAudience = previous.ScopeToAudience is null
-            ? new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+            ? new(StringComparer.Ordinal)
             : new Dictionary<string, IReadOnlyList<string>>(previous.ScopeToAudience, StringComparer.Ordinal);
         scopeToAudience[MachineScope] = [ResourceServerAudience];
 
@@ -2052,7 +2049,7 @@ internal sealed class TokenExchangeGrantTests
         };
         host.Registrations[segment] = updated;
         host.Registrations[updated.ClientId] = updated;
-        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        host.Server.UpdateClient(previous, updated, []);
         material.Registration = updated;
     }
 
@@ -2232,7 +2229,7 @@ internal sealed class TokenExchangeGrantTests
             Pool,
             TimeSpan.FromSeconds(60),
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2248,6 +2245,6 @@ internal sealed class TokenExchangeGrantTests
         Result<OutgoingFormFields, TokenRequestBuilderError> built = TokenExchangeRequestBuilder.Build(options);
         Assert.IsTrue(built.IsSuccess, "The builder must accept a well-formed token-exchange request.");
 
-        return built.Value!;
+        return built.Value;
     }
 }

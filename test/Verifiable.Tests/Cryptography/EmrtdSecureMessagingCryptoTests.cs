@@ -1,9 +1,5 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -182,7 +178,7 @@ internal sealed class EmrtdSecureMessagingCryptoTests
         {
             Assert.AreEqual(expectedCiphertextHex, Convert.ToHexString(result.AsReadOnlySpan()),
                 "Triple-DES CBC ciphertext must match the Doc 9303 Appendix D worked example.");
-            Assert.IsInstanceOfType<SymmetricCipherPerformedEvent>(evt,
+            _ = Assert.IsInstanceOfType<SymmetricCipherPerformedEvent>(evt,
                 "The operation must emit a SymmetricCipherPerformedEvent for CBOM provenance.");
         }
         finally
@@ -224,7 +220,7 @@ internal sealed class EmrtdSecureMessagingCryptoTests
         {
             Assert.AreEqual(expectedMacHex, Convert.ToHexString(result.AsReadOnlySpan()),
                 "Retail MAC must match the Doc 9303 Appendix D worked example.");
-            Assert.IsInstanceOfType<BlockCipherMacComputedEvent>(evt,
+            _ = Assert.IsInstanceOfType<BlockCipherMacComputedEvent>(evt,
                 "The operation must emit a BlockCipherMacComputedEvent for CBOM provenance.");
         }
         finally

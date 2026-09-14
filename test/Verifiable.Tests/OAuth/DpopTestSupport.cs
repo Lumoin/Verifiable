@@ -1,7 +1,4 @@
-using System.Text;
 using System.Text.Json;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
 
@@ -67,7 +64,7 @@ internal static class DpopTestSupport
     {
         Dictionary<string, object> dict = part is Dictionary<string, object> d
             ? d
-            : new Dictionary<string, object>(part);
+            : new(part);
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(dict);
         return new TaggedMemory<byte>(bytes, BufferTags.Json);
     }

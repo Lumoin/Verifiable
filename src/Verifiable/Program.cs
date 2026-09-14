@@ -1,12 +1,9 @@
+using Lumoin.Base;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System;
 using System.CommandLine;
-using System.IO;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 
@@ -53,15 +50,15 @@ internal static class Program
         //using declaration ties the pool's disposal to this method's own scope, which does not return
         //until the host itself has stopped.
         using var pool = new BaseMemoryPool(allowNativeDegradation: true);
-        builder.Services.AddSingleton(pool);
-        builder.Services.AddSingleton<FillEntropyDelegate>(RandomNumberGenerator.Fill);
-        builder.Services.AddSingleton(timeProvider);
+        _ = builder.Services.AddSingleton(pool);
+        _ = builder.Services.AddSingleton<FillEntropyDelegate>(RandomNumberGenerator.Fill);
+        _ = builder.Services.AddSingleton(timeProvider);
 
-        builder.Services.AddMcpServer()
+        _ = builder.Services.AddMcpServer()
             .WithStdioServerTransport()
             .WithTools<VerifiableMcpServer>();
 
-        builder.Logging.AddConsole(options =>
+        _ = builder.Logging.AddConsole(options =>
         {
             options.LogToStandardErrorThreshold = LogLevel.Trace;
         });

@@ -1,10 +1,7 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
+using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 
@@ -115,11 +112,7 @@ public static class KbJwtIssuance
             //Project to List<object> to match the payload dictionary's JSON
             //converter, which writes IList<object> arrays but not the
             //variance-incompatible IList<string>.
-            List<object> wireHashes = new(hashes.Count);
-            foreach(string hash in hashes)
-            {
-                wireHashes.Add(hash);
-            }
+            List<object> wireHashes = [.. hashes];
 
             payload[TransactionDataClaimNames.Hashes] = wireHashes;
 

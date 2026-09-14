@@ -97,7 +97,7 @@ public static class CredentialRequestJsonParsing
         if(encryptionElement.TryGetProperty(Oid4VciCredentialParameterNames.Jwk, out JsonElement jwkElement)
             && jwkElement.ValueKind == JsonValueKind.Object)
         {
-            jwk = new Dictionary<string, object>(StringComparer.Ordinal);
+            jwk = new(StringComparer.Ordinal);
             foreach(JsonProperty member in jwkElement.EnumerateObject())
             {
                 if(member.Value.ValueKind == JsonValueKind.String)

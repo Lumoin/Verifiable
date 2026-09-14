@@ -1,6 +1,3 @@
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>

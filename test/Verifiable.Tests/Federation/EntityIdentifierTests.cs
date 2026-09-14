@@ -1,5 +1,3 @@
-using Verifiable.OAuth.Federation;
-
 namespace Verifiable.Tests.Federation;
 
 /// <summary>
@@ -43,7 +41,7 @@ internal sealed class EntityIdentifierTests
     public void NonHttpSchemeIsRejected()
     {
         //A non-http(s) absolute value (the cross-platform Uri.TryCreate trap) must be rejected.
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             static () => new EntityIdentifier("urn:example:entity"));
     }
 
@@ -51,7 +49,7 @@ internal sealed class EntityIdentifierTests
     [TestMethod]
     public void RelativeValueIsRejected()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             static () => new EntityIdentifier("/federation/entity"));
     }
 
@@ -60,7 +58,7 @@ internal sealed class EntityIdentifierTests
     public void QueryComponentIsRejected()
     {
         //§1.2: an Entity Identifier MUST NOT contain a query component.
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             static () => new EntityIdentifier("https://entity.example?tenant=a"));
     }
 
@@ -69,7 +67,7 @@ internal sealed class EntityIdentifierTests
     public void FragmentComponentIsRejected()
     {
         //§1.2: an Entity Identifier MUST NOT contain a fragment component.
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             static () => new EntityIdentifier("https://entity.example#key-1"));
     }
 }

@@ -170,7 +170,7 @@ public static class JwtSigningExtensions
         int signingInputByteCount = Encoding.ASCII.GetByteCount(signingInput);
         using IMemoryOwner<byte> dataToSignOwner = memoryPool.Rent(signingInputByteCount);
         Debug.Assert(dataToSignOwner.Memory.Length == signingInputByteCount, "Pool must return exact-size allocations.");
-        Encoding.ASCII.GetBytes(signingInput, dataToSignOwner.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(signingInput, dataToSignOwner.Memory.Span);
 
         (Signature signature, CryptoEvent? evt) = await signingDelegate(
             privateKey.AsReadOnlyMemory(),

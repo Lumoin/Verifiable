@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Cryptography.Pki;
 

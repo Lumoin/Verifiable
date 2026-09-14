@@ -1,18 +1,10 @@
-using System;
-using System.Buffers;
-using System.Collections;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
-using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Fido2;
@@ -70,7 +62,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-s9",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-s9", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapGetInfoResponse getInfoResponse = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
@@ -255,7 +247,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         CancellationToken cancellationToken = TestContext.CancellationToken;
         byte[] salt1 = CtapMakeCredentialGetAssertionFixtures.BuildFixedBytes(32, 0x86);
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-mc",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-mc", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         using CtapPlatformPinSession mcSession = await CtapPinCryptoFixtures.EstablishSessionAsync(
@@ -317,7 +309,7 @@ internal sealed class CtapAuthenticatorHmacSecretCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-lifecycle",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("capstone-lifecycle", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken).ConfigureAwait(false);
 
         CtapMakeCredentialRequest mcRequest = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(

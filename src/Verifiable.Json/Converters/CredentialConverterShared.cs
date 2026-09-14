@@ -1,5 +1,4 @@
-using System;
-using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Verifiable.Core.Model.DataIntegrity;
 
@@ -14,8 +13,13 @@ namespace Verifiable.Json.Converters;
 /// </summary>
 internal static class CredentialConverterShared
 {
-    //Deserializes a member value through the options' registered converters and source-gen
-    //metadata. Returns the type default for a JSON null.
+    /// <summary>
+    /// Deserializes a member value through the options' registered converters and source-generated
+    /// metadata. Returns the type default for a JSON null.
+    /// </summary>
+    /// <typeparam name="T">The member's declared type.</typeparam>
+    /// <param name="element">The member's JSON element.</param>
+    /// <param name="options">The serializer options carrying the registered converters.</param>
     internal static T? Deserialize<T>(JsonElement element, JsonSerializerOptions options)
     {
         if(element.ValueKind == JsonValueKind.Null)
@@ -23,20 +27,36 @@ internal static class CredentialConverterShared
             return default;
         }
 
-        return (T?)JsonSerializer.Deserialize(element, options.GetTypeInfo(typeof(T)));
+        return element.Deserialize(options.GetTypeInfo<T>());
     }
 
 
-    //Serializes a member value through the options' registered converters and source-gen
-    //metadata. The writer must already be positioned after WritePropertyName.
+    /// <summary>
+    /// Serializes a member value through the options' registered converters and source-generated
+    /// metadata. The writer must already be positioned after <c>WritePropertyName</c>.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="memberType"/> is resolved at runtime because the member's declared type varies
+    /// by call site, so the generic <see cref="JsonSerializerOptions.GetTypeInfo"/> overload that
+    /// CA2263 prefers cannot apply here.
+    /// </remarks>
+    /// <param name="writer">The writer, positioned after the property name.</param>
+    /// <param name="memberType">The member's declared type.</param>
+    /// <param name="value">The member value.</param>
+    /// <param name="options">The serializer options carrying the registered converters.</param>
+    [SuppressMessage("Performance", "CA2263:Prefer generic overload when type is known", Justification = "memberType is a runtime Type parameter, not a compile-time type; no generic overload is possible.")]
     internal static void WriteMember(Utf8JsonWriter writer, Type memberType, object value, JsonSerializerOptions options)
     {
         JsonSerializer.Serialize(writer, value, options.GetTypeInfo(memberType));
     }
 
 
-    //Reads a "proof" member, which Data Integrity allows as either a single proof object or an
-    //array of proofs (a proof chain). Both forms normalize to an ordered list.
+    /// <summary>
+    /// Reads a <c>proof</c> member, which Data Integrity allows as either a single proof object or
+    /// an array of proofs (a proof chain). Both forms normalize to an ordered list.
+    /// </summary>
+    /// <param name="element">The member's JSON element.</param>
+    /// <param name="options">The serializer options carrying the registered converters.</param>
     internal static List<DataIntegrityProof>? ReadProofs(JsonElement element, JsonSerializerOptions options)
     {
         if(element.ValueKind == JsonValueKind.Array)
@@ -54,8 +74,11 @@ internal static class CredentialConverterShared
     }
 
 
-    //Reads a "type" member, normally a JSON array of strings but tolerant of a single string
-    //per JSON-LD. Primitive arrays are read manually, matching the convention in this assembly.
+    /// <summary>
+    /// Reads a <c>type</c> member, normally a JSON array of strings but tolerant of a single string
+    /// per JSON-LD. Primitive arrays are read manually, matching the convention in this assembly.
+    /// </summary>
+    /// <param name="element">The member's JSON element.</param>
     internal static List<string>? ReadStringList(JsonElement element)
     {
         if(element.ValueKind == JsonValueKind.String)
@@ -83,7 +106,12 @@ internal static class CredentialConverterShared
     }
 
 
-    //Writes a list of strings as a JSON array property.
+    /// <summary>
+    /// Writes a list of strings as a JSON array property.
+    /// </summary>
+    /// <param name="writer">The writer, positioned inside the parent object.</param>
+    /// <param name="propertyName">The property name.</param>
+    /// <param name="values">The strings to write.</param>
     internal static void WriteStringList(Utf8JsonWriter writer, string propertyName, List<string> values)
     {
         writer.WriteStartArray(propertyName);

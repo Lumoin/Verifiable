@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 
@@ -245,7 +244,7 @@ public readonly struct XAdESCommitmentTypeIndication: IEquatable<XAdESCommitment
             }
 
             hasCommitmentTypeQualifiers = true;
-            scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, qualifiersElementIndex, out child);
+            scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, qualifiersElementIndex, out _);
             if(scan == ElementScanResult.UnexpectedContent)
             {
                 error = new XAdESReadError(XAdESReadFailure.UnexpectedElementContent, 0);

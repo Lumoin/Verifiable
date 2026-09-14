@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 

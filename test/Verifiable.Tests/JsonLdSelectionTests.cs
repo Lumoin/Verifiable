@@ -36,7 +36,7 @@ internal class JsonLdSelectionTests
 
     //Canonicalization here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     /// <summary>
     /// Test credential with various property types for comprehensive testing.
@@ -152,7 +152,7 @@ internal class JsonLdSelectionTests
     {
         var pointer = Lumoin.Veritas.JsonPointer.JsonPointer.Parse("/nonExistentProperty");
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             JsonLdSelection.SelectFragment(TestCredentialJson, pointer),
             "Invalid pointer must throw ArgumentException.");
     }
@@ -241,7 +241,7 @@ internal class JsonLdSelectionTests
         bool result = JsonLdSelection.TryEvaluate(doc.RootElement, pointer, out var element);
 
         Assert.IsFalse(result, "Invalid pointer must return false.");
-        Assert.AreEqual(default(JsonElement), element, "Element must be default for invalid pointer.");
+        Assert.AreEqual(default, element, "Element must be default for invalid pointer.");
     }
 
 

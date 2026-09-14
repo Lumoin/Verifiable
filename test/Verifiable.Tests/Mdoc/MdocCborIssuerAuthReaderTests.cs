@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
@@ -59,7 +59,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         Exception? caught = null;
         try
         {
-            MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared);
+            _ = MdocCborIssuerAuthReader.Read(issuerAuthBytes, BaseMemoryPool.Shared);
         }
         catch(Exception ex)
         {
@@ -96,7 +96,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
         Exception? caught = null;
         try
         {
-            MdocCborIssuerAuthReader.Read(arbitrary, BaseMemoryPool.Shared);
+            _ = MdocCborIssuerAuthReader.Read(arbitrary, BaseMemoryPool.Shared);
         }
         catch(Exception ex)
         {
@@ -122,7 +122,7 @@ internal sealed class MdocCborIssuerAuthReaderTests
 
         using var metered = new MeteredHousePool();
 
-        Assert.ThrowsExactly<CborContentException>(() =>
+        _ = Assert.ThrowsExactly<CborContentException>(() =>
             MdocCborIssuerAuthReader.Read(issuerAuthBytes, metered.Pool));
 
         Assert.IsGreaterThan(0, metered.RentedCount, "metered.Pool must have been exercised, or the balance assertion below is vacuous.");

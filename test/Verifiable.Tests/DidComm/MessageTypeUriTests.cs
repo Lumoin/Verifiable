@@ -67,7 +67,7 @@ internal sealed class MessageTypeUriTests
     public void RejectsMissingVersionSegment()
     {
         Assert.IsFalse(MessageTypeUri.TryParse("https://didcomm.org/routing/forward", out _));
-        Assert.ThrowsExactly<FormatException>(() => MessageTypeUri.Parse("https://didcomm.org/routing/forward"));
+        _ = Assert.ThrowsExactly<FormatException>(() => MessageTypeUri.Parse("https://didcomm.org/routing/forward"));
     }
 
 
@@ -76,7 +76,7 @@ internal sealed class MessageTypeUriTests
     public void RejectsVersionNotStartingWithDigit()
     {
         Assert.IsFalse(MessageTypeUri.TryParse("https://didcomm.org/routing/v2.0/forward", out _));
-        Assert.ThrowsExactly<FormatException>(() => MessageTypeUri.Parse("https://didcomm.org/routing/v2.0/forward"));
+        _ = Assert.ThrowsExactly<FormatException>(() => MessageTypeUri.Parse("https://didcomm.org/routing/v2.0/forward"));
     }
 
 
@@ -85,7 +85,7 @@ internal sealed class MessageTypeUriTests
     public void RejectsTrailingSlash()
     {
         Assert.IsFalse(MessageTypeUri.TryParse("https://didcomm.org/routing/2.0/forward/", out _));
-        Assert.ThrowsExactly<FormatException>(() => MessageTypeUri.Parse("https://didcomm.org/routing/2.0/forward/"));
+        _ = Assert.ThrowsExactly<FormatException>(() => MessageTypeUri.Parse("https://didcomm.org/routing/2.0/forward/"));
     }
 
 

@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Verifiable.Cryptography;
@@ -67,7 +65,7 @@ public static class AcdcJson
             Frame frame = stack.Peek();
             if(!frame.TryGetNext(out string? name, out JsonElement value))
             {
-                stack.Pop();
+                _ = stack.Pop();
                 continue;
             }
 
@@ -134,7 +132,7 @@ public static class AcdcJson
                     writer.WriteEndArray();
                 }
 
-                stack.Pop();
+                _ = stack.Pop();
                 continue;
             }
 

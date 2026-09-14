@@ -1,12 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
@@ -148,10 +143,10 @@ internal sealed class CBAdESCounterSignatureVisibilityTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "Malformed counter-signature content must fail validation once the caller opts into decoding it.");
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var failure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var failure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, failure.Violations);
-        Assert.IsInstanceOfType<CBAdESCounterSignatureMalformedViolation>(failure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCounterSignatureMalformedViolation>(failure.Violations[0]);
     }
 
 
@@ -249,10 +244,10 @@ internal sealed class CBAdESCounterSignatureVisibilityTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "A genuine counter-signature resolved against the WRONG public key must fail validation.");
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var failure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var failure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, failure.Violations);
-        Assert.IsInstanceOfType<CBAdESCounterSignatureVerificationFailedViolation>(failure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCounterSignatureVerificationFailedViolation>(failure.Violations[0]);
     }
 
 
@@ -294,10 +289,10 @@ internal sealed class CBAdESCounterSignatureVisibilityTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "sigD on a counter signature's own protected header must fail validation (CB-5.2.8-09).");
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var failure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var failure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, failure.Violations);
-        Assert.IsInstanceOfType<CBAdESCounterSignatureDetachedObjectsViolation>(failure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCounterSignatureDetachedObjectsViolation>(failure.Violations[0]);
     }
 
 
@@ -347,11 +342,11 @@ internal sealed class CBAdESCounterSignatureVisibilityTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "The second (wrong-key) countersignature in the array arm must fail validation.");
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var failure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var failure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, failure.Violations,
             "Exactly one of the two countersignatures must fail -- proving BOTH were processed, not just the first (which alone would report zero) nor neither.");
-        Assert.IsInstanceOfType<CBAdESCounterSignatureVerificationFailedViolation>(failure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCounterSignatureVerificationFailedViolation>(failure.Violations[0]);
     }
 
 

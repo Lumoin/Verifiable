@@ -111,9 +111,9 @@ internal sealed class VerifiableCredentialConverterTests
             }
             """;
 
-        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, Options)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, Options);
 
-        Assert.IsInstanceOfType<DataIntegritySecuredCredential>(credential);
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredCredential>(credential);
         var secured = (DataIntegritySecuredCredential)credential;
         Assert.IsNotNull(secured.Proof);
         Assert.HasCount(1, secured.Proof);
@@ -146,7 +146,7 @@ internal sealed class VerifiableCredentialConverterTests
 
         var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, Options)!;
 
-        Assert.IsInstanceOfType<DataIntegritySecuredCredential>(credential);
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredCredential>(credential);
         Assert.HasCount(1, ((DataIntegritySecuredCredential)credential).Proof!);
     }
 
@@ -205,7 +205,7 @@ internal sealed class VerifiableCredentialConverterTests
     public void CredentialExtensionDataSurvivesUnderCombinedResolver()
     {
         var options = new JsonSerializerOptions();
-        options.ApplyVerifiableDefaults();
+        _ = options.ApplyVerifiableDefaults();
         options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
             VerifiableJsonContext.Default,
             VerifiableCredentialConverterTestsJsonContext.Default);
@@ -221,7 +221,7 @@ internal sealed class VerifiableCredentialConverterTests
             }
             """;
 
-        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, options)!;
+        var credential = JsonSerializerExtensions.Deserialize<VerifiableCredential>(json, options);
         string reserialized = JsonSerializerExtensions.Serialize(credential, options);
 
         using var document = JsonDocument.Parse(reserialized);

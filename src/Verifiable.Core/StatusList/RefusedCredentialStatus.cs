@@ -27,6 +27,11 @@ public sealed record RefusedCredentialStatus
     {
         CredentialStatusDisposition.Revoked => "revoked",
         CredentialStatusDisposition.Suspended => "suspended",
+        CredentialStatusDisposition.ApplicationSpecific => "application-specific",
+
+        //Disposition is computed above from the declared enum's members, with
+        //ApplicationSpecific already its own catch-all, so no other value ever reaches
+        //this property; it shares ApplicationSpecific's word rather than throwing.
         _ => "application-specific"
     };
 }

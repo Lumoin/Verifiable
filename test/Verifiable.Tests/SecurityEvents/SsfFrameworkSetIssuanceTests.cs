@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestDataProviders;
@@ -143,6 +139,6 @@ internal sealed class SsfFrameworkSetIssuanceTests
         await SecurityEventTokenReception.ReceiveAsync(
             compact, publicKey, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-            TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
+            TestSetup.Base64UrlDecoder, NeverSeen, [], Pool,
             expectedVerificationState, TestContext.CancellationToken).ConfigureAwait(false);
 }

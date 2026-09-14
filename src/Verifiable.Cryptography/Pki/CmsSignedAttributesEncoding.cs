@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
@@ -172,7 +170,7 @@ public sealed class CmsSignedAttributesEncoding: IDisposable
             throw new CryptographicException("A SignerInfo signedAttrs field is a [0] IMPLICIT constructed set (RFC 5652 §5.3), so its first octet is 0xA0.");
         }
 
-        AsnDecoder.ReadEncodedValue(embeddedSignedAttributes, AsnEncodingRules.DER, out _, out _, out int bytesConsumed);
+        _ = AsnDecoder.ReadEncodedValue(embeddedSignedAttributes, AsnEncodingRules.DER, out _, out _, out int bytesConsumed);
         if(bytesConsumed != embeddedSignedAttributes.Length)
         {
             throw new AsnContentException("A SignerInfo signedAttrs field is exactly one DER-encoded value, with no trailing octets (RFC 5652 §5.3).");

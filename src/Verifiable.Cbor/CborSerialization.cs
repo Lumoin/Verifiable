@@ -1,10 +1,7 @@
-using System;
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
-using System.Linq;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 
@@ -68,7 +65,7 @@ public static class CoseSerialization
     {
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
 
         //Protected header (already serialized).
@@ -144,7 +141,7 @@ public static class CoseSerialization
         int? mapLength = reader.ReadStartMap();
         if(mapLength > 0)
         {
-            unprotectedHeader = new Dictionary<int, object>();
+            unprotectedHeader = [];
             for(int i = 0; i < mapLength; i++)
             {
                 int key = reader.ReadInt32();
@@ -314,7 +311,7 @@ public static class CoseSerialization
     {
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
+        writer.WriteTag(new CborTag(CoseTags.Sign));
         writer.WriteStartArray(4);
 
         //Body-layer protected header (already serialized).
@@ -526,7 +523,7 @@ public static class CoseSerialization
             Dictionary<int, object>? header = null;
             if(mapLength.Value > 0)
             {
-                header = new Dictionary<int, object>();
+                header = [];
                 for(int i = 0; i < mapLength.Value; i++)
                 {
                     int key = reader.ReadInt32();
@@ -784,7 +781,7 @@ public static class CoseSerialization
             Dictionary<int, object>? header = null;
             if(mapLength.Value > 0)
             {
-                header = new Dictionary<int, object>();
+                header = [];
                 for(int i = 0; i < mapLength.Value; i++)
                 {
                     int key = mapReader.ReadInt32();
@@ -870,7 +867,7 @@ public static class CoseSerialization
         var probe = new CborReader(valueBytes, CborOptions.RfcCanonical);
         if(probe.PeekState() != CborReaderState.Tag)
         {
-            probe.ReadStartArray();
+            _ = probe.ReadStartArray();
             if(probe.PeekState() == CborReaderState.StartArray)
             {
                 return ReadCounterSignatureV2Sequence(valueBytes, pool);

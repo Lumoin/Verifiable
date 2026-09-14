@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Did;
 
@@ -53,7 +51,7 @@ public static class DidDocumentExtensions
             }
 
             //Normalize the candidate to compare against id fragments without the leading '#'.
-            string fragment = serviceIdOrType.StartsWith('#')
+            string fragment = serviceIdOrType.StartsWith('#', StringComparison.Ordinal)
                 ? serviceIdOrType[1..]
                 : serviceIdOrType;
 
@@ -152,7 +150,7 @@ public static class DidDocumentExtensions
 
             //Append relative reference per DID Core 1.1 §7.2: avoid double slash.
             string baseUrl = service.ServiceEndpoint.TrimEnd('/');
-            string relative = relativeRef.StartsWith('/') ? relativeRef : $"/{relativeRef}";
+            string relative = relativeRef.StartsWith('/', StringComparison.Ordinal) ? relativeRef : $"/{relativeRef}";
 
             return $"{baseUrl}{relative}";
         }

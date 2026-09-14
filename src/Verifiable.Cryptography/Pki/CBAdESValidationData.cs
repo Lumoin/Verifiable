@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -162,7 +160,7 @@ public abstract record CBAdESX509OrOtherCertificate
 /// per clause 5.4.2 (CB-5.4.2-03).
 /// </param>
 [DebuggerDisplay("CBAdESX509Certificate({Certificate.Val.Length} bytes)")]
-public sealed record CBAdESX509Certificate(AdESPkiObject Certificate) : CBAdESX509OrOtherCertificate;
+public sealed record CBAdESX509Certificate(AdESPkiObject Certificate): CBAdESX509OrOtherCertificate;
 
 
 /// <summary>
@@ -176,7 +174,7 @@ public sealed record CBAdESX509Certificate(AdESPkiObject Certificate) : CBAdESX5
 /// fully-specified requirement.
 /// </param>
 [DebuggerDisplay("CBAdESOtherCertificate({Certificate.Val.Length} bytes)")]
-public sealed record CBAdESOtherCertificate(AdESPkiObject Certificate) : CBAdESX509OrOtherCertificate;
+public sealed record CBAdESOtherCertificate(AdESPkiObject Certificate): CBAdESX509OrOtherCertificate;
 
 
 /// <summary>

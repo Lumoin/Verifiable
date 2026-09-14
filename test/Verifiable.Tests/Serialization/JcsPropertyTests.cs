@@ -327,7 +327,7 @@ internal sealed class JcsPropertyTests
                 JcsPropertyTestsJsonContext.Default)
         };
 
-        var dictTypeInfo = (JsonTypeInfo<Dictionary<string, object?>>)options.GetTypeInfo(typeof(Dictionary<string, object?>));
+        var dictTypeInfo = options.GetTypeInfo<Dictionary<string, object?>>();
 
         JsonObjectGen(2).Sample(json =>
         {

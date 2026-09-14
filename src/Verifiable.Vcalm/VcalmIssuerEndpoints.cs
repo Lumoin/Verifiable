@@ -1,13 +1,9 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Validation;
 using Verifiable.JCose;
 

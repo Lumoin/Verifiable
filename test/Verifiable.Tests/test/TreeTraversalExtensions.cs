@@ -26,9 +26,9 @@ namespace Verifiable.Tests.test
             stack.Push(new TreeTraversalNode<TNodeType>(root, 0));
             while(stack.Count != 0)
             {
-                var current = stack.Pop();        
+                var current = stack.Pop();
                 yield return current;
-                
+
                 var children = await descendantsSelector(current.Node).ConfigureAwait(false);
                 foreach(var child in children.Reverse())
                 {
@@ -48,7 +48,7 @@ namespace Verifiable.Tests.test
     internal static class TreeNodeFormatters
     {
         public static string SimpleNodeFormatter<TNodeType>(TreeTraversalNode<TNodeType> node)
-        {            
+        {
             var indent = new string(' ', node.Depth * 4);
             return $"{indent}{node.Node?.ToString() ?? "null"}";
         }
@@ -63,7 +63,7 @@ namespace Verifiable.Tests.test
 
 
         public static async Task FileOutputSinkAsync(string formattedData)
-        {         
+        {
             string path = "output.txt";
             await File.AppendAllTextAsync(path, formattedData + Environment.NewLine).ConfigureAwait(false);
         }

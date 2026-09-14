@@ -1,10 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -67,7 +67,7 @@ internal sealed class Fido2RegistrationVerifierFailClosedTests
             authenticatorDataOverride: authenticatorData,
             expectedRpIdHash: rpIdHash);
 
-        AttestationVerifyDelegate throwingVerify = static (_, _) => throw new InvalidOperationException("Simulated unexpected attestation verifier failure.");
+        static ValueTask<AttestationResult> throwingVerify(AttestationVerificationRequest _1, CancellationToken _2) => throw new InvalidOperationException("Simulated unexpected attestation verifier failure.");
         SelectAttestationVerifierDelegate selectVerifier = Fido2AttestationSelectors.FromFormats(
             (WellKnownWebAuthnAttestationFormats.Packed, throwingVerify));
 

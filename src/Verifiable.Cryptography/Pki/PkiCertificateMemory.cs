@@ -2,7 +2,6 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Cryptography.Pki;
 

@@ -1,7 +1,5 @@
-using System;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -72,7 +70,7 @@ internal sealed class DataGroup3And4Tests
     {
         byte[] notAFingerRecord = [0x49, 0x49, 0x52, 0x00, 0xAA];
 
-        Assert.ThrowsExactly<InvalidOperationException>(
+        _ = Assert.ThrowsExactly<InvalidOperationException>(
             () => { using ElementaryFile _ = DataGroup3.Write(notAFingerRecord, BaseMemoryPool.Shared); },
             "A DG3 record must begin with the ISO/IEC 19794-4 format identifier.");
     }
@@ -83,7 +81,7 @@ internal sealed class DataGroup3And4Tests
     {
         using ElementaryFile dataGroup4 = DataGroup4.Write(IrisRecord, BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<InvalidOperationException>(
+        _ = Assert.ThrowsExactly<InvalidOperationException>(
             () => { using DataGroup3 _ = DataGroup3.Parse(dataGroup4.AsReadOnlySpan(), BaseMemoryPool.Shared); },
             "DG3 parse must reject a DG4-tagged file at the template tag.");
     }

@@ -1,16 +1,13 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -105,7 +102,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.TxCode] = "493536"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -204,7 +201,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             {
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode, response.Body);
@@ -234,7 +231,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,
@@ -263,7 +260,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -292,7 +289,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
 
         //The deployment opts in to anonymous access — the §12.3 advertisement matches what the
         //seam will accept. The flag is read off the per-request context the policy stage mutates.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetPreAuthorizedGrantAnonymousAccessSupported(true);
 
         ServerHttpResponse response = await host.DispatchAtEndpointAsync(
@@ -338,7 +335,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
             WellKnownEndpointNames.MetadataDiscovery,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -372,7 +369,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
         {
             ShouldListenTo = static source =>
                 string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            Sample = static (ref _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => captured.Add(activity)
         };
         ActivitySource.AddActivityListener(listener);
@@ -400,7 +397,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.TxCode] = "493536"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -468,7 +465,7 @@ internal sealed class Oid4VciPreAuthorizedCodeGrantTests
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA",
                 [OAuthRequestParameterNames.TxCode] = "493536"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);

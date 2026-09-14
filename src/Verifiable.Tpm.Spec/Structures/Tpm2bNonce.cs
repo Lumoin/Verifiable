@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Cryptography;
@@ -102,7 +101,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
 
         //Copy nonce bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(size);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, size));
+        sourceBytes.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bNonce(storage);
     }
@@ -186,7 +185,7 @@ public sealed class Tpm2bNonce: SensitiveMemory, ITpmWireType
         }
 
         IMemoryOwner<byte> storage = pool.Rent(length);
-        rng(storage.Memory.Span.Slice(0, length));
+        rng(storage.Memory.Span[..length]);
         return new Tpm2bNonce(storage);
     }
 

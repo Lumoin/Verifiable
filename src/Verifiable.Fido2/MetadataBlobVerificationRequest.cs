@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.Cryptography.Pki;

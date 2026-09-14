@@ -497,7 +497,7 @@ public readonly struct CryptoAlgorithm: IEquatable<CryptoAlgorithm>
     public static CryptoAlgorithm Blake3 { get; } = new CryptoAlgorithm(33);
 
 
-    private static List<CryptoAlgorithm> RegisteredAlgorithms { get; } = new([Rsa2048]);
+    private static List<CryptoAlgorithm> RegisteredAlgorithms { get; } = [Rsa2048];
 
 
     /// <summary>

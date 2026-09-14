@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -146,7 +144,7 @@ public static class SdJwtPathExtraction
         var interiorClaims = new Dictionary<CredentialPath, object?>();
         var seenDigests = new HashSet<string>(StringComparer.Ordinal);
 
-        WalkAndClean(payloadGraph, CredentialPath.Root, digestToDisclosure, disclosurePaths, issuerSignedClaims, interiorClaims, seenDigests, depth: 0);
+        _ = WalkAndClean(payloadGraph, CredentialPath.Root, digestToDisclosure, disclosurePaths, issuerSignedClaims, interiorClaims, seenDigests, depth: 0);
 
         return new SdJwtWalkResult(disclosurePaths, issuerSignedClaims, interiorClaims);
     }
@@ -201,9 +199,9 @@ public static class SdJwtPathExtraction
             var localNames = new HashSet<string>(StringComparer.Ordinal);
             foreach(string key in obj.Keys)
             {
-                if(key != SdConstants.SdClaimName && key != SdConstants.SdAlgorithmClaimName)
+                if(key is not SdConstants.SdClaimName and not SdConstants.SdAlgorithmClaimName)
                 {
-                    localNames.Add(key);
+                    _ = localNames.Add(key);
                 }
             }
 
@@ -213,7 +211,7 @@ public static class SdJwtPathExtraction
             {
                 foreach(object? digestObj in sdArray)
                 {
-                    string digest = (string)digestObj!;
+                    string digest = (string)digestObj;
 
                     RecordDigest(digest, seenDigests);
 
@@ -250,14 +248,14 @@ public static class SdJwtPathExtraction
 
                     //Step 3.c.ii.5: recursively process the Disclosure's own value. Everything it
                     //carries is interior to it — reading any of it costs this Disclosure's release.
-                    WalkAndClean(disclosure.ClaimValue, disclosurePath, digestToDisclosure, disclosurePaths, interiorClaims, interiorClaims, seenDigests, depth + 1);
+                    _ = WalkAndClean(disclosure.ClaimValue, disclosurePath, digestToDisclosure, disclosurePaths, interiorClaims, interiorClaims, seenDigests, depth + 1);
                 }
             }
 
             var cleaned = new Dictionary<string, object?>(StringComparer.Ordinal);
             foreach(KeyValuePair<string, object> property in obj)
             {
-                if(property.Key == SdConstants.SdClaimName || property.Key == SdConstants.SdAlgorithmClaimName)
+                if(property.Key is SdConstants.SdClaimName or SdConstants.SdAlgorithmClaimName)
                 {
                     continue;
                 }
@@ -302,7 +300,7 @@ public static class SdJwtPathExtraction
 
                         //Step 3.c.iii.3: recursively process the Disclosure's own value, whose
                         //nodes are interior to it.
-                        WalkAndClean(disclosure.ClaimValue, elementPath, digestToDisclosure, disclosurePaths, interiorClaims, interiorClaims, seenDigests, depth + 1);
+                        _ = WalkAndClean(disclosure.ClaimValue, elementPath, digestToDisclosure, disclosurePaths, interiorClaims, interiorClaims, seenDigests, depth + 1);
                     }
 
                     index++;
@@ -439,7 +437,7 @@ public static class SdJwtPathExtraction
 
         foreach(CredentialPath path in disclosurePaths.Values)
         {
-            allPathsWithDisclosures.Add(path);
+            _ = allPathsWithDisclosures.Add(path);
         }
 
         return new PathLattice(allPathsWithDisclosures, mandatoryPaths);
@@ -514,13 +512,13 @@ public static class SdJwtPathExtraction
         CredentialPath currentPath,
         HashSet<CredentialPath> paths)
     {
-        paths.Add(currentPath);
+        _ = paths.Add(currentPath);
 
         if(element.ValueKind == JsonValueKind.Object)
         {
             foreach(JsonProperty prop in element.EnumerateObject())
             {
-                if(prop.Name == SdConstants.SdClaimName || prop.Name == SdConstants.SdAlgorithmClaimName)
+                if(prop.Name is SdConstants.SdClaimName or SdConstants.SdAlgorithmClaimName)
                 {
                     continue;
                 }
@@ -538,7 +536,7 @@ public static class SdJwtPathExtraction
                 if(item.ValueKind == JsonValueKind.Object &&
                     item.TryGetProperty(SdConstants.ArrayDigestKey, out _))
                 {
-                    paths.Add(currentPath.Append(index));
+                    _ = paths.Add(currentPath.Append(index));
                 }
                 else
                 {
@@ -557,13 +555,13 @@ public static class SdJwtPathExtraction
         CredentialPath currentPath,
         HashSet<CredentialPath> mandatory)
     {
-        mandatory.Add(currentPath);
+        _ = mandatory.Add(currentPath);
 
         if(element.ValueKind == JsonValueKind.Object)
         {
             foreach(JsonProperty prop in element.EnumerateObject())
             {
-                if(prop.Name == SdConstants.SdClaimName || prop.Name == SdConstants.SdAlgorithmClaimName)
+                if(prop.Name is SdConstants.SdClaimName or SdConstants.SdAlgorithmClaimName)
                 {
                     continue;
                 }

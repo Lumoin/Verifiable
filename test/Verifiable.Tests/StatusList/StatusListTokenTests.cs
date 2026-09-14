@@ -1,7 +1,4 @@
-using System.Buffers;
-using Lumoin.Base;
 using Verifiable.Core.StatusList;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -16,19 +13,19 @@ internal sealed class StatusListTokenTests
     /// Gets the capacity used for small status lists in test scenarios.
     /// </summary>
     private int SmallListCapacity { get; } = StatusListTestConstants.SmallListCapacity;
-    
+
     /// <summary>
     /// Gets the example subject value used for token generation in test scenarios.
     /// </summary>
     /// <remarks>This property is intended for use in testing contexts where a consistent token subject is
     /// required. The value is derived from test constants and should not be used in production code.</remarks>
     private string ExampleTokenSubject { get; } = StatusListTestConstants.ExampleTokenSubject;
-    
+
     /// <summary>
     /// Gets the base point in time used as a reference for time calculations or comparisons.
     /// </summary>
     private DateTimeOffset BaseTime { get; } = StatusListTestConstants.BaseTime;
-    
+
     /// <summary>
     /// Gets a shared memory pool for efficient allocation and reuse of byte buffers.
     /// </summary>
@@ -74,7 +71,7 @@ internal sealed class StatusListTokenTests
     {
         using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             new StatusListToken(null!, BaseTime, list));
     }
 
@@ -84,7 +81,7 @@ internal sealed class StatusListTokenTests
     {
         using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new StatusListToken("   ", BaseTime, list));
     }
 
@@ -92,7 +89,7 @@ internal sealed class StatusListTokenTests
     [TestMethod]
     public void ConstructorThrowsForNullStatusList()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             new StatusListToken(ExampleTokenSubject, BaseTime, null!));
     }
 
@@ -112,7 +109,7 @@ internal sealed class StatusListTokenTests
     {
         using var list = StatusListType.Create(SmallListCapacity, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             new StatusListToken(ExampleTokenSubject, BaseTime, list) { TimeToLive = timeToLive });
     }
 }

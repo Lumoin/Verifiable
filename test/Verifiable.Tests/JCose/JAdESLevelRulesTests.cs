@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 
 namespace Verifiable.Tests.JCose;
@@ -92,7 +88,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESSignatureTimestampTokenCountViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(2, violation!.TokenCount);
+        Assert.AreEqual(2, violation.TokenCount);
     }
 
 
@@ -137,7 +133,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESTimestampTokenNotBaselineViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESTimestampContainerKind.SignatureTimestamp, violation!.Kind);
+        Assert.AreEqual(JAdESTimestampContainerKind.SignatureTimestamp, violation.Kind);
     }
 
 
@@ -159,7 +155,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESTimestampTokenNotBaselineViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESTimestampContainerKind.PayloadTimestamp, violation!.Kind);
+        Assert.AreEqual(JAdESTimestampContainerKind.PayloadTimestamp, violation.Kind);
     }
 
 
@@ -215,7 +211,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESRefsFamilyForbiddenViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESRefsFamilyKind.CertificateReferences, violation!.Kind);
+        Assert.AreEqual(JAdESRefsFamilyKind.CertificateReferences, violation.Kind);
         Assert.AreEqual("JA-6.3-29", violation.RequirementId);
     }
 
@@ -249,7 +245,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESRefsFamilyForbiddenViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESRefsFamilyKind.AttributeRevocationReferences, violation!.Kind);
+        Assert.AreEqual(JAdESRefsFamilyKind.AttributeRevocationReferences, violation.Kind);
     }
 
 
@@ -272,7 +268,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESReferencesTimestampGenerationGateViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESReferencesTimestampGenerationKind.SignatureAndReferences, violation!.Kind);
+        Assert.AreEqual(JAdESReferencesTimestampGenerationKind.SignatureAndReferences, violation.Kind);
     }
 
 
@@ -373,7 +369,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESAttributeReferencesGateViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESAttributeReferencesKind.AttributeCertificateReferences, violation!.Kind);
+        Assert.AreEqual(JAdESAttributeReferencesKind.AttributeCertificateReferences, violation.Kind);
     }
 
 
@@ -540,7 +536,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESRefsFamilyMd5DigestAlgorithmViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESRefsFamilyDigestSurface.CertificateReferences, violation!.Surface);
+        Assert.AreEqual(JAdESRefsFamilyDigestSurface.CertificateReferences, violation.Surface);
     }
 
 
@@ -560,7 +556,7 @@ internal sealed class JAdESLevelRulesTests
 
         var violation = FindViolation<JAdESRefsFamilyMd5DigestAlgorithmViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESRefsFamilyDigestSurface.RevocationReferences, violation!.Surface);
+        Assert.AreEqual(JAdESRefsFamilyDigestSurface.RevocationReferences, violation.Surface);
     }
 
 
@@ -778,7 +774,7 @@ internal sealed class JAdESLevelRulesTests
         AdESSignerAttributes? signerAttributes = null;
         if(withAttributeCertificate)
         {
-            var certificate = new AdESX509AttributeCertificate(new AdESPkiObject { Val = new byte[] { 0x0A } });
+            var certificate = new AdESX509AttributeCertificate(new AdESPkiObject { Val = "\n"u8.ToArray() });
             signerAttributes = new AdESSignerAttributes(certified: [certificate]);
         }
         else if(withClaimedAttributeOnly)

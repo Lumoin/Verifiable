@@ -88,7 +88,7 @@ public sealed class AssertionMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="verificationReferenceId"/> is <c>null</c>.
     /// </exception>
-    public AssertionMethod(string verificationReferenceId): base(verificationReferenceId)
+    public AssertionMethod(string verificationReferenceId) : base(verificationReferenceId)
     {
     }
 
@@ -103,7 +103,7 @@ public sealed class AssertionMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="embeddedVerification"/> is <c>null</c>.
     /// </exception>
-    public AssertionMethod(VerificationMethod embeddedVerification): base(embeddedVerification)
+    public AssertionMethod(VerificationMethod embeddedVerification) : base(embeddedVerification)
     {
     }
 }

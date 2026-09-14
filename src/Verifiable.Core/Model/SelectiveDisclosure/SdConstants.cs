@@ -41,7 +41,7 @@ public static class SdConstants
     /// The separator character used in SD-JWT wire format.
     /// </summary>
     public const char JwtSeparator = '~';
-    
+
     /// <summary>
     /// The claim name for the nonce in key binding.
     /// </summary>
@@ -70,6 +70,6 @@ public static class SdConstants
     /// <returns><c>true</c> if the claim name is reserved; otherwise, <c>false</c>.</returns>
     public static bool IsReservedClaimName(string claimName)
     {
-        return claimName == SdClaimName || claimName == ArrayDigestKey;
+        return claimName is SdClaimName or ArrayDigestKey;
     }
 }

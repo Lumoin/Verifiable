@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.Did.Methods.WebPlus;
 
 namespace Verifiable.Tests.Resolver;
@@ -79,7 +78,7 @@ internal sealed class WebPlusDidResolverTests
     [DataRow("did:webplus:example.com:a%2Fb:" + RootSelfHash)]           //Segment carrying an encoded path separator.
     public void RejectsIpHostAndUnsafePathSegment(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve(did));
     }
 
 
@@ -87,7 +86,7 @@ internal sealed class WebPlusDidResolverTests
     [TestMethod]
     public void RejectsNonWebPlusIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve($"did:web:example.com:{RootSelfHash}"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve($"did:web:example.com:{RootSelfHash}"));
     }
 
 
@@ -95,7 +94,7 @@ internal sealed class WebPlusDidResolverTests
     [TestMethod]
     public void RejectsIdentifierWithoutRootSelfHash()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve("did:webplus:example.com"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve("did:webplus:example.com"));
     }
 
 
@@ -105,6 +104,6 @@ internal sealed class WebPlusDidResolverTests
     [DataRow("   ")]
     public void RejectsEmptyIdentifier(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebPlusDidResolver.Resolve(did));
     }
 }

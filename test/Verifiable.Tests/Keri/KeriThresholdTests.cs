@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Keri;
 
 namespace Verifiable.Tests.Keri;
@@ -103,8 +102,8 @@ internal sealed class KeriThresholdTests
     [TestMethod]
     public void RejectsDegenerateOrMalformedThreshold()
     {
-        Assert.ThrowsExactly<KeriException>(() => KeriThreshold.Parse("0"));
-        Assert.ThrowsExactly<KeriException>(() => KeriThreshold.Parse(new List<string> { "half" }));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriThreshold.Parse("0"));
+        _ = Assert.ThrowsExactly<KeriException>(() => KeriThreshold.Parse(new List<string> { "half" }));
     }
 
 
@@ -165,7 +164,7 @@ internal sealed class KeriThresholdTests
             everyPosition.Add(position);
         }
 
-        Assert.ThrowsExactly<KeriException>(
+        _ = Assert.ThrowsExactly<KeriException>(
             () => threshold.IsSatisfiedBy(everyPosition, keyCount: weights.Count),
             "A weighted clause whose accumulated denominator exceeds the bound must be rejected rather than summed at unbounded cost.");
     }

@@ -1,20 +1,15 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
@@ -51,7 +46,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //The protected-header serializer: the JWE layer hands a Dictionary<string, object> to this delegate
     //to produce the UTF-8 JSON bytes.
@@ -249,7 +244,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
         Assert.IsTrue(resolution.IsSuccessful, $"'{did}' MUST resolve.");
         Assert.IsNotNull(resolution.Document);
 
-        return resolution.Document!;
+        return resolution.Document;
     }
 
 
@@ -263,7 +258,7 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
         VerificationMethod method = methods[0];
         Assert.IsNotNull(method.Id);
 
-        string kid = method.Id!.StartsWith('#') ? did + method.Id : method.Id;
+        string kid = method.Id.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id;
 
         return (kid, method);
     }
@@ -287,19 +282,19 @@ internal sealed class DidCommPeerKeyAgreementE2ETests
     private static void AssertRecovered(DidCommMessage? recovered, string expectedFrom, IList<string> expectedTo)
     {
         Assert.IsNotNull(recovered);
-        Assert.AreEqual(MessageId, recovered!.Id);
+        Assert.AreEqual(MessageId, recovered.Id);
         Assert.AreEqual(MessageType, recovered.Type);
         Assert.AreEqual(expectedFrom, recovered.From);
 
         Assert.IsNotNull(recovered.To);
-        Assert.HasCount(expectedTo.Count, recovered.To!);
+        Assert.HasCount(expectedTo.Count, recovered.To);
         for(int i = 0; i < expectedTo.Count; ++i)
         {
-            Assert.AreEqual(expectedTo[i], recovered.To![i]);
+            Assert.AreEqual(expectedTo[i], recovered.To[i]);
         }
 
         Assert.IsNotNull(recovered.Body);
-        Assert.IsTrue(recovered.Body!.TryGetValue(BodyAttribute, out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(recovered.Body.TryGetValue(BodyAttribute, out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual(BodyValue, value as string);
     }
 }

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor;

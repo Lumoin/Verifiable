@@ -1,9 +1,6 @@
-using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.EventLog;
 
@@ -150,7 +147,7 @@ public static class TcgEventLogParser
             return TpmResult<TcgEventLog>.TransportError((uint)TcgEventLogError.InvalidFirstEvent);
         }
 
-        var firstEvent = firstEventResult.Value!;
+        var firstEvent = firstEventResult.Value;
 
         //Check if this is a crypto-agile log.
         bool isCryptoAgile = false;
@@ -158,20 +155,20 @@ public static class TcgEventLogParser
         uint platformClass = 0;
         (byte Major, byte Minor, byte Errata) specVersionNumber = (1, 0, 0);
         byte uintnSize = 4;
-        Dictionary<TpmAlgIdConstants, ushort> digestSizes = new();
+        Dictionary<TpmAlgIdConstants, ushort> digestSizes = [];
 
         if(firstEvent.EventType == TcgEventType.EV_NO_ACTION && firstEvent.EventData.Length > SpecIdSignatureSize)
         {
             var specIdResult = ParseSpecIdEvent(firstEvent.EventData);
             if(specIdResult.IsSuccess)
             {
-                var specId = specIdResult.Value!;
+                var specId = specIdResult.Value;
                 isCryptoAgile = specId.IsCryptoAgile;
                 specVersion = specId.Signature;
                 platformClass = specId.PlatformClass;
                 specVersionNumber = (specId.SpecVersionMajor, specId.SpecVersionMinor, specId.SpecErrata);
                 uintnSize = specId.UintnSize;
-                digestSizes = new Dictionary<TpmAlgIdConstants, ushort>(specId.DigestSizes);
+                digestSizes = new(specId.DigestSizes);
             }
         }
 
@@ -194,7 +191,7 @@ public static class TcgEventLogParser
                     break;
                 }
 
-                events.Add(CreateTcgEvent(eventIndex++, eventResult.Value!));
+                events.Add(CreateTcgEvent(eventIndex++, eventResult.Value));
             }
             else
             {
@@ -205,7 +202,7 @@ public static class TcgEventLogParser
                     break;
                 }
 
-                events.Add(CreateTcgEvent(eventIndex++, eventResult.Value!));
+                events.Add(CreateTcgEvent(eventIndex++, eventResult.Value));
             }
         }
 
@@ -537,7 +534,7 @@ public static class TcgEventLogParser
         foreach(byte b in eventData)
         {
             //Allow printable ASCII (0x20-0x7E) and null terminator.
-            if(b != 0 && (b < 0x20 || b > 0x7E))
+            if(b is not 0 and (< 0x20 or > 0x7E))
             {
                 return null;
             }
@@ -599,7 +596,7 @@ public static class TcgEventLogParser
         //Name starts at offset 32, each character is 2 bytes (UTF-16LE).
         const int nameOffset = 32;
         const int maxNameLength = 1000;
-        if(nameLength > 0 && nameLength < maxNameLength && nameOffset + (int)nameLength * 2 <= eventData.Length)
+        if(nameLength > 0 && nameLength < maxNameLength && nameOffset + ((int)nameLength * 2) <= eventData.Length)
         {
             string name = Encoding.Unicode.GetString(eventData, nameOffset, (int)nameLength * 2).TrimEnd('\0');
             return $"Variable: {name}";

@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Spec.Structures;
 
@@ -111,7 +109,7 @@ public sealed class Tpm2bSignatureHint: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, Length);
+            return Storage.Memory.Span[..Length];
         }
     }
 
@@ -168,7 +166,7 @@ public sealed class Tpm2bSignatureHint: IDisposable, ITpmWireType
 
         //Copy hint bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(size);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, size));
+        sourceBytes.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bSignatureHint(storage, size);
     }

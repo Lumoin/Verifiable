@@ -130,7 +130,7 @@ public static class JwsParsing
         UnverifiedJwtHeader? unprotectedHeader = null;
         if(jsonObject.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
         {
-            unprotectedHeader = new UnverifiedJwtHeader(headerDict);
+            unprotectedHeader = new(headerDict);
         }
 
         IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);
@@ -220,7 +220,7 @@ public static class JwsParsing
 
             if(sigDict.TryGetValue("header", out object? headerObj) && headerObj is Dictionary<string, object> headerDict)
             {
-                unprotectedHeader = new UnverifiedJwtHeader(headerDict);
+                unprotectedHeader = new(headerDict);
             }
 
             IMemoryOwner<byte> signatureOwner = base64UrlDecoder(signatureEncoded, pool);

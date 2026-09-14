@@ -1,5 +1,5 @@
-using System.Buffers;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -69,7 +69,7 @@ internal sealed class KeyAttestationVerifierTests
 
         Assert.IsTrue(result.IsValid, $"a genuine jwk attestation must verify; got {result.FailureReason}.");
         Assert.IsNotNull(result.Attestation);
-        Assert.IsNotNull(result.Attestation!.AttestedKeysJson);
+        Assert.IsNotNull(result.Attestation.AttestedKeysJson);
         Assert.AreEqual(AttestationNonce, result.Attestation.Nonce);
     }
 
@@ -209,7 +209,7 @@ internal sealed class KeyAttestationVerifierTests
             isAttestationSigningAlgAcceptable: static _ => false,
             resolveWalletProviderKey: null,
             x509Verification: null,
-            context: new ExchangeContext(),
+            context: [],
             TestSetup.Base64UrlDecoder,
             TimeProvider,
             Pool,
@@ -237,7 +237,7 @@ internal sealed class KeyAttestationVerifierTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(chain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(NowInstant);
 
@@ -284,7 +284,7 @@ internal sealed class KeyAttestationVerifierTests
         IReadOnlyList<PkiCertificateMemory> foreignAnchors = ParseAnchor(otherChain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(foreignAnchors);
             context.SetValidationTime(NowInstant);
 
@@ -326,8 +326,7 @@ internal sealed class KeyAttestationVerifierTests
         string attestation = await MintKidAttestationAsync(wpPrivate, Kid, NowInstant.AddHours(1), AttestationNonce)
             .ConfigureAwait(false);
 
-        KeyAttestationVerifier.ResolveWalletProviderKeyDelegate resolver =
-            (kid, algorithm, context, ct) => string.Equals(kid, Kid, StringComparison.Ordinal)
+        ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) => string.Equals(kid, Kid, StringComparison.Ordinal)
                 ? ValueTask.FromResult<PublicKeyMemory?>(CopyPublicKey(wpPublic))
                 : ValueTask.FromResult<PublicKeyMemory?>(null);
 
@@ -338,7 +337,7 @@ internal sealed class KeyAttestationVerifierTests
             isAttestationSigningAlgAcceptable: static _ => true,
             resolveWalletProviderKey: resolver,
             x509Verification: null,
-            context: new ExchangeContext(),
+            context: [],
             TestSetup.Base64UrlDecoder,
             TimeProvider,
             Pool,
@@ -364,8 +363,7 @@ internal sealed class KeyAttestationVerifierTests
             wpPrivate, "https://wallet-provider.example.com/keys#unknown", NowInstant.AddHours(1), AttestationNonce)
             .ConfigureAwait(false);
 
-        KeyAttestationVerifier.ResolveWalletProviderKeyDelegate resolver =
-            (kid, algorithm, context, ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
+        static ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
 
         KeyAttestationVerificationResult result = await KeyAttestationVerifier.VerifyAsync(
             attestation,
@@ -374,7 +372,7 @@ internal sealed class KeyAttestationVerifierTests
             isAttestationSigningAlgAcceptable: static _ => true,
             resolveWalletProviderKey: resolver,
             x509Verification: null,
-            context: new ExchangeContext(),
+            context: [],
             TestSetup.Base64UrlDecoder,
             TimeProvider,
             Pool,
@@ -478,7 +476,7 @@ internal sealed class KeyAttestationVerifierTests
             payload[WellKnownJwtClaimNames.Nonce] = nonce;
         }
 
-        UnsignedJwt unsigned = new(new JwtHeader(header), new JwtPayload(payload));
+        UnsignedJwt unsigned = new(new(header), new(payload));
         using JwsMessage jws = await unsigned.SignAsync(
             signingKey, HeaderSerializer, PayloadSerializer,
             TestSetup.Base64UrlEncoder, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -497,7 +495,7 @@ internal sealed class KeyAttestationVerifierTests
             isAttestationSigningAlgAcceptable: static _ => true,
             resolveWalletProviderKey: null,
             x509Verification: null,
-            context: new ExchangeContext(),
+            context: [],
             TestSetup.Base64UrlDecoder,
             TimeProvider,
             Pool,

@@ -67,7 +67,7 @@ public static class JweAgreementInfo
 
         int byteCount = Encoding.UTF8.GetByteCount(senderKeyId);
         using IMemoryOwner<byte> owner = pool.Rent(byteCount);
-        Encoding.UTF8.GetBytes(senderKeyId, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(senderKeyId, owner.Memory.Span);
 
         return base64UrlEncoder(owner.Memory.Span[..byteCount]);
     }
@@ -165,7 +165,7 @@ public static class JweAgreementInfo
 
         int byteCount = Encoding.UTF8.GetByteCount(joined);
         using IMemoryOwner<byte> inputOwner = pool.Rent(byteCount);
-        Encoding.UTF8.GetBytes(joined, inputOwner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(joined, inputOwner.Memory.Span);
 
         return CryptographicKeyEvents.ComputeDigest(
             inputOwner.Memory.Span[..byteCount],

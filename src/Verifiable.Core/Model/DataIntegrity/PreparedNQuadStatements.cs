@@ -1,9 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.DataIntegrity;
@@ -127,7 +121,7 @@ public static class NQuadStatementPreparation
         var mandatoryRelabeled = new HashSet<string>(StringComparer.Ordinal);
         foreach(int idx in mandatoryIndexes)
         {
-            mandatoryRelabeled.Add(relabeledStatements[idx]);
+            _ = mandatoryRelabeled.Add(relabeledStatements[idx]);
         }
 
         //Compute mandatory and non-mandatory indexes in the sorted list.
@@ -138,11 +132,11 @@ public static class NQuadStatementPreparation
         {
             if(mandatoryRelabeled.Contains(sortedStatements[i]))
             {
-                sortedMandatoryIndexes.Add(i);
+                _ = sortedMandatoryIndexes.Add(i);
             }
             else
             {
-                sortedNonMandatoryIndexes.Add(i);
+                _ = sortedNonMandatoryIndexes.Add(i);
             }
         }
 
@@ -195,7 +189,7 @@ public static class NQuadStatementPreparation
         var mandatoryRelabeled = new HashSet<string>(StringComparer.Ordinal);
         foreach(int idx in mandatoryIndexes)
         {
-            mandatoryRelabeled.Add(relabeledStatements[idx]);
+            _ = mandatoryRelabeled.Add(relabeledStatements[idx]);
         }
 
         //Compute mandatory and non-mandatory indexes in the sorted list.
@@ -206,11 +200,11 @@ public static class NQuadStatementPreparation
         {
             if(mandatoryRelabeled.Contains(sortedStatements[i]))
             {
-                sortedMandatoryIndexes.Add(i);
+                _ = sortedMandatoryIndexes.Add(i);
             }
             else
             {
-                sortedNonMandatoryIndexes.Add(i);
+                _ = sortedNonMandatoryIndexes.Add(i);
             }
         }
 

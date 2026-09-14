@@ -1,23 +1,21 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
+using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Core.Assessment;
-using Verifiable.Core.StatusList;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
+using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
-using Verifiable.Cryptography.Pki;
+using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Oid4Vp;
@@ -26,15 +24,11 @@ using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
+using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.Federation;
 using Verifiable.Tests.TestDataProviders;
-using System.Collections.Immutable;
-using Verifiable.Foundation.Automata;
-using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.OAuth;
@@ -176,7 +170,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierParReceivedState>(
+        _ = Assert.IsInstanceOfType<VerifierParReceivedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must be in VerifierParReceived after PAR.");
 
@@ -184,11 +178,11 @@ internal sealed class Oid4VpFlowIntegrationTests
         //JAR, the verifier PDA advances to VerifierJarServed.
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierJarServedState>(
+        _ = Assert.IsInstanceOfType<VerifierJarServedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must be in VerifierJarServed after the HTTP JAR fetch.");
 
@@ -207,7 +201,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the HTTP response POST.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -263,7 +257,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -290,7 +284,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             enc,
             "Wallet must have chosen A256GCM as the enc algorithm.");
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the HTTP response POST.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -366,7 +360,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the §5.10 POST round-trip.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -588,7 +582,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet must complete the presentation after decrypting the A256GCM-wrapped JAR.");
     }
 
@@ -633,14 +627,14 @@ internal sealed class Oid4VpFlowIntegrationTests
         //tag-mismatch exception during the wallet's decrypt path.
         string tamperedJar = TamperJweSegment(compactJar, segmentIndex: 3);
 
-        await Assert.ThrowsExactlyAsync<System.Security.Cryptography.AuthenticationTagMismatchException>(
+        _ = await Assert.ThrowsExactlyAsync<System.Security.Cryptography.AuthenticationTagMismatchException>(
             async () => await walletClient.PresentJarAsync(
                 new PresentJarOptions
                 {
                     CompactJar = tamperedJar,
                     RequestUri = requestUri,
                     ExpectedVerifierClientId = VerifierClientId,
-                        WalletExchangePrivateKey = walletEncPrivate,
+                    WalletExchangePrivateKey = walletEncPrivate,
                     FlowId = $"wallet-tamper-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false))
@@ -693,14 +687,14 @@ internal sealed class Oid4VpFlowIntegrationTests
             jarEncryptionEnc: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<System.Security.Cryptography.AuthenticationTagMismatchException>(
+        _ = await Assert.ThrowsExactlyAsync<System.Security.Cryptography.AuthenticationTagMismatchException>(
             async () => await walletClient.PresentJarAsync(
                 new PresentJarOptions
                 {
                     CompactJar = compactJar,
                     RequestUri = requestUri,
                     ExpectedVerifierClientId = VerifierClientId,
-                        WalletExchangePrivateKey = mismatchedPrivate,
+                    WalletExchangePrivateKey = mismatchedPrivate,
                     FlowId = $"wallet-wrongkey-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false))
@@ -753,7 +747,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                     CompactJar = compactJar,
                     RequestUri = requestUri,
                     ExpectedVerifierClientId = VerifierClientId,
-                        WalletExchangePrivateKey = null,
+                    WalletExchangePrivateKey = null,
                     FlowId = $"wallet-nokey-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false))
@@ -792,7 +786,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage response = await app.Host("default").SharedHttpClient!
             .PostAsync(requestUri, body, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        _ = response.EnsureSuccessStatusCode();
         return await response.Content
             .ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
@@ -857,7 +851,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             redirectUriRegistration;
 
         TransactionNonce nonce = new("nonce-redirect-uri-01");
-        (Uri _, string parHandle) = await app.HandleParAsync(verifierKeys,
+        (_, string parHandle) = await app.HandleParAsync(verifierKeys,
             nonce,
             CreatePreparedQuery(),
             transactionData: null,
@@ -896,7 +890,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the inline-parameter response POST.");
 
         PresentationVerifiedState verified =
@@ -966,7 +960,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //returns an unsigned compact JAR per §5.9.3.
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -995,7 +989,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the unsigned-JAR response POST.");
 
         PresentationVerifiedState verified =
@@ -1061,7 +1055,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                     CompactJar = null,
                     RequestUri = responseUri,
                     ExpectedVerifierClientId = mismatchedClientId,
-                        InlineAuthorizationParameters = inlineParameters,
+                    InlineAuthorizationParameters = inlineParameters,
                     FlowId = $"wallet-redirect-mismatch-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false))
@@ -1125,7 +1119,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                     CompactJar = null,
                     RequestUri = responseUri,
                     ExpectedVerifierClientId = verifierAttestationClientId,
-                        InlineAuthorizationParameters = inlineParameters,
+                    InlineAuthorizationParameters = inlineParameters,
                     FlowId = $"wallet-non-redirect-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false))
@@ -1199,7 +1193,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1222,7 +1216,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             $"Wallet PDA must reach ResponseSent for {algorithm}.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -1321,7 +1315,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1352,7 +1346,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //(EncryptedJweResponse here is the compact JWE; we can't peek
         //inside on the wallet side, but the verifier's PresentationVerified
         //state should show both credential query ids in Claims.)
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState);
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState);
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
         Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId(DcqlFixtures.PidPrimaryCredentialId)),
@@ -1417,8 +1411,8 @@ internal sealed class Oid4VpFlowIntegrationTests
 
             Assert.IsTrue(parsed.CredentialSignatureValid, "The issued credential must verify.");
             Assert.IsNotNull(parsed.Credential.Status?.StatusList, "The verifier must surface the credential's status_list reference.");
-            Assert.AreEqual(credentialIndex, parsed.Credential.Status!.StatusList!.Value.Index);
-            Assert.AreEqual(statusListUri, parsed.Credential.Status.StatusList!.Value.Uri);
+            Assert.AreEqual(credentialIndex, parsed.Credential.Status.StatusList.Value.Index);
+            Assert.AreEqual(statusListUri, parsed.Credential.Status.StatusList.Value.Uri);
 
             //The resolver stands in for whatever fetched and verified the status list (an HTTP fetch,
             //or an Orleans status-list grain); here the verified token is built directly.
@@ -1426,7 +1420,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
             CredentialStatusOutcome beforeRevocation = await CredentialStatusGate.CheckAsync(
-                StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList!.Value),
+                StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList.Value),
                 StatusListFixtures.ResolverFor(new StatusListToken(statusListUri, now, statusList), now),
                 now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -1435,7 +1429,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             statusList[credentialIndex] = StatusTypes.Invalid;
 
             CredentialStatusOutcome afterRevocation = await CredentialStatusGate.CheckAsync(
-                StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList!.Value),
+                StatusListFixtures.ContextFor(parsed.Credential.Status.StatusList.Value),
                 StatusListFixtures.ResolverFor(new StatusListToken(statusListUri, now, statusList), now),
                 now,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -1464,18 +1458,17 @@ internal sealed class Oid4VpFlowIntegrationTests
         using StatusListType statusList = StatusListType.Create(
             64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate resolveStatusList =
-            (context, ct) =>
-            {
-                DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
+        ValueTask<ResolvedStatusListToken?> resolveStatusList(StatusListResolutionContext context, CancellationToken ct = default)
+        {
+            DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
 
-                return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
-                {
-                    Token = new StatusListToken(statusListUri, resolvedAt, statusList),
-                    ResolvedAt = resolvedAt,
-                    IsTokenOwned = false
-                });
-            };
+            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            {
+                Token = new StatusListToken(statusListUri, resolvedAt, statusList),
+                ResolvedAt = resolvedAt,
+                IsTokenOwned = false
+            });
+        }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
@@ -1507,7 +1500,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
             using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
                 .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-            jarResponse.EnsureSuccessStatusCode();
+            _ = jarResponse.EnsureSuccessStatusCode();
             string compactJar = await jarResponse.Content
                 .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1521,7 +1514,7 @@ internal sealed class Oid4VpFlowIntegrationTests
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+            _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
                 "Wallet PDA must reach ResponseSent after the HTTP response POST.");
 
             return (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -1574,18 +1567,17 @@ internal sealed class Oid4VpFlowIntegrationTests
         using StatusListType statusList = StatusListType.Create(
             64, StatusListBitSize.OneBit, Pool, BitOrder.LeastSignificantFirst);
 
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate resolveStatusList =
-            (context, ct) =>
-            {
-                DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
+        ValueTask<ResolvedStatusListToken?> resolveStatusList(StatusListResolutionContext context, CancellationToken ct = default)
+        {
+            DateTimeOffset resolvedAt = TimeProvider.GetUtcNow();
 
-                return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
-                {
-                    Token = new StatusListToken(statusListUri, resolvedAt, statusList),
-                    ResolvedAt = resolvedAt,
-                    IsTokenOwned = false
-                });
-            };
+            return ValueTask.FromResult<ResolvedStatusListToken?>(new ResolvedStatusListToken
+            {
+                Token = new StatusListToken(statusListUri, resolvedAt, statusList),
+                ResolvedAt = resolvedAt,
+                IsTokenOwned = false
+            });
+        }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: resolveStatusList);
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
@@ -1614,7 +1606,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1638,7 +1630,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             refusalDetail = exception.Message;
         }
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "An undeterminable credential status fails closed, so the verifier refuses the presentation.");
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
         Assert.AreEqual(VerifierFlowRefusalKind.StatusUndeterminable, failed.Refusal!.Value.Kind,
@@ -1686,7 +1678,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1696,7 +1688,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //flow state, which must not be PresentationVerified.
         try
         {
-            await walletClient.PresentJarAsync(
+            _ = await walletClient.PresentJarAsync(
                 new PresentJarOptions
                 {
                     CompactJar = compactJar,
@@ -1810,7 +1802,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         string compactJar = await app.HandleJarRequestAsync(verifierKeys,
             parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId,
@@ -1826,7 +1818,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         string compactJwe = await wallet.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(wallet.GetFlowState(walletFlowId).State);
+        _ = Assert.IsInstanceOfType<ResponseSent>(wallet.GetFlowState(walletFlowId).State);
 
 
         //Step 4: Verifier — direct_post (POST /connect/{segment}/cb).
@@ -1855,7 +1847,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             receivedRedirectUri,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<BrowserRedirectIssued>(
+        _ = Assert.IsInstanceOfType<BrowserRedirectIssued>(
             wallet.GetFlowState(walletFlowId).State,
             "Wallet PDA must reach BrowserRedirectIssued.");
         Assert.AreEqual(sameDeviceRedirectUri, browserRedirect.RedirectUri,
@@ -1933,7 +1925,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         //=== Channel boundary: compactJar passes to Wallet (NFC/BLE/memory). ===
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId,
@@ -1954,10 +1946,10 @@ internal sealed class Oid4VpFlowIntegrationTests
             redirectUri: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach PresentationVerified.");
-        Assert.IsInstanceOfType<ResponseSent>(
+        _ = Assert.IsInstanceOfType<ResponseSent>(
             wallet.GetFlowState(walletFlowId).State,
             "Wallet PDA must reach ResponseSent.");
         Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
@@ -2005,7 +1997,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         string compactJar = await app.HandleJarRequestAsync(verifierKeys,
             parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId, requestUri, compactJar, verifierKeys.SigningPublicKey,
@@ -2017,7 +2009,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //Attacker flips bits in segment 3 (ciphertext) before delivery to the Verifier.
         string tamperedJwe = TamperJweSegment(compactJwe, segmentIndex: 3);
 
-        await Assert.ThrowsExactlyAsync<System.Security.Cryptography.AuthenticationTagMismatchException>(
+        _ = await Assert.ThrowsExactlyAsync<System.Security.Cryptography.AuthenticationTagMismatchException>(
             async () => await app.HandleDirectPostAsync(verifierKeys,
                 parHandle,
                 tamperedJwe,
@@ -2133,15 +2125,15 @@ internal sealed class Oid4VpFlowIntegrationTests
             CreatePreparedQuery(),
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierParReceivedState>(
+        _ = Assert.IsInstanceOfType<VerifierParReceivedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must be in VerifierParReceived after PAR.");
 
 
         //Step 2: Wallet — QR scan / deep link.
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
-        Assert.IsInstanceOfType<RequestUriReceived>(
+        _ = Assert.IsInstanceOfType<RequestUriReceived>(
             wallet.GetFlowState(walletFlowId).State,
             "Wallet PDA must be in RequestUriReceived after QR scan.");
 
@@ -2173,7 +2165,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             walletMetadataJson: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierJarServedState>(
+        _ = Assert.IsInstanceOfType<VerifierJarServedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach VerifierJarServed after the effect-loop wallet POST → JAR sign sequence.");
 
@@ -2202,7 +2194,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         string compactJwe = await wallet.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(
+        _ = Assert.IsInstanceOfType<ResponseSent>(
             wallet.GetFlowState(walletFlowId).State,
             "Wallet PDA must reach ResponseSent (terminal accept).");
 
@@ -2214,7 +2206,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             redirectUri: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach PresentationVerified (terminal accept).");
         Assert.IsTrue(verified.Credentials.ContainsKey(new CredentialQueryId("pid")),
@@ -2311,11 +2303,9 @@ internal sealed class Oid4VpFlowIntegrationTests
                 exp: now + TimingPolicy.Default.Oid4VpRequestObjectLifetime,
                 transactionData: transactionData);
 
-        JwtHeaderSerializer jwtHeaderSerializer =
-            static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        ReadOnlySpan<byte> jwtHeaderSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
-        JwtPayloadSerializer jwtPayloadSerializer =
-            static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        ReadOnlySpan<byte> jwtPayloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
         using SignedJar signedJar = await requestObject.SignJarAsync(
@@ -2342,7 +2332,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         string walletFlowId = $"wallet-tx-{Guid.NewGuid():N}";
         Uri requestUri = new(VerifierBaseUri, "/request/tx-token");
 
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
         await wallet.HandleJarFetchAsync(
             walletFlowId,
             requestUri,
@@ -2364,7 +2354,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         string compactJwe = await wallet.HandleResponsePostAsync(
             walletFlowId, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(
+        _ = Assert.IsInstanceOfType<ResponseSent>(
             wallet.GetFlowState(walletFlowId).State,
             "Wallet PDA must reach ResponseSent after posting the response.");
 
@@ -2427,7 +2417,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         Assert.IsNotNull(parsed.KbJwtTransactionDataHashes,
             "KB-JWT must carry transaction_data_hashes when the JAR carried transaction_data.");
-        Assert.HasCount(1, parsed.KbJwtTransactionDataHashes!,
+        Assert.HasCount(1, parsed.KbJwtTransactionDataHashes,
             "Exactly one entry was sent and exactly one hash must come back.");
 
         //Verifier's own recomputation must positionally match.
@@ -2444,7 +2434,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //executor enforcement is wired (tracked separately).
         ValidationContext vc = new()
         {
-            Context = new ExchangeContext(),
+            Context = [],
             Now = now,
             KbJwtTransactionDataHashes = parsed.KbJwtTransactionDataHashes,
             ExpectedTransactionDataHashes = expectedHashes
@@ -2529,7 +2519,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //carrying the transaction_data descriptors in the protected claims.
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2553,7 +2543,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -2662,7 +2652,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //inline trust_chain in its JOSE header.
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2726,7 +2716,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the federation-bound HTTP wire E2E.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -2868,19 +2858,19 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using System.Net.Http.HttpResponseMessage verifierEcResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(verifierEcUrl, TestContext.CancellationToken).ConfigureAwait(false);
-        verifierEcResponse.EnsureSuccessStatusCode();
+        _ = verifierEcResponse.EnsureSuccessStatusCode();
         string fetchedVerifierEc = await verifierEcResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using System.Net.Http.HttpResponseMessage anchorEcResponse = await anchorHost.SharedHttpClient!
             .GetAsync(anchorEcUrl, TestContext.CancellationToken).ConfigureAwait(false);
-        anchorEcResponse.EnsureSuccessStatusCode();
+        _ = anchorEcResponse.EnsureSuccessStatusCode();
         string fetchedAnchorEc = await anchorEcResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         using System.Net.Http.HttpResponseMessage ssResponse = await anchorHost.SharedHttpClient!
             .GetAsync(anchorSsUrl, TestContext.CancellationToken).ConfigureAwait(false);
-        ssResponse.EnsureSuccessStatusCode();
+        _ = ssResponse.EnsureSuccessStatusCode();
         string fetchedSubordinateStatement = await ssResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2923,7 +2913,7 @@ internal sealed class Oid4VpFlowIntegrationTests
         //the chain header.
         using System.Net.Http.HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -2995,7 +2985,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after two-Kestrel federation HTTP wire E2E.");
 
         PresentationVerifiedState verified2k = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -3055,7 +3045,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -3073,13 +3063,13 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after the unencrypted direct_post POST.");
 
         //The result's response artifact is the plaintext vp_token JSON
         //object (not a compact JWE). A JSON object starts with '{'; a JWE
         //starts with base64url(JSON header) which always begins with 'ey'.
-        Assert.IsTrue(result.PostedResponseArtifact.StartsWith('{'),
+        Assert.IsTrue(result.PostedResponseArtifact.StartsWith('{', StringComparison.Ordinal),
             "Wallet response artifact must be a JSON object for response_mode=direct_post, " +
             $"got: {result.PostedResponseArtifact[..Math.Min(40, result.PostedResponseArtifact.Length)]}");
 
@@ -3152,7 +3142,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after composing the query-mode redirect URL.");
 
         //The artifact is the redirect URL the calling application would
@@ -3232,7 +3222,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "Wallet PDA must reach ResponseSent after composing the fragment-mode redirect URL.");
 
         Assert.Contains("#", result.PostedResponseArtifact, StringComparison.Ordinal);
@@ -3316,7 +3306,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -3330,7 +3320,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "The wallet must have POSTed the response before the verifier's terminal state is read.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -3414,7 +3404,7 @@ internal sealed class Oid4VpFlowIntegrationTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -3428,7 +3418,7 @@ internal sealed class Oid4VpFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "The wallet must have POSTed the multi-credential response before the terminal state is read.");
 
         PresentationVerifiedState verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;

@@ -42,7 +42,7 @@ internal static class VerifiableCliTestHelpers
     {
         //A leading '-' makes System.CommandLine treat the token as an option rather than a
         //positional argument value, so such inputs are not valid unquoted CLI arguments.
-        return string.IsNullOrWhiteSpace(value) || ContainsCliSpecialCharacters(value) || value.StartsWith('-');
+        return string.IsNullOrWhiteSpace(value) || ContainsCliSpecialCharacters(value) || value.StartsWith('-', StringComparison.Ordinal);
     }
 
 
@@ -51,7 +51,7 @@ internal static class VerifiableCliTestHelpers
     /// </summary>
     public static bool IsUnsuitableForCliOptionValue(string value)
     {
-        return ContainsCliSpecialCharacters(value) || value.StartsWith('-');
+        return ContainsCliSpecialCharacters(value) || value.StartsWith('-', StringComparison.Ordinal);
     }
 
 
@@ -170,7 +170,7 @@ internal static class VerifiableCliTestHelpers
         {
             foreach(var config in configurations)
             {
-                string path = Path.Join(projectRoot, projectPath, "bin", config, "net10.0", $"verifiable{extension}");
+                string path = Path.Join(projectRoot, projectPath, "bin", config, "net11.0", $"verifiable{extension}");
                 if(File.Exists(path))
                 {
                     return path;
@@ -255,7 +255,7 @@ internal static class VerifiableCliTestHelpers
             }
         };
 
-        process.Start();
+        _ = process.Start();
 
         string stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         string stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
@@ -291,7 +291,7 @@ internal static class VerifiableCliTestHelpers
             process.StartInfo.ArgumentList.Add(arg);
         }
 
-        process.Start();
+        _ = process.Start();
 
         string stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         string stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);

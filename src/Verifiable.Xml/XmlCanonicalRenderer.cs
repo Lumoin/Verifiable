@@ -410,7 +410,7 @@ internal static class XmlCanonicalRenderer
             int slotIndex;
             if(FreeSlotIndices.Count > 0)
             {
-                slotIndex = FreeSlotIndices[FreeSlotIndices.Count - 1];
+                slotIndex = FreeSlotIndices[^1];
                 FreeSlotIndices.Truncate(FreeSlotIndices.Count - 1);
                 Slots[slotIndex] = slot;
             }
@@ -440,7 +440,7 @@ internal static class XmlCanonicalRenderer
             NamespacePrefixSlot slot = Slots[slotIndex];
             _ = TryFindSortedPosition(Table.NamespaceDeclarationPrefixOf(slot.PrefixElement, slot.PrefixOrdinal), out int position);
             SortedSlotIndices.RemoveAt(position);
-            FreeSlotIndices.Add(slotIndex);
+            _ = FreeSlotIndices.Add(slotIndex);
             if(slotIndex == DefaultSlotIndex)
             {
                 DefaultSlotIndex = -1;
@@ -506,7 +506,7 @@ internal static class XmlCanonicalRenderer
         int documentElement = table.DocumentElementIndex;
         using var namespaceContext = new NamespaceRenderContext(table, pool);
         using var stack = new PooledStructList<RenderFrame>(pool, 32);
-        stack.Add(new RenderFrame
+        _ = stack.Add(new RenderFrame
         {
             NodeIndex = table.RootIndex,
             NextChild = table.FirstChildOf(table.RootIndex),
@@ -518,14 +518,14 @@ internal static class XmlCanonicalRenderer
         });
         while(stack.Count > 0)
         {
-            ref RenderFrame frame = ref stack[stack.Count - 1];
+            ref RenderFrame frame = ref stack[^1];
             if(frame.NextChild < 0)
             {
                 if(frame.IsRendered)
                 {
-                    output.AddRange("</"u8);
+                    _ = output.AddRange("</"u8);
                     AppendQName(table, frame.NodeIndex, output);
-                    output.Add((byte)'>');
+                    _ = output.Add((byte)'>');
                 }
 
                 namespaceContext.PopScope(frame.NamespaceScopeMark);
@@ -543,6 +543,9 @@ internal static class XmlCanonicalRenderer
                 XmlNodeKind.Text => isContentInSet && RenderTextChild(table, child, output),
                 XmlNodeKind.Comment => isWithComments && !nodeSet.ExcludesComments && isContentInSet && RenderCommentOrProcessingInstruction(table, child, documentElement, isComment: true, output),
                 XmlNodeKind.ProcessingInstruction => isContentInSet && RenderCommentOrProcessingInstruction(table, child, documentElement, isComment: false, output),
+
+                //The root node is the walk's own starting frame, never a child the walk descends into.
+                XmlNodeKind.Root => false,
                 _ => false
             };
         }
@@ -576,7 +579,7 @@ internal static class XmlCanonicalRenderer
             return false;
         }
 
-        RenderFrame parentFrame = stack[stack.Count - 1];
+        RenderFrame parentFrame = stack[^1];
         bool isUnderApex = elementIndex == nodeSet.ApexElementIndex || parentFrame.IsUnderApex;
         bool isRendered = nodeSet.IsWholeDocument || isUnderApex || IsAncestorContextElement(in nodeSet, elementIndex);
         int namespaceScopeMark = namespaceContext.PushScope(elementIndex);
@@ -585,7 +588,7 @@ internal static class XmlCanonicalRenderer
             RenderStartTag(table, variant, inclusivePrefixes, elementIndex, parentFrame.NearestInSetElement, parentFrame.IsNodeInSet, namespaceContext, stack, pool, output);
         }
 
-        stack.Add(new RenderFrame
+        _ = stack.Add(new RenderFrame
         {
             NodeIndex = elementIndex,
             NextChild = table.FirstChildOf(elementIndex),
@@ -675,7 +678,7 @@ internal static class XmlCanonicalRenderer
     /// <param name="output">The list the octets are appended to.</param>
     private static void RenderStartTag(XmlNodeTable table, XmlCanonicalVariant variant, ExclusivePrefixSet inclusivePrefixes, int elementIndex, int nearestInSetAncestor, bool isParentInSet, NamespaceRenderContext namespaceContext, PooledStructList<RenderFrame> stack, MemoryPool<byte> pool, PooledStructList<byte> output)
     {
-        output.Add((byte)'<');
+        _ = output.Add((byte)'<');
         AppendQName(table, elementIndex, output);
         if(variant == XmlCanonicalVariant.Exclusive10)
         {
@@ -687,7 +690,7 @@ internal static class XmlCanonicalRenderer
         }
 
         RenderAttributeAxis(table, variant, elementIndex, isParentInSet, stack, pool, output);
-        output.Add((byte)'>');
+        _ = output.Add((byte)'>');
     }
 
 
@@ -711,7 +714,7 @@ internal static class XmlCanonicalRenderer
             && table.NamespaceDeclarationUriOf(ancestorDefaultElement, ancestorDefaultOrdinal).Length > 0;
         if(!hasOwnDefault && ancestorHasDefault)
         {
-            output.AddRange(" xmlns=\"\""u8);
+            _ = output.AddRange(" xmlns=\"\""u8);
         }
 
         for(int i = 0; i < namespaceContext.SlotCount; ++i)
@@ -784,7 +787,7 @@ internal static class XmlCanonicalRenderer
 
         if(isEmptyDefaultRendered)
         {
-            output.AddRange(" xmlns=\"\""u8);
+            _ = output.AddRange(" xmlns=\"\""u8);
         }
 
         for(int i = 0; i < namespaceContext.SlotCount; ++i)
@@ -933,16 +936,16 @@ internal static class XmlCanonicalRenderer
     /// <param name="output">The list the octets are appended to.</param>
     private static void AppendNamespaceDeclaration(ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> uri, PooledStructList<byte> output)
     {
-        output.AddRange(" xmlns"u8);
+        _ = output.AddRange(" xmlns"u8);
         if(!prefix.IsEmpty)
         {
-            output.Add((byte)':');
-            output.AddRange(prefix);
+            _ = output.Add((byte)':');
+            _ = output.AddRange(prefix);
         }
 
-        output.AddRange("=\""u8);
+        _ = output.AddRange("=\""u8);
         AppendEscapedAttributeValue(uri, output);
-        output.Add((byte)'"');
+        _ = output.Add((byte)'"');
     }
 
 
@@ -975,6 +978,9 @@ internal static class XmlCanonicalRenderer
         {
             XmlCanonicalVariant.Inclusive10 => ImportInclusive10AttributeAxis(table, elementIndex, items),
             XmlCanonicalVariant.Inclusive11 => ImportInclusive11AttributeAxis(table, stack, elementIndex, pool, synthesizedXmlBase, items, out hasSynthesizedXmlBase),
+
+            //Exclusive canonicalization imports no xml-namespace attributes from an omitted parent.
+            XmlCanonicalVariant.Exclusive10 => false,
             _ => false
         };
 
@@ -986,24 +992,24 @@ internal static class XmlCanonicalRenderer
                 continue;
             }
 
-            items.Add(new AttributeRenderItem { Source = OwnAttributeSource, Element = elementIndex, Ordinal = i });
+            _ = items.Add(new AttributeRenderItem { Source = OwnAttributeSource, Element = elementIndex, Ordinal = i });
         }
 
         if(hasSynthesizedXmlBase)
         {
-            items.Add(new AttributeRenderItem { Source = SynthesizedXmlBaseSource, Element = -1, Ordinal = -1 });
+            _ = items.Add(new AttributeRenderItem { Source = SynthesizedXmlBaseSource, Element = -1, Ordinal = -1 });
         }
 
         SortAttributeItems(table, items);
         for(int i = 0; i < items.Count; ++i)
         {
             AttributeRenderItem item = items[i];
-            output.Add((byte)' ');
+            _ = output.Add((byte)' ');
             if(item.Source == SynthesizedXmlBaseSource)
             {
-                output.AddRange("xml:base=\""u8);
+                _ = output.AddRange("xml:base=\""u8);
                 AppendEscapedAttributeValue(synthesizedXmlBase.AsSpan(), output);
-                output.Add((byte)'"');
+                _ = output.Add((byte)'"');
 
                 continue;
             }
@@ -1011,14 +1017,14 @@ internal static class XmlCanonicalRenderer
             ReadOnlySpan<byte> prefix = table.AttributePrefixOf(item.Element, item.Ordinal);
             if(!prefix.IsEmpty)
             {
-                output.AddRange(prefix);
-                output.Add((byte)':');
+                _ = output.AddRange(prefix);
+                _ = output.Add((byte)':');
             }
 
-            output.AddRange(table.AttributeLocalNameOf(item.Element, item.Ordinal));
-            output.AddRange("=\""u8);
+            _ = output.AddRange(table.AttributeLocalNameOf(item.Element, item.Ordinal));
+            _ = output.AddRange("=\""u8);
             AppendEscapedAttributeValue(table.AttributeValueOf(item.Element, item.Ordinal), output);
-            output.Add((byte)'"');
+            _ = output.Add((byte)'"');
         }
     }
 
@@ -1114,7 +1120,7 @@ internal static class XmlCanonicalRenderer
                     continue;
                 }
 
-                items.Add(new AttributeRenderItem { Source = ImportedAttributeSource, Element = ancestor, Ordinal = i });
+                _ = items.Add(new AttributeRenderItem { Source = ImportedAttributeSource, Element = ancestor, Ordinal = i });
             }
         }
     }
@@ -1155,7 +1161,7 @@ internal static class XmlCanonicalRenderer
                 break;
             }
 
-            contiguouslyOmitted.Add(frame.NodeIndex);
+            _ = contiguouslyOmitted.Add(frame.NodeIndex);
         }
 
         using var valueSources = new PooledStructList<XmlBaseValueSource>(pool, 8);
@@ -1163,7 +1169,7 @@ internal static class XmlCanonicalRenderer
         {
             if(TryFindXmlNamespaceAttribute(table, contiguouslyOmitted[i], "base"u8, out int ordinal))
             {
-                valueSources.Add(new XmlBaseValueSource { Element = contiguouslyOmitted[i], Ordinal = ordinal });
+                _ = valueSources.Add(new XmlBaseValueSource { Element = contiguouslyOmitted[i], Ordinal = ordinal });
             }
         }
 
@@ -1175,14 +1181,14 @@ internal static class XmlCanonicalRenderer
         bool hasOwnValue = TryFindXmlNamespaceAttribute(table, elementIndex, "base"u8, out int ownOrdinal);
         if(hasOwnValue)
         {
-            valueSources.Add(new XmlBaseValueSource { Element = elementIndex, Ordinal = ownOrdinal });
+            _ = valueSources.Add(new XmlBaseValueSource { Element = elementIndex, Ordinal = ownOrdinal });
         }
 
         int last = valueSources.Count - 1;
         var reduced = new PooledStructList<byte>(pool, 32);
         try
         {
-            reduced.AddRange(table.AttributeValueOf(valueSources[last].Element, valueSources[last].Ordinal));
+            _ = reduced.AddRange(table.AttributeValueOf(valueSources[last].Element, valueSources[last].Ordinal));
             for(int i = last - 1; i >= 0; --i)
             {
                 var joined = new PooledStructList<byte>(pool, 32);
@@ -1206,7 +1212,7 @@ internal static class XmlCanonicalRenderer
 
             if(reduced.Count > 0)
             {
-                synthesizedXmlBase.AddRange(reduced.AsSpan());
+                _ = synthesizedXmlBase.AddRange(reduced.AsSpan());
                 hasSynthesizedXmlBase = true;
             }
         }
@@ -1333,32 +1339,32 @@ internal static class XmlCanonicalRenderer
         bool isBeforeDocumentElement = nodeIndex < documentElementIndex;
         if(isRootChild && !isBeforeDocumentElement)
         {
-            output.Add((byte)0x0A);
+            _ = output.Add(0x0A);
         }
 
         if(isComment)
         {
-            output.AddRange("<!--"u8);
-            output.AddRange(table.ValueOf(nodeIndex));
-            output.AddRange("-->"u8);
+            _ = output.AddRange("<!--"u8);
+            _ = output.AddRange(table.ValueOf(nodeIndex));
+            _ = output.AddRange("-->"u8);
         }
         else
         {
-            output.AddRange("<?"u8);
-            output.AddRange(table.LocalNameOf(nodeIndex));
+            _ = output.AddRange("<?"u8);
+            _ = output.AddRange(table.LocalNameOf(nodeIndex));
             ReadOnlySpan<byte> value = table.ValueOf(nodeIndex);
             if(!value.IsEmpty)
             {
-                output.Add((byte)' ');
-                output.AddRange(value);
+                _ = output.Add((byte)' ');
+                _ = output.AddRange(value);
             }
 
-            output.AddRange("?>"u8);
+            _ = output.AddRange("?>"u8);
         }
 
         if(isRootChild && isBeforeDocumentElement)
         {
-            output.Add((byte)0x0A);
+            _ = output.Add(0x0A);
         }
 
         return true;
@@ -1377,11 +1383,11 @@ internal static class XmlCanonicalRenderer
         ReadOnlySpan<byte> prefix = table.PrefixOf(elementIndex);
         if(!prefix.IsEmpty)
         {
-            output.AddRange(prefix);
-            output.Add((byte)':');
+            _ = output.AddRange(prefix);
+            _ = output.Add((byte)':');
         }
 
-        output.AddRange(table.LocalNameOf(elementIndex));
+        _ = output.AddRange(table.LocalNameOf(elementIndex));
     }
 
 

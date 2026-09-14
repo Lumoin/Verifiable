@@ -7,8 +7,6 @@ using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -49,7 +47,7 @@ internal sealed class TpmAttestationTests
 
         AttestationResult result = await RunAsync(scenario).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
         Assert.AreEqual(AttestationType.AttestationCa, ((CertifiedAttestationResult)result).Type);
     }
 
@@ -409,7 +407,7 @@ internal sealed class TpmAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(result);
         Assert.AreEqual(Fido2AttestationErrors.MalformedStatement.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 
@@ -453,8 +451,8 @@ internal sealed class TpmAttestationTests
         using Scenario scenario = BuildConformantScenario();
 
         int offsetBeforeSafeByte = sizeof(uint) + sizeof(ushort)
-            + (sizeof(ushort) + SignerName.Length)
-            + (sizeof(ushort) + scenario.ExtraData.Length)
+            + sizeof(ushort) + SignerName.Length
+            + sizeof(ushort) + scenario.ExtraData.Length
             + sizeof(ulong) + sizeof(uint) + sizeof(uint);
         byte[] truncatedCertInfo = scenario.CertInfoBytes[..offsetBeforeSafeByte];
 

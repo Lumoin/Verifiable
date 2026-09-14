@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Json;
 using Verifiable.OAuth.Ssf;
@@ -83,10 +81,10 @@ internal sealed class SsfTransmitterMetadataProfileTests
         Assert.IsNotNull(
             parsed.AuthorizationSchemes,
             $"Profile §2.3.7 makes authorization_schemes MUST-include. Json: {json}");
-        Assert.ContainsSingle(parsed.AuthorizationSchemes!);
+        _ = Assert.ContainsSingle(parsed.AuthorizationSchemes);
         Assert.AreEqual(
             SsfMetadataParameterNames.AuthorizationSchemeSpecUrnOAuth2,
-            parsed.AuthorizationSchemes![0].SpecUrn);
+            parsed.AuthorizationSchemes[0].SpecUrn);
     }
 
 
@@ -109,7 +107,7 @@ internal sealed class SsfTransmitterMetadataProfileTests
         SsfTransmitterConfiguration? parsed = SsfDiscoveryJsonParsing.ParseTransmitterConfiguration(json);
 
         Assert.IsNotNull(parsed, $"The emitted metadata must strict-parse. Json: {json}");
-        Assert.ContainsSingle(parsed.AuthorizationSchemes!);
+        _ = Assert.ContainsSingle(parsed.AuthorizationSchemes!);
         Assert.AreEqual("urn:example:scheme", parsed.AuthorizationSchemes![0].SpecUrn);
     }
 

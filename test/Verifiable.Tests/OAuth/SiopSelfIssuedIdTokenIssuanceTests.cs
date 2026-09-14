@@ -85,16 +85,16 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         string? resolvedKid = null;
-        ResolveDidVerificationKeyDelegate resolver = (_, kid, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? kid, CancellationToken _2)
         {
             resolvedKid = kid;
 
             return ValueTask.FromResult<PublicKeyMemory?>(subjectPublic);
-        };
+        }
 
         SelfIssuedIdTokenValidationResult result = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
-            resolver,
+resolver,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -148,7 +148,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
         using PublicKeyMemory subjectPublic = keys.PublicKey;
         using PrivateKeyMemory subjectPrivate = keys.PrivateKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             _ = await SelfIssuedIdTokenIssuance.IssueWithDecentralizedIdentifierAsync(
                 subjectPrivate, "https://not-a-did.example.com", "key-1", ClientId, RequestNonce,
@@ -170,7 +170,7 @@ internal sealed class SiopSelfIssuedIdTokenIssuanceTests
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             _ = await SelfIssuedIdTokenIssuance.IssueWithJwkThumbprintAsync(
                 subjectPrivate, subjectPublic, ClientId, RequestNonce,

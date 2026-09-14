@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
@@ -680,7 +678,7 @@ public static class CmsSignedDataAugmentation
         ArgumentOutOfRangeException.ThrowIfNegative(attributeIndex);
         ArgumentOutOfRangeException.ThrowIfNegative(valueIndex);
 
-        AsnDecoder.ReadEncodedValue(replacementValue, AsnEncodingRules.DER, out _, out _, out int consumed);
+        _ = AsnDecoder.ReadEncodedValue(replacementValue, AsnEncodingRules.DER, out _, out _, out int consumed);
         if(consumed != replacementValue.Length)
         {
             throw new ArgumentException("A replacement attribute value is exactly one DER value (RFC 5652 §5.3).", nameof(replacementValue));
@@ -859,7 +857,7 @@ public static class CmsSignedDataAugmentation
             throw new ArgumentException("A parallel-signer addition places one whole DER SignerInfo (RFC 5652 §5.3).", parameterName);
         }
 
-        AsnDecoder.ReadEncodedValue(addition, AsnEncodingRules.DER, out _, out _, out int consumed);
+        _ = AsnDecoder.ReadEncodedValue(addition, AsnEncodingRules.DER, out _, out _, out int consumed);
         if(consumed != addition.Length)
         {
             throw new ArgumentException("A parallel-signer addition is exactly one DER value (RFC 5652 §5.3).", parameterName);
@@ -1189,7 +1187,7 @@ public static class CmsSignedDataAugmentation
 
         for(int i = 0; i < members.Count; ++i)
         {
-            AsnDecoder.ReadEncodedValue(members[i].Span, AsnEncodingRules.DER, out _, out _, out int consumed);
+            _ = AsnDecoder.ReadEncodedValue(members[i].Span, AsnEncodingRules.DER, out _, out _, out int consumed);
             if(consumed != members[i].Length)
             {
                 throw new ArgumentException($"Each member added to a SignedData '{fieldName}' field is exactly one DER value (RFC 5652 §5.1).", nameof(members));
@@ -1795,7 +1793,7 @@ public static class CmsSignedDataAugmentation
 
         ReadOnlySpan<byte> window = source[start..limit];
         Asn1Tag tag = Asn1Tag.Decode(window, out int tagLength);
-        AsnDecoder.ReadEncodedValue(window, AsnEncodingRules.BER, out int contentOffset, out int contentLength, out int bytesConsumed);
+        _ = AsnDecoder.ReadEncodedValue(window, AsnEncodingRules.BER, out int contentOffset, out int contentLength, out int bytesConsumed);
 
         return new CmsElement(
             Start: start,

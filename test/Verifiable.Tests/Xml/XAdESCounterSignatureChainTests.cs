@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Xml;
@@ -43,7 +42,7 @@ internal sealed class XAdESCounterSignatureChainTests
     /// </summary>
     private static string BuildLinearChain(int depth)
     {
-        string Signature(int remaining, string id)
+        static string Signature(int remaining, string id)
         {
             string inner = remaining <= 0
                 ? string.Empty

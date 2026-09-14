@@ -1,7 +1,6 @@
-using System;
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics;
-using Lumoin.Veritas.Cbor;
 
 namespace Verifiable.Cbor;
 

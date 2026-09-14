@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-
-using Verifiable.OAuth;
 
 namespace Verifiable.OAuth.Introspection;
 

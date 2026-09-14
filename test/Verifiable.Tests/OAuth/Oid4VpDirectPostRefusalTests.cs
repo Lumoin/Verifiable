@@ -21,7 +21,6 @@ using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -312,7 +311,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ProduceVpTokenPresentationsDelegate corruptingProduce = async (context, cancellationToken) =>
+        async ValueTask<Oid4VpPresentationSet> corruptingProduce(Oid4VpPresentationContext context, CancellationToken cancellationToken)
         {
             Oid4VpPresentationSet valid = await run.Produce(context, cancellationToken).ConfigureAwait(false);
 
@@ -329,11 +328,11 @@ internal sealed class Oid4VpDirectPostRefusalTests
                 },
                 ResponseEncryptionApu = valid.ResponseEncryptionApu
             };
-        };
+        }
 
         Oid4VpWalletClient walletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
             verifierKeys,
-            corruptingProduce,
+corruptingProduce,
             TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -345,7 +344,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -397,7 +396,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ProduceVpTokenPresentationsDelegate produceWithoutApu = async (context, cancellationToken) =>
+        async ValueTask<Oid4VpPresentationSet> produceWithoutApu(Oid4VpPresentationContext context, CancellationToken cancellationToken)
         {
             Oid4VpPresentationSet valid = await run.Produce(context, cancellationToken).ConfigureAwait(false);
 
@@ -406,11 +405,11 @@ internal sealed class Oid4VpDirectPostRefusalTests
                 PresentationsByQueryId = valid.PresentationsByQueryId,
                 ResponseEncryptionApu = null
             };
-        };
+        }
 
         Oid4VpWalletClient walletClient = await app.CreateHttpBackedOid4VpWalletClientAsync(
             verifierKeys,
-            produceWithoutApu,
+produceWithoutApu,
             TestHostShell.PinnedVerifierKeyResolver(verifierKeys.SigningPublicKey),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -422,7 +421,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -484,14 +483,14 @@ internal sealed class Oid4VpDirectPostRefusalTests
             //Builds the real protected header (embedding the presentation SD-CWT under kcwt) and
             //truncates its bytes before the KBT is signed and serialized — the outer COSE_Sign1
             //array/lengths stay correct throughout, only the protected header's CBOR content is cut.
-            BuildKbtProtectedHeaderDelegate truncateProtectedHeader = (coseAlgorithm, presentationToken, pool) =>
+            static EncodedCoseProtectedHeader truncateProtectedHeader(int coseAlgorithm, SdToken<ReadOnlyMemory<byte>> presentationToken, BaseMemoryPool pool)
             {
                 using EncodedCoseProtectedHeader validHeader =
                     SdKbtIssuance.BuildProtectedHeader(coseAlgorithm, presentationToken, pool);
                 ReadOnlySpan<byte> validBytes = validHeader.AsReadOnlySpan();
 
                 return EncodedCoseProtectedHeader.FromBytes(validBytes[..(validBytes.Length / 2)], pool);
-            };
+            }
 
             using EncodedCoseSign1 corruptKbt = await KbCwtIssuance.IssueAsync(
                 issued,
@@ -499,7 +498,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
                 VerifierClientId,
                 "nonce-sdcwt-corrupt-kbt",
                 TimeProvider.GetUtcNow(),
-                truncateProtectedHeader,
+truncateProtectedHeader,
                 SdKbtIssuance.BuildPayload,
                 CoseSerialization.BuildSigStructure,
                 CoseSerialization.SerializeCoseSign1,
@@ -736,10 +735,10 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using JsonDocument answer = JsonDocument.Parse(body);
         Assert.AreEqual(JsonValueKind.Object, answer.RootElement.ValueKind,
             "OID4VP 1.0 §8.2: the 200 answer's body is a JSON object.");
-        Assert.IsFalse(answer.RootElement.TryGetProperty(AuthorizationResponseParameters.RedirectUri, out JsonElement _),
+        Assert.IsFalse(answer.RootElement.TryGetProperty(AuthorizationResponseParameters.RedirectUri, out _),
             "OID4VP 1.0 §8.2: redirect_uri is OPTIONAL, so a deployment that configures none omits the member.");
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A presentation the Verifier accepted leaves the flow in its verified terminal state.");
     }
 
@@ -781,7 +780,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         Assert.AreEqual(sameDeviceRedirectUri.OriginalString, ReadRedirectUri(response.Body),
             "OID4VP 1.0 §8.2: the configured redirect_uri is returned in the Response Endpoint's JSON object.");
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A presentation the Verifier accepted leaves the flow in its verified terminal state.");
     }
 
@@ -946,7 +945,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        (Uri _, string parHandle) = await app.HandleParAsync(
+        (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
             new TransactionNonce("nonce-error-without-state"),
             DcqlFixtures.PidFamilyNamePrepared(),
@@ -955,7 +954,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         _ = await app.HandleJarRequestAsync(
             verifierKeys, parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        (int statusCode, string _, string? _) = await app.PostDirectPostFormAsync(
+        (int statusCode, _, _) = await app.PostDirectPostFormAsync(
             verifierKeys.Registration.TenantId.Value,
             [new(OAuthRequestParameterNames.Error, OAuthErrors.AccessDenied)],
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -964,7 +963,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
             "OID4VP 1.0 §8.2: HTTP 200 answers a successfully processed Authorization Error Response, and an uncorrelatable POST is not one.");
         Assert.AreEqual(404, statusCode,
             "No Response URI shape matches a POST without state, so the request reaches no Response URI handler at all.");
-        Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
             "A POST the Response URI never processed leaves the flow untouched.");
     }
 
@@ -983,7 +982,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        (Uri _, string parHandle) = await app.HandleParAsync(
+        (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
             new TransactionNonce("nonce-state-only"),
             DcqlFixtures.PidFamilyNamePrepared(),
@@ -992,7 +991,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         _ = await app.HandleJarRequestAsync(
             verifierKeys, parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
-        (int statusCode, string _, string? _) = await app.PostDirectPostFormAsync(
+        (int statusCode, _, _) = await app.PostDirectPostFormAsync(
             verifierKeys.Registration.TenantId.Value,
             [new(OAuthRequestParameterNames.State, parHandle)],
             TestContext.CancellationToken).ConfigureAwait(false);
@@ -1001,7 +1000,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
             "OID4VP 1.0 §8.2: HTTP 200 answers a successfully processed Authorization Response or Authorization Error Response, and a bare state POST is neither.");
         Assert.AreEqual(404, statusCode,
             "No Response URI shape matches a POST carrying neither a presentation nor an error, so the request reaches no Response URI handler at all.");
-        Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
             "A POST the Response URI never processed leaves the flow untouched.");
     }
 
@@ -1021,7 +1020,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(verifierKeys.Registration.TenantId);
 
         EndpointChain chain = await app.GetEndpointsAsync(verifierKeys.Registration, context)
@@ -1081,7 +1080,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
     [DataRow("line\nbreak", DisplayName = "control character %x0A")]
     public void ARefusalDescriptionOutsideTheRfc6749CharacterSetCannotBeConstructed(string description)
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => _ = new VerifierFlowRefusal(VerifierFlowRefusalKind.Unverifiable, description),
             "RFC 6749 §4.1.2.1: error_description MUST NOT include characters outside %x20-21 / %x23-5B / %x5D-7E.");
     }
@@ -1239,7 +1238,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        (Uri _, string parHandle) = await app.HandleParAsync(
+        (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
             new TransactionNonce("nonce-wallet-error-quote"),
             DcqlFixtures.PidFamilyNamePrepared(),
@@ -1262,11 +1261,11 @@ internal sealed class Oid4VpDirectPostRefusalTests
         Assert.AreEqual(WellKnownMediaTypes.Application.Json, contentType,
             "The RFC 6749 §4.1.2.1 error object is a JSON body.");
 
-        (string wireError, string _) = OAuthErrorAssertions.ReadOAuthErrorBody(body);
+        (string wireError, _) = OAuthErrorAssertions.ReadOAuthErrorBody(body);
         Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
             "RFC 6749 §4.1.2.1: a malformed request is invalid_request.");
 
-        Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
             "A malformed Wallet error POST is rejected before it reaches VerifierWalletErrorReceivedState.");
     }
 
@@ -1287,7 +1286,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        (Uri _, string parHandle) = await app.HandleParAsync(
+        (_, string parHandle) = await app.HandleParAsync(
             verifierKeys,
             new TransactionNonce("nonce-wallet-error-overlong-description"),
             DcqlFixtures.PidFamilyNamePrepared(),
@@ -1311,11 +1310,11 @@ internal sealed class Oid4VpDirectPostRefusalTests
         Assert.AreEqual(WellKnownMediaTypes.Application.Json, contentType,
             "The RFC 6749 §4.1.2.1 error object is a JSON body.");
 
-        (string wireError, string _) = OAuthErrorAssertions.ReadOAuthErrorBody(body);
+        (string wireError, _) = OAuthErrorAssertions.ReadOAuthErrorBody(body);
         Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
             "RFC 6749 §4.1.2.1: a malformed request is invalid_request.");
 
-        Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierJarServedState>(app.GetFlowState(parHandle).State,
             "A malformed Wallet error POST is rejected before it reaches VerifierWalletErrorReceivedState.");
     }
 
@@ -1364,7 +1363,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
             TimeProvider);
 
         string walletFlowId = $"wallet-{nonce}";
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId, requestUri, compactJar, verifierKeys.SigningPublicKey,
@@ -1396,7 +1395,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
     {
         string segment = verifierKeys.Registration.TenantId.Value;
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(verifierKeys.Registration.TenantId);
         context.SetOid4VpRedirectUri(redirectUri);
 
@@ -1483,7 +1482,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
     {
         FlowState state = app.GetFlowState(parHandle).State;
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
             "A refused presentation leaves the Verifier's flow in its terminal failure state.");
 
         var failed = (VerifierFlowFailedState)state;
@@ -1502,7 +1501,7 @@ internal sealed class Oid4VpDirectPostRefusalTests
     {
         FlowState state = app.GetFlowState(parHandle).State;
 
-        Assert.IsInstanceOfType<VerifierWalletErrorReceivedState>(state,
+        _ = Assert.IsInstanceOfType<VerifierWalletErrorReceivedState>(state,
             "OID4VP 1.0 §8.2: a processed Authorization Error Response is recorded on the Verifier's flow.");
 
         return (VerifierWalletErrorReceivedState)state;

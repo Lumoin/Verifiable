@@ -1,14 +1,9 @@
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.BouncyCastle;
 using Verifiable.Core.Did.Methods.WebPlus;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -376,7 +371,7 @@ internal sealed class WebPlusMicroledgerReplayTests
 
         var finalState = (DeactivatedLogState<WebPlusState>)results[2].State;
         Assert.AreEqual(2UL, finalState.Value.VersionId);
-        Assert.IsInstanceOfType<DisallowUpdateRule>(finalState.Value.UpdateRules, "The deactivated document's updateRules MUST be the disallow form.");
+        _ = Assert.IsInstanceOfType<DisallowUpdateRule>(finalState.Value.UpdateRules, "The deactivated document's updateRules MUST be the disallow form.");
     }
 
 

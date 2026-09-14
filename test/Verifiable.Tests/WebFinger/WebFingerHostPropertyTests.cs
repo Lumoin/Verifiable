@@ -95,7 +95,7 @@ internal sealed class WebFingerHostPropertyTests
             }
 
             string body = acct["acct:".Length..];
-            int lastAt = body.LastIndexOf('@');
+            int lastAt = body.LastIndexOf('@', StringComparison.Ordinal);
             if(lastAt < 0)
             {
                 return false;

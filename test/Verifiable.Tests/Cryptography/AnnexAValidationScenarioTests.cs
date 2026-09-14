@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
@@ -317,11 +313,11 @@ internal sealed class AnnexAValidationScenarioTests
     /// <typeparam name="T">The mandated report data shape.</typeparam>
     /// <param name="conclusion">The conclusion to read.</param>
     /// <returns>The item.</returns>
-    private static T SingleReportData<T>(SignatureValidationConclusion conclusion) where T: SignatureValidationReportData
+    private static T SingleReportData<T>(SignatureValidationConclusion conclusion) where T : SignatureValidationReportData
     {
         Assert.HasCount(1, conclusion.ReportData,
             "Table 6 mandates one associated validation report data item for the reported sub-indication.");
-        Assert.IsInstanceOfType<T>(conclusion.ReportData[0],
+        _ = Assert.IsInstanceOfType<T>(conclusion.ReportData[0],
             "The reported evidence has the shape Table 6 mandates for the reported sub-indication.");
 
         return (T)conclusion.ReportData[0];

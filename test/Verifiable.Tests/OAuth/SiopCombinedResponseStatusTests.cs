@@ -1,29 +1,16 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
-using System.Collections.Immutable;
 using System.Net;
-using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
-using Verifiable.JCose;
-using Verifiable.JCose.Eudi;
-using Verifiable.Json;
-using Verifiable.Json.Sd;
 using Verifiable.Json.StatusList;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Server;
 using Verifiable.OAuth.Siop.Server.States;
-using Verifiable.OAuth.Siop.Wallet;
-using Verifiable.Server;
 using Verifiable.Server.Pipeline;
-using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
@@ -124,7 +111,7 @@ internal sealed class SiopCombinedResponseStatusTests
                 "Section 12's MUST composed with Token Status List Section 8.3 step 7 requires the SIOP seat "
                 + "to evaluate the presented credential's status and carry the outcome forward.");
             Assert.IsTrue(
-                verified.CredentialStatuses!.TryGetValue(
+                verified.CredentialStatuses.TryGetValue(
                     SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId,
                     out CredentialStatusOutcome? outcome),
                 "The Section 12 combined response presents one credential, keyed by the seat's credential query id.");
@@ -179,7 +166,7 @@ internal sealed class SiopCombinedResponseStatusTests
             Assert.IsNotNull(verified.CredentialStatuses,
                 "A determinable revoked status is surfaced, not refused, when the deployment's policy only surfaces.");
             Assert.IsTrue(
-                verified.CredentialStatuses!.TryGetValue(
+                verified.CredentialStatuses.TryGetValue(
                     SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId,
                     out CredentialStatusOutcome? outcome),
                 "The Section 12 combined response presents one credential, keyed by the seat's credential query id.");
@@ -245,26 +232,26 @@ internal sealed class SiopCombinedResponseStatusTests
 
             SiopVerifierFlowFailedState failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.IsNotNull(failed.Refusal, "A policy refusal carries a typed refusal onto the failed state.");
-            Assert.AreEqual(VerifierFlowRefusalKind.PolicyRefused, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.PolicyRefused, failed.Refusal.Value.Kind,
                 "Verifier policy decides whether to reject or accept — a rejection is a policy refusal.");
-            Assert.AreEqual(OAuthErrors.AccessDenied, failed.Refusal!.Value.ErrorCode,
+            Assert.AreEqual(OAuthErrors.AccessDenied, failed.Refusal.Value.ErrorCode,
                 "Section 4.1.2.1: a denial is answered with access_denied.");
 
             Assert.IsNotNull(failed.CredentialStatusRefusal,
                 "The relying party's own detail rides the state, since Section 15.9 keeps it off the wire.");
-            Assert.HasCount(1, failed.CredentialStatusRefusal!.Credentials);
+            Assert.HasCount(1, failed.CredentialStatusRefusal.Credentials);
             Assert.AreEqual(
                 SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId,
-                failed.CredentialStatusRefusal!.Credentials[0].CredentialQueryId,
+                failed.CredentialStatusRefusal.Credentials[0].CredentialQueryId,
                 "The typed refusal names the credential query whose status the policy refused.");
             Assert.AreEqual(
                 CredentialStatusDisposition.Revoked,
-                failed.CredentialStatusRefusal!.Credentials[0].Disposition,
+                failed.CredentialStatusRefusal.Credentials[0].Disposition,
                 "Token Status List Section 7.1: 0x01 INVALID reads as revoked.");
             Assert.AreEqual(
                 "credential_status_not_valid: credential query "
                 + $"'{SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId}' reads status 0x01 (revoked)",
-                failed.CredentialStatusRefusal!.Description,
+                failed.CredentialStatusRefusal.Description,
                 "The typed refusal composes the query id, the raw status and its disposition for the relying party.");
         }
     }
@@ -314,7 +301,7 @@ internal sealed class SiopCombinedResponseStatusTests
             SiopVerifierFlowFailedState failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.IsNotNull(failed.Refusal,
                 "No statement about the status can be made, which is a typed refusal, not a server fault.");
-            Assert.AreEqual(VerifierFlowRefusalKind.StatusUndeterminable, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.StatusUndeterminable, failed.Refusal.Value.Kind,
                 "Step 4.a's subject mismatch leaves the status undeterminable, so the presentation fails closed.");
             Assert.IsNull(failed.CredentialStatusRefusal,
                 "An undeterminable status is not a policy refusal, so it names no refused credential status.");
@@ -452,7 +439,7 @@ internal sealed class SiopCombinedResponseStatusTests
                 "The Referenced Token's own validation determines it invalid, so the flow fails there.");
             Assert.IsNotNull(failed.Refusal,
                 "Section 12's binding conjunction is a classified refusal, not an unclassified server fault.");
-            Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal.Value.Kind,
                 "A negative Section 12 binding verdict is the Unverifiable refusal class.");
             Assert.AreEqual(0, resolverInvocations(),
                 "Further procedures regarding Status List MUST NOT be performed once the Referenced Token is "
@@ -504,7 +491,7 @@ internal sealed class SiopCombinedResponseStatusTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
@@ -576,7 +563,7 @@ internal sealed class SiopCombinedResponseStatusTests
                         [AuthorizationResponseParameters.VpToken] = vpToken,
                         [OAuthRequestParameterNames.State] = requestHandle
                     },
-                    new ExchangeContext(),
+                    [],
                     TestContext.CancellationToken).ConfigureAwait(false);
 
                 return (requestHandle, response);
@@ -595,9 +582,9 @@ internal sealed class SiopCombinedResponseStatusTests
                 host.GetFlowState(replayedRequestHandle).State);
             Assert.IsNotNull(failed.Refusal,
                 "Section 11.2's replay check is a classified refusal, not an unclassified server fault.");
-            Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal.Value.Kind,
                 "A replayed nonce is a negative verification verdict — the Unverifiable refusal class.");
-            Assert.AreEqual(OAuthErrors.InvalidRequest, failed.Refusal!.Value.ErrorCode,
+            Assert.AreEqual(OAuthErrors.InvalidRequest, failed.Refusal.Value.ErrorCode,
                 "Section 4.1.2.1: the Unverifiable refusal's error code is invalid_request.");
             Assert.IsNull(failed.CredentialStatusRefusal,
                 "A replay refusal never reaches the credential-status step, so it names no refused credential status.");
@@ -621,7 +608,7 @@ internal sealed class SiopCombinedResponseStatusTests
         using VerifierKeyMaterial rpKeys = host.RegisterClient(
             SiopCombinedResponseFixture.RelyingPartyClientId, SiopCombinedResponseFixture.RelyingPartyBaseUri, SiopCombinedResponseFixture.SiopCapabilities);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(rpKeys.Registration.TenantId);
 
         EndpointChain chain = await host.GetEndpointsAsync(rpKeys.Registration, context).ConfigureAwait(false);
@@ -718,7 +705,7 @@ internal sealed class SiopCombinedResponseStatusTests
             SiopVerifierFlowFailedState failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.IsNotNull(failed.Refusal,
                 "A status_list reference that does not adhere to Section 6.2 is a classified refusal.");
-            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
                 "A relative uri fails Section 6.2's RFC 3986 conformance rule, refused as Malformed.");
             Assert.AreEqual(0, resolverInvocations(),
                 "A malformed reference is refused at the parse boundary, before any Status List Token would be resolved.");
@@ -767,7 +754,7 @@ internal sealed class SiopCombinedResponseStatusTests
             SiopVerifierFlowFailedState failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.IsNotNull(failed.Refusal,
                 "A negative idx does not adhere to Section 6.2, so the presentation is a classified refusal.");
-            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
                 "A negative idx fails Section 6.2's non-negative-Integer rule, refused as Malformed.");
             Assert.AreEqual(0, resolverInvocations(),
                 "A malformed reference is refused at the parse boundary, before any Status List Token would be resolved.");
@@ -818,7 +805,7 @@ internal sealed class SiopCombinedResponseStatusTests
             SiopVerifierFlowFailedState failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.IsNotNull(failed.Refusal,
                 "A status claim naming no mechanism does not adhere to Section 6.1, so the presentation is a classified refusal.");
-            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
                 "Section 6.1: an empty status object is a malformed presentation, not a status the verifier cannot evaluate.");
             Assert.AreEqual(0, resolverInvocations(),
                 "The refusal happens at the parse boundary, before any Status List Token would be resolved.");
@@ -870,7 +857,7 @@ internal sealed class SiopCombinedResponseStatusTests
                 [AuthorizationResponseParameters.VpToken] = "not-a-vp-token",
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.BadRequest, response.StatusCode, response.Body,
@@ -882,7 +869,7 @@ internal sealed class SiopCombinedResponseStatusTests
             host.GetFlowState(requestHandle).State);
         Assert.IsNotNull(failed.Refusal,
             "An unparseable vp_token is a classified refusal, not an unclassified server fault.");
-        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal!.Value.Kind,
+        Assert.AreEqual(VerifierFlowRefusalKind.Malformed, failed.Refusal.Value.Kind,
             "A vp_token with no issuer-JWT/disclosure structure is the Malformed refusal class.");
         Assert.AreEqual(0, resolverInvocations(),
             "The parse fails before any status claim is ever read, so the resolver is never invoked.");
@@ -944,7 +931,7 @@ internal sealed class SiopCombinedResponseStatusTests
             SiopVerifierFlowFailedState failed = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(state);
             Assert.IsNotNull(failed.Refusal,
                 "A status the verifier cannot evaluate is a classified refusal, not an unclassified fault.");
-            Assert.AreEqual(VerifierFlowRefusalKind.StatusUndeterminable, failed.Refusal!.Value.Kind,
+            Assert.AreEqual(VerifierFlowRefusalKind.StatusUndeterminable, failed.Refusal.Value.Kind,
                 "A claim naming only unevaluable mechanisms is the same undeterminable rejection an unreadable "
                 + "Status List Token is.");
             Assert.IsNull(failed.CredentialStatusRefusal,
@@ -1008,14 +995,14 @@ internal sealed class SiopCombinedResponseStatusTests
 
             Assert.IsNotNull(verified.Credentials,
                 "Section 12's combined response carried a vp_token, so the seat surfaces what it verified.");
-            Assert.IsTrue(verified.Credentials!.TryGetValue(
+            Assert.IsTrue(verified.Credentials.TryGetValue(
                 SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId,
                 out VpCredentialClaims? credential),
                 "The verified credential is keyed by the credential query the seat presents it under.");
-            Assert.IsNotNull(credential!.Status,
+            Assert.IsNotNull(credential.Status,
                 "Token Status List Section 6.1 requires at least one mechanism and the issuer named one, so "
                 + "the credential carries a status claim.");
-            Assert.IsNull(credential.Status!.StatusList,
+            Assert.IsNull(credential.Status.StatusList,
                 "The claim names no status_list mechanism, so there is no reference to resolve.");
             Assert.HasCount(1, credential.Status.Mechanisms,
                 "The issuer named exactly one mechanism, so exactly one is surfaced.");
@@ -1065,11 +1052,11 @@ internal sealed class SiopCombinedResponseStatusTests
 
             Assert.IsNotNull(verified.Credentials,
                 "Section 12's combined response carried a vp_token, so the seat surfaces what it verified.");
-            Assert.IsTrue(verified.Credentials!.TryGetValue(
+            Assert.IsTrue(verified.Credentials.TryGetValue(
                 SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId,
                 out VpCredentialClaims? credential),
                 "The verified credential is keyed by the credential query the seat presents it under.");
-            Assert.IsNull(credential!.Status,
+            Assert.IsNull(credential.Status,
                 "Step 1's existence check found no status claim, so the credential surfaces none — which is "
                 + "what separates it from one naming a mechanism this verifier cannot evaluate.");
             Assert.IsNull(verified.CredentialStatuses,

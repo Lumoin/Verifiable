@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -67,37 +65,37 @@ public static class CtapGetAssertionResponseCborReader
 
                 switch(key)
                 {
-                    case(WellKnownCtapGetAssertionResponseKeys.Credential):
+                    case WellKnownCtapGetAssertionResponseKeys.Credential:
                     {
                         credential = CtapCommandEntityCborCodec.ReadDescriptor(reader, pool);
                         break;
                     }
-                    case(WellKnownCtapGetAssertionResponseKeys.AuthData):
+                    case WellKnownCtapGetAssertionResponseKeys.AuthData:
                     {
                         authData = reader.ReadByteString();
                         break;
                     }
-                    case(WellKnownCtapGetAssertionResponseKeys.Signature):
+                    case WellKnownCtapGetAssertionResponseKeys.Signature:
                     {
                         signature = reader.ReadByteString();
                         break;
                     }
-                    case(WellKnownCtapGetAssertionResponseKeys.User):
+                    case WellKnownCtapGetAssertionResponseKeys.User:
                     {
                         user = CtapCommandEntityCborCodec.ReadUserEntity(reader, pool);
                         break;
                     }
-                    case(WellKnownCtapGetAssertionResponseKeys.NumberOfCredentials):
+                    case WellKnownCtapGetAssertionResponseKeys.NumberOfCredentials:
                     {
                         numberOfCredentials = checked((int)reader.ReadInt64());
                         break;
                     }
-                    case(WellKnownCtapGetAssertionResponseKeys.UserSelected):
+                    case WellKnownCtapGetAssertionResponseKeys.UserSelected:
                     {
                         userSelected = reader.ReadBoolean();
                         break;
                     }
-                    case(WellKnownCtapGetAssertionResponseKeys.LargeBlobKey):
+                    case WellKnownCtapGetAssertionResponseKeys.LargeBlobKey:
                     {
                         largeBlobKey = reader.ReadByteString();
                         break;

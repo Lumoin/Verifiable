@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
 using Verifiable.Cbor;
@@ -148,7 +146,7 @@ internal sealed class SdCwtKeyBindingFlowTests
 
         public ValueTask Record(DigestValue commitment, CancellationToken cancellationToken)
         {
-            Seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
+            _ = Seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
 
             return ValueTask.CompletedTask;
         }

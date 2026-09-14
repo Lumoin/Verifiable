@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
@@ -523,13 +522,13 @@ public static class CryptographicKeyEvents
                 }
                 catch(Exception exception)
                 {
-                    Activity.Current?.AddEvent(new ActivityEvent(
+                    _ = (Activity.Current?.AddEvent(new ActivityEvent(
                         CryptoTelemetry.ActivityNames.SubscriberException,
                         tags: new ActivityTagsCollection
                         {
                             [CryptoTelemetry.Subscriber.EventType] = value.GetType().Name,
                             [CryptoTelemetry.Subscriber.ExceptionType] = exception.GetType().Name
-                        }));
+                        })));
                 }
             }
         }

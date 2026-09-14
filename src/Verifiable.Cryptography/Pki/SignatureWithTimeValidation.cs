@@ -1,10 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Formats.Asn1;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -396,6 +391,7 @@ public static class SignatureWithTimeValidation
                 || subIndication.Equals(SignatureValidationSubIndication.TryLater)
                 || subIndication.Equals(SignatureValidationSubIndication.OutOfBoundsNoProofOfExistence)
                 || subIndication.Equals(SignatureValidationSubIndication.OutOfBoundsNotRevoked),
+            BuildingBlockIndication.Failed => false,
             _ => false
         };
 

@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
@@ -82,7 +81,8 @@ public class VerificationMethodConverter: JsonConverter<VerificationMethod>
 {
     private static VerificationMethodTypeInfoFactoryDelegate DefaultTypeInfoFactory { get; } = typeName => typeName switch
     {
-        _ when typeName == VerificationMethodTypeInfo.JsonWebKey2020.TypeName => VerificationMethodTypeInfo.JsonWebKey2020, "JsonWebKey" => VerificationMethodTypeInfo.JsonWebKey2020,
+        _ when typeName == VerificationMethodTypeInfo.JsonWebKey2020.TypeName => VerificationMethodTypeInfo.JsonWebKey2020,
+        "JsonWebKey" => VerificationMethodTypeInfo.JsonWebKey2020,
         _ when typeName == VerificationMethodTypeInfo.Ed25519VerificationKey2020.TypeName => VerificationMethodTypeInfo.Ed25519VerificationKey2020,
         _ when typeName == VerificationMethodTypeInfo.Secp256k1VerificationKey2018.TypeName => VerificationMethodTypeInfo.Secp256k1VerificationKey2018,
         _ when typeName == VerificationMethodTypeInfo.Multikey.TypeName => VerificationMethodTypeInfo.Multikey,
@@ -116,7 +116,7 @@ public class VerificationMethodConverter: JsonConverter<VerificationMethod>
     /// <param name="typeSelector">
     /// The delegate that maps verification method <c>type</c> strings to .NET types.
     /// </param>
-    public VerificationMethodConverter(VerificationMethodTypeSelector typeSelector): this(typeSelector, DefaultTypeInfoFactory, KeyFormatDefaults.Reader, KeyFormatDefaults.Writer)
+    public VerificationMethodConverter(VerificationMethodTypeSelector typeSelector) : this(typeSelector, DefaultTypeInfoFactory, KeyFormatDefaults.Reader, KeyFormatDefaults.Writer)
     {
     }
 
@@ -216,8 +216,11 @@ public class VerificationMethodConverter: JsonConverter<VerificationMethod>
             }
 
             //Derived type: AOT-friendly deserialization. Since CanConvert only
-            //matches typeof(VerificationMethod), STJ won't re-enter this converter.
+            //matches typeof(VerificationMethod), STJ won't re-enter this converter. targetType
+            //comes from TypeSelector at runtime, so the generic GetTypeInfo<T>() overload cannot apply.
+#pragma warning disable CA2263 // targetType is a runtime Type, not a compile-time type argument.
             var typeInfo = options.GetTypeInfo(targetType);
+#pragma warning restore CA2263
             var derived = (VerificationMethod)JsonSerializer.Deserialize(element, typeInfo)!;
             derived.Type = TypeInfoFactory(typeString).TypeName;
 
@@ -246,10 +249,13 @@ public class VerificationMethodConverter: JsonConverter<VerificationMethod>
         ArgumentNullException.ThrowIfNull(options);
 
         //Derived type: AOT-friendly serialization. Since CanConvert only matches
-        //typeof(VerificationMethod), STJ won't re-enter this converter.
+        //typeof(VerificationMethod), STJ won't re-enter this converter. value.GetType() is a
+        //runtime Type, so the generic GetTypeInfo<T>() overload cannot apply.
         if(value.GetType() != typeof(VerificationMethod))
         {
+#pragma warning disable CA2263 // value.GetType() is a runtime Type, not a compile-time type argument.
             var typeInfo = options.GetTypeInfo(value.GetType());
+#pragma warning restore CA2263
             JsonSerializer.Serialize(writer, value, typeInfo);
             return;
         }

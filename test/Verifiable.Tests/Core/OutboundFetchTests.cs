@@ -1,9 +1,5 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Core;
@@ -214,7 +210,7 @@ internal sealed class OutboundFetchTests
 
     private static ExchangeContext Context(OutboundFetchPolicy policy)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(policy);
         return context;
     }

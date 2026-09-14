@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography;
+using System.Text;
+using System.Xml.Linq;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Cryptography.Pki.Xml;
 using Verifiable.Tests.TestInfrastructure;
@@ -832,7 +827,7 @@ internal sealed class XmlEvidenceRecordsTests
         /// <typeparam name="T">The carrier's type.</typeparam>
         /// <param name="carrier">The carrier.</param>
         /// <returns>The same carrier.</returns>
-        private T Own<T>(T carrier) where T: IDisposable
+        private T Own<T>(T carrier) where T : IDisposable
         {
             Owned.Add(carrier);
 

@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
@@ -255,7 +251,7 @@ internal sealed class OcspRevocationCheckerTests
         PkiCertificateMemory[] chain = [scenario.LeafCarrier, scenario.IntermediateCarrier];
         PkiCertificateMemory[] anchors = [scenario.RootCarrier];
 
-        await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(async () =>
             await MicrosoftX509Functions.ValidateChainAsync(
                 chain, anchors, ValidationTime, BaseMemoryPool.Shared, checker.CheckAsync, TestContext.CancellationToken)
             .ConfigureAwait(false), "A leaf the OCSP responder reports Revoked for must be rejected by chain validation.").ConfigureAwait(false);
@@ -289,9 +285,9 @@ internal sealed class OcspRevocationCheckerTests
 
         Assert.AreEqual(CertificateRevocationStatus.Good, retained.Status, "The retaining check reaches the same conclusion as the status-only one.");
         Assert.IsNotNull(retained.Response, "A verified response is kept, so its octets can be placed into a signature.");
-        Assert.AreSequenceEqual(answered, retained.Response!.AsReadOnlySpan().ToArray(),
+        Assert.AreSequenceEqual(answered, retained.Response.AsReadOnlySpan().ToArray(),
             "The octets kept are the responder's own answer, unchanged.");
-        Assert.IsTrue(retained.Response!.IsOcspResponse, "The kept carrier is tagged as the OCSP response it is.");
+        Assert.IsTrue(retained.Response.IsOcspResponse, "The kept carrier is tagged as the OCSP response it is.");
     }
 
 

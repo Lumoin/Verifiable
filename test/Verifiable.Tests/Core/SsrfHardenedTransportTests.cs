@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -25,7 +21,7 @@ internal sealed class SsrfHardenedTransportTests
     [TestMethod]
     public async Task InternalIpLiteralIsBlockedWithoutResolving()
     {
-        await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
             await SsrfHardenedTransport.ResolveAndPinAsync(
                 "169.254.169.254", OutboundFetchPolicy.SecureDefault, ThrowingResolver, TestContext.CancellationToken)
             .ConfigureAwait(false)).ConfigureAwait(false);
@@ -48,7 +44,7 @@ internal sealed class SsrfHardenedTransportTests
     {
         HostResolverDelegate rebinding = Resolver(IPAddress.Loopback);
 
-        await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
             await SsrfHardenedTransport.ResolveAndPinAsync(
                 "public-looking.example", OutboundFetchPolicy.SecureDefault, rebinding, TestContext.CancellationToken)
             .ConfigureAwait(false)).ConfigureAwait(false);
@@ -76,7 +72,7 @@ internal sealed class SsrfHardenedTransportTests
         //address is rejected wholesale rather than racing to a permitted one.
         HostResolverDelegate mixed = Resolver(IPAddress.Parse("93.184.216.34"), IPAddress.Parse("10.0.0.1"));
 
-        await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
             await SsrfHardenedTransport.ResolveAndPinAsync(
                 "mixed.example", OutboundFetchPolicy.SecureDefault, mixed, TestContext.CancellationToken)
             .ConfigureAwait(false)).ConfigureAwait(false);
@@ -86,10 +82,10 @@ internal sealed class SsrfHardenedTransportTests
     [TestMethod]
     public async Task HostThatDoesNotResolveIsBlocked()
     {
-        HostResolverDelegate empty = (host, cancellationToken) =>
+        static ValueTask<IReadOnlyList<IPAddress>> empty(string host, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlyList<IPAddress>>([]);
 
-        await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<SsrfBlockedException>(async () =>
             await SsrfHardenedTransport.ResolveAndPinAsync(
                 "nxdomain.example", OutboundFetchPolicy.SecureDefault, empty, TestContext.CancellationToken)
             .ConfigureAwait(false)).ConfigureAwait(false);

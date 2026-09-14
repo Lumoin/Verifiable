@@ -1,20 +1,12 @@
-using System;
-using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 using static Verifiable.Tpm.Spec.TpmRcExtensions;
 
 namespace Verifiable.Tpm.Automata;
@@ -931,7 +923,7 @@ public static class TpmLifecycleTransitions
         //order of BuildTpmProperties.
         List<TpmsTaggedProperty> all = BuildTpmProperties(state);
         all.Sort(static (left, right) => left.Property.CompareTo(right.Property));
-        List<TpmsTaggedProperty> selected = new();
+        List<TpmsTaggedProperty> selected = [];
         bool moreData = false;
         for(int i = 0; i < all.Count; i++)
         {
@@ -991,8 +983,8 @@ public static class TpmLifecycleTransitions
             | (state.EhEnable ? (uint)TpmaStartupClear.EH_ENABLE : 0u)
             | (state.PhEnableNV ? (uint)TpmaStartupClear.PH_ENABLE_NV : 0u);
 
-        return new List<TpmsTaggedProperty>
-        {
+        return
+        [
             new(TpmPtConstants.TPM_PT_FAMILY_INDICATOR, SimFamilyIndicator),
             new(TpmPtConstants.TPM_PT_LEVEL, SimSpecLevel),
             new(TpmPtConstants.TPM_PT_REVISION, SimSpecRevision),
@@ -1002,7 +994,7 @@ public static class TpmLifecycleTransitions
             //28) — this TPM's own object-slot count, the bound every allocating command refuses above with
             //TPM_RC_OBJECT_MEMORY. Reported so a resource manager can plan its flushes without discovering the
             //bound by being refused.
-            new(TpmPtConstants.TPM_PT_HR_TRANSIENT_MIN, (uint)TpmSimulatorState.MaxLoadedObjects),
+            new(TpmPtConstants.TPM_PT_HR_TRANSIENT_MIN, TpmSimulatorState.MaxLoadedObjects),
 
             //The six context-management properties (Part 2, clause 6.13, Table 28), reported together: the
             //algorithm and key size that protect a saved context's confidentiality and integrity, the largest
@@ -1012,9 +1004,9 @@ public static class TpmLifecycleTransitions
             new(TpmPtConstants.TPM_PT_CONTEXT_GAP_MAX, (uint)(TpmSimulatorState.MaxContextGap - 1ul)),
             new(TpmPtConstants.TPM_PT_CONTEXT_HASH, (uint)TpmAlgIdConstants.TPM_ALG_SHA256),
             new(TpmPtConstants.TPM_PT_CONTEXT_SYM, (uint)TpmAlgIdConstants.TPM_ALG_AES),
-            new(TpmPtConstants.TPM_PT_CONTEXT_SYM_SIZE, (uint)TpmSimulator.ContextSymmetricKeyBytes * 8u),
-            new(TpmPtConstants.TPM_PT_MAX_OBJECT_CONTEXT, (uint)Tpm2bContextData.MaxSize),
-            new(TpmPtConstants.TPM_PT_MAX_SESSION_CONTEXT, (uint)Tpm2bContextData.MaxSize),
+            new(TpmPtConstants.TPM_PT_CONTEXT_SYM_SIZE, TpmSimulator.ContextSymmetricKeyBytes * 8u),
+            new(TpmPtConstants.TPM_PT_MAX_OBJECT_CONTEXT, Tpm2bContextData.MaxSize),
+            new(TpmPtConstants.TPM_PT_MAX_SESSION_CONTEXT, Tpm2bContextData.MaxSize),
 
             //"the maximum data size in one NV write, NV read, NV extend, or NV certify command" (Part 2, clause
             //6.13, Table 28) — this TPM's own MAX_NV_BUFFER_SIZE, the bound Table 97 leaves TPM-dependent and
@@ -1032,7 +1024,7 @@ public static class TpmLifecycleTransitions
             new(TpmPtConstants.TPM_PT_MAX_AUTH_FAIL, state.MaxTries),
             new(TpmPtConstants.TPM_PT_LOCKOUT_INTERVAL, state.RecoveryTime),
             new(TpmPtConstants.TPM_PT_LOCKOUT_RECOVERY, state.LockoutRecovery)
-        };
+        ];
     }
 
     /// <summary>
@@ -1054,7 +1046,7 @@ public static class TpmLifecycleTransitions
     {
         if(state.RecoveryTime > 0 && state.FailedTries > 0)
         {
-            ulong intervalMs = (ulong)state.RecoveryTime * 1000ul;
+            ulong intervalMs = state.RecoveryTime * 1000ul;
             ulong elapsedMs = state.Time - state.LastFailedTriesRecoveryTime;
             ulong decrements = elapsedMs / intervalMs;
             if(decrements > 0)
@@ -6370,7 +6362,7 @@ public static class TpmLifecycleTransitions
     private static bool IsProperPersistHierarchy(uint objectHierarchy, uint auth) =>
         auth == (uint)TpmRh.TPM_RH_PLATFORM
             ? objectHierarchy == (uint)TpmRh.TPM_RH_PLATFORM
-            : objectHierarchy == (uint)TpmRh.TPM_RH_OWNER || objectHierarchy == (uint)TpmRh.TPM_RH_ENDORSEMENT;
+            : objectHierarchy is ((uint)TpmRh.TPM_RH_OWNER) or ((uint)TpmRh.TPM_RH_ENDORSEMENT);
 
     /// <summary>
     /// Whether a persistent handle lies in the owner range <paramref name="auth"/> of <c>TPM_RH_OWNER</c> may
@@ -6443,7 +6435,7 @@ public static class TpmLifecycleTransitions
         //@auth must name a provisioning hierarchy (TPMI_RH_PROVISION: owner or platform, Part 2, clause 9.21)
         //— checked before the authorization ladder so no other permanent handle (the lockout hierarchy's
         //one-strike path included) is reachable through this command.
-        if(request.AuthHandle.Value != (uint)TpmRh.TPM_RH_OWNER && request.AuthHandle.Value != (uint)TpmRh.TPM_RH_PLATFORM)
+        if(request.AuthHandle.Value is not ((uint)TpmRh.TPM_RH_OWNER) and not ((uint)TpmRh.TPM_RH_PLATFORM))
         {
             //Structural: auth is TPMI_RH_PROVISION (Part 2, clause 9.21), EvictControl's first handle (H1).
             return Reject(state, TpmCcConstants.TPM_CC_EvictControl, HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), request);
@@ -9976,7 +9968,7 @@ public static class TpmLifecycleTransitions
         //session's bind (Part 1, clause 18.1: "The binding of the session is ignored"); a companion authorizes
         //none and folds nothing. Slot 0 authorizes the parent, so the parent's LIVE authValue is that term.
         //The nonce rides the action as a BORROW: the request keeps owning it across the decrypt step.
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.FirstSession.Value)], ResolvedObject(state, request.ParentHandle).AuthValue, request.FirstNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.DecryptSession.Value)], Tpm2bAuth.Empty, request.DecryptNonceCaller),
@@ -9987,13 +9979,13 @@ public static class TpmLifecycleTransitions
             state with
             {
                 NextAction = new TpmDecryptCreateSensitiveAction(
-                    request, request.RawParameterArea, decrypt.Session is not null,
-                    decrypt.Session?.SessionAlg ?? TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_NULL),
-                    decrypt.Session?.Symmetric ?? TpmtSymDef.Null,
-                    decrypt.Session?.SessionKey ?? TpmSimulatorState.EmptySessionKey,
-                    decrypt.EntityAuthValue,
-                    decrypt.NonceCaller,
-                    decrypt.Session?.NonceTpm ?? Tpm2bNonce.Empty),
+                    request, request.RawParameterArea, Session is not null,
+                    Session?.SessionAlg ?? TpmiAlgHash.FromValue(TpmAlgIdConstants.TPM_ALG_NULL),
+                    Session?.Symmetric ?? TpmtSymDef.Null,
+                    Session?.SessionKey ?? TpmSimulatorState.EmptySessionKey,
+                    EntityAuthValue,
+                    NonceCaller,
+                    Session?.NonceTpm ?? Tpm2bNonce.Empty),
                 ResponseIntent = null
             },
             "Create:DecryptRequested");
@@ -10876,10 +10868,10 @@ public static class TpmLifecycleTransitions
         if(!state.LoadedKeyedHashObjects.TryGetValue(request.ObjectHandle, out sealedObject)
             && !state.TransientObjects.TryGetValue(request.ObjectHandle, out key))
         {
-            TryResolvePersistentObject(state, request.ObjectHandle.Value, out key);
+            _ = TryResolvePersistentObject(state, request.ObjectHandle.Value, out key);
         }
 
-        TryResolveObjectChangeAuthParent(state, request.ParentHandle, out _, out parent);
+        _ = TryResolveObjectChangeAuthParent(state, request.ParentHandle, out _, out parent);
     }
 
     /// <summary>
@@ -11526,7 +11518,7 @@ public static class TpmLifecycleTransitions
     /// <returns>The resulting <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the decryption step.</returns>
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> ContinueRsaDecryptOverSession(TpmSimulatorState state, TpmRsaDecryptOverSessionRequested request)
     {
-        TryResolveRsaKeyHandle(state, request.KeyHandle, out TransientKeyState? key, out KeyedHashObjectState? keyedHash, out SequenceObjectState? sequence);
+        _ = TryResolveRsaKeyHandle(state, request.KeyHandle, out TransientKeyState? key, out KeyedHashObjectState? keyedHash, out SequenceObjectState? sequence);
         ReadOnlySpan<TpmAuthorizedEntity> entities = [BuildRsaAuthorizedEntity(key, keyedHash, sequence)];
 
         return DeclareFirstParameterDecryption(
@@ -11551,7 +11543,7 @@ public static class TpmLifecycleTransitions
     /// <returns>The resulting <see cref="TransitionResult{TState, TStackSymbol}"/> declaring the decryption action, or a rejection.</returns>
     private static TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> CompleteRsaDecryptOverSession(TpmSimulatorState state, TpmRsaDecryptOverSessionRequested request)
     {
-        TryResolveRsaKeyHandle(state, request.KeyHandle, out TransientKeyState? key, out KeyedHashObjectState? keyedHash, out SequenceObjectState? sequence);
+        _ = TryResolveRsaKeyHandle(state, request.KeyHandle, out TransientKeyState? key, out KeyedHashObjectState? keyedHash, out SequenceObjectState? sequence);
         ReadOnlySpan<TpmAuthorizedEntity> entities = [BuildRsaAuthorizedEntity(key, keyedHash, sequence)];
 
         var framing = new TpmOverSessionsFraming(TpmCcConstants.TPM_CC_RSA_Decrypt, BuildResponseSessions(state, request.Area, entities, request.ResolvedAuthValues));
@@ -12661,8 +12653,7 @@ public static class TpmLifecycleTransitions
         //ContinueGetRandomOverSession's rationale for not threading resolved records through the verify queue.
         KeyedHashObjectState sealedObject = state.LoadedKeyedHashObjects[request.ItemHandle];
 
-        PolicySessionState? policySession = null;
-        if(state.PolicySessions.TryGetValue(TpmiShPolicy.FromValue(request.FirstSession.Value), out policySession))
+        if(state.PolicySessions.TryGetValue(TpmiShPolicy.FromValue(request.FirstSession.Value), out PolicySessionState? policySession))
         {
             //A trial policy session (Part 1, clause 18.3) accumulates a policyDigest for prediction but authorizes
             //nothing; a trial session presented to authorize the unseal is rejected before the object's authPolicy
@@ -15021,7 +15012,7 @@ public static class TpmLifecycleTransitions
 
         //The decrypt slot's own authorized entity supplies the cipher key's authValue term, UNRESOLVED by the
         //session's bind (Part 1, clause 18.1); a companion authorizes none and folds nothing.
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.SignSessionHandle.Value)], ResolvedObject(state, request.SignHandle).AuthValue, request.SignNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.CompanionSessionHandle.Value)], Tpm2bAuth.Empty, request.CompanionNonceCaller),
@@ -15031,7 +15022,7 @@ public static class TpmLifecycleTransitions
 
         return DeclareAttestQualifyingDataDecryption(
             state, TpmCcConstants.TPM_CC_Quote, request, request.RawParameterArea, decryptIndex,
-            decrypt.Session, decrypt.EntityAuthValue, decrypt.NonceCaller, "Quote:OverSession:QualifyingDataDecryptRequested");
+            Session, EntityAuthValue, NonceCaller, "Quote:OverSession:QualifyingDataDecryptRequested");
     }
 
     /// <summary>
@@ -15409,7 +15400,7 @@ public static class TpmLifecycleTransitions
 
         //The decrypt slot's own authorized entity supplies the cipher key's authValue term, UNRESOLVED by the
         //session's bind (Part 1, clause 18.1); a companion authorizes none and folds nothing.
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.SignSessionHandle.Value)], ResolvedObject(state, request.SignHandle).AuthValue, request.SignNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.CompanionSessionHandle.Value)], Tpm2bAuth.Empty, request.CompanionNonceCaller),
@@ -15419,7 +15410,7 @@ public static class TpmLifecycleTransitions
 
         return DeclareAttestQualifyingDataDecryption(
             state, TpmCcConstants.TPM_CC_CertifyCreation, request, request.RawParameterArea, decryptIndex,
-            decrypt.Session, decrypt.EntityAuthValue, decrypt.NonceCaller, "CertifyCreation:OverSession:QualifyingDataDecryptRequested");
+            Session, EntityAuthValue, NonceCaller, "CertifyCreation:OverSession:QualifyingDataDecryptRequested");
     }
 
     /// <summary>
@@ -15853,7 +15844,7 @@ public static class TpmLifecycleTransitions
         //The decrypt slot's own authorized entity supplies the cipher key's authValue term, UNRESOLVED by the
         //session's bind (Part 1, clause 18.1): the certified object's for slot 0, the signing key's for slot 1,
         //none for a companion.
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.ObjectSessionHandle.Value)], ResolvedObject(state, request.ObjectHandle).AuthValue, request.ObjectNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.SignSessionHandle.Value)], ResolvedObject(state, request.SignHandle).AuthValue, request.SignNonceCaller),
@@ -15863,7 +15854,7 @@ public static class TpmLifecycleTransitions
 
         return DeclareAttestQualifyingDataDecryption(
             state, TpmCcConstants.TPM_CC_Certify, request, request.RawParameterArea, decryptIndex,
-            decrypt.Session, decrypt.EntityAuthValue, decrypt.NonceCaller, "Certify:OverSession:QualifyingDataDecryptRequested");
+            Session, EntityAuthValue, NonceCaller, "Certify:OverSession:QualifyingDataDecryptRequested");
     }
 
     /// <summary>
@@ -16253,7 +16244,7 @@ public static class TpmLifecycleTransitions
         //The decrypt slot's own authorized entity supplies the cipher key's authValue term, UNRESOLVED by the
         //session's bind (Part 1, clause 18.1): the endorsement hierarchy's for slot 0, the signing key's for slot
         //1, none for a companion.
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.PrivacyAdminSessionHandle.Value)], endorsementAuth, request.PrivacyAdminNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.SignSessionHandle.Value)], ResolvedObject(state, request.SignHandle).AuthValue, request.SignNonceCaller),
@@ -16263,7 +16254,7 @@ public static class TpmLifecycleTransitions
 
         return DeclareAttestQualifyingDataDecryption(
             state, TpmCcConstants.TPM_CC_GetTime, request, request.RawParameterArea, decryptIndex,
-            decrypt.Session, decrypt.EntityAuthValue, decrypt.NonceCaller, "GetTime:OverSession:QualifyingDataDecryptRequested");
+            Session, EntityAuthValue, NonceCaller, "GetTime:OverSession:QualifyingDataDecryptRequested");
     }
 
     /// <summary>
@@ -16633,7 +16624,7 @@ public static class TpmLifecycleTransitions
         _ = state.TryGetHierarchyAuthValue(request.PrivacyAdminHandle.Value, out Tpm2bAuth endorsementAuth);
         bool isNullSigner = request.SignHandle.Value == (uint)TpmRh.TPM_RH_NULL;
 
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.PrivacyAdminSessionHandle.Value)], endorsementAuth, request.PrivacyAdminNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.SignSessionHandle.Value)], isNullSigner ? Tpm2bAuth.Empty : ResolvedObject(state, request.SignHandle).AuthValue, request.SignNonceCaller),
@@ -16643,7 +16634,7 @@ public static class TpmLifecycleTransitions
 
         return DeclareAttestQualifyingDataDecryption(
             state, TpmCcConstants.TPM_CC_GetSessionAuditDigest, request, request.RawParameterArea, decryptIndex,
-            decrypt.Session, decrypt.EntityAuthValue, decrypt.NonceCaller, "GetSessionAuditDigest:OverSession:QualifyingDataDecryptRequested");
+            Session, EntityAuthValue, NonceCaller, "GetSessionAuditDigest:OverSession:QualifyingDataDecryptRequested");
     }
 
     /// <summary>
@@ -16886,7 +16877,7 @@ public static class TpmLifecycleTransitions
         System.Diagnostics.Debug.Assert(session is not null);
 
         TpmPendingSessionVerification? pending = BeginHierarchyAuthorization(
-            state, request.AuthHandle.Value, session!, request.SessionAttributes, request.NonceCaller, request.Hmac,
+            state, request.AuthHandle.Value, session, request.SessionAttributes, request.NonceCaller, request.Hmac,
             hasDecryptSession: false, decryptSessionAttributes: default, decryptSessionHandle: default, Tpm2bNonce.Empty,
             TpmtSymDef.Null, Tpm2bNonce.Empty,
             firstCommandParameterIsEncryptable: false, out TpmRcConstants refusal, out _);
@@ -17018,7 +17009,7 @@ public static class TpmLifecycleTransitions
         System.Diagnostics.Debug.Assert(session is not null);
 
         TpmPendingSessionVerification? pending = BeginHierarchyAuthorization(
-            state, request.AuthHandle.Value, session!, request.SessionAttributes, request.NonceCaller, request.Hmac,
+            state, request.AuthHandle.Value, session, request.SessionAttributes, request.NonceCaller, request.Hmac,
             hasDecryptSession: false, decryptSessionAttributes: default, decryptSessionHandle: default, Tpm2bNonce.Empty,
             TpmtSymDef.Null, Tpm2bNonce.Empty,
             firstCommandParameterIsEncryptable: false, out TpmRcConstants refusal, out _);
@@ -19714,7 +19705,7 @@ public static class TpmLifecycleTransitions
         //The decrypt slot's own authorized entity supplies the cipher key's authValue term, UNRESOLVED by the
         //session's bind (Part 1, clause 18.1): the signing key's for slot 0, the owner hierarchy's or the Index's
         //for slot 1 — whichever @authHandle named — and none for a companion.
-        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) decrypt = decryptIndex switch
+        (HmacSessionState? Session, Tpm2bAuth EntityAuthValue, Tpm2bNonce NonceCaller) = decryptIndex switch
         {
             0 => (state.HmacSessions[TpmiShHmac.FromValue(request.SignSessionHandle.Value)], ResolvedObject(state, request.SignHandle).AuthValue, request.SignNonceCaller),
             1 => (state.HmacSessions[TpmiShHmac.FromValue(request.AuthorizingSessionHandle.Value)],
@@ -19726,7 +19717,7 @@ public static class TpmLifecycleTransitions
 
         return DeclareAttestQualifyingDataDecryption(
             state, TpmCcConstants.TPM_CC_NV_Certify, request, request.RawParameterArea, decryptIndex,
-            decrypt.Session, decrypt.EntityAuthValue, decrypt.NonceCaller, "NvCertify:OverSession:QualifyingDataDecryptRequested");
+            Session, EntityAuthValue, NonceCaller, "NvCertify:OverSession:QualifyingDataDecryptRequested");
     }
 
     /// <summary>
@@ -24232,7 +24223,7 @@ public static class TpmLifecycleTransitions
         //38-39 answers this condition BARE — no RC_ modifier at all — because the failing condition spans two
         //parameters (offset AND operandB.size) jointly and the reference itself cannot name one field; N stays
         //zero (Table 15's last sentence).
-        if((uint)request.Offset + (uint)request.OperandB.Length > TpmsTimeInfo.SerializedSize)
+        if(request.Offset + (uint)request.OperandB.Length > TpmsTimeInfo.SerializedSize)
         {
             return Reject(state, TpmCcConstants.TPM_CC_PolicyCounterTimer, TpmRcConstants.TPM_RC_RANGE, request);
         }
@@ -27794,13 +27785,13 @@ public static class TpmLifecycleTransitions
             return result;
         }
 
-        if(completed.ResponseIntent!.ResponseCode == TpmRcConstants.TPM_RC_SUCCESS)
+        if(completed.ResponseIntent.ResponseCode == TpmRcConstants.TPM_RC_SUCCESS)
         {
             return result with
             {
                 NextState = completed with
                 {
-                    NextAction = new TpmFrameNoAuthSessionsAction(frame, completed.ResponseIntent!),
+                    NextAction = new TpmFrameNoAuthSessionsAction(frame, completed.ResponseIntent),
                     ResponseIntent = null,
                     PendingSessionFrame = null
                 }
@@ -27846,7 +27837,7 @@ public static class TpmLifecycleTransitions
         TpmSimulatorState completed = result.NextState;
         TpmiShHmac? exclusiveAuditSession = completed.ExclusiveAuditSession;
 
-        if(completed.ResponseIntent!.ResponseCode == TpmRcConstants.TPM_RC_SUCCESS)
+        if(completed.ResponseIntent.ResponseCode == TpmRcConstants.TPM_RC_SUCCESS)
         {
             exclusiveAuditSession = completed.PendingAudit switch
             {

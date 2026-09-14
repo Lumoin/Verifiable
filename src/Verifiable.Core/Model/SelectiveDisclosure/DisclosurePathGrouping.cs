@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Lumoin.Veritas.JsonPointer;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;
@@ -84,11 +82,11 @@ public static class DisclosurePathGrouping
 
             if(!grouped.TryGetValue(parent.Value, out HashSet<string>? leaves))
             {
-                leaves = new HashSet<string>(StringComparer.Ordinal);
+                leaves = new(StringComparer.Ordinal);
                 grouped[parent.Value] = leaves;
             }
 
-            leaves.Add(leafName);
+            _ = leaves.Add(leafName);
         }
 
         //Convert to read-only interface.

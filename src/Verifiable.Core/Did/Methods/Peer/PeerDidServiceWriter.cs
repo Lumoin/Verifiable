@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using Verifiable.Core.Model.Did;
@@ -46,12 +44,12 @@ internal static class PeerDidServiceWriter
         }
 
         StringBuilder builder = new();
-        builder.Append("{\"t\":");
+        _ = builder.Append("{\"t\":");
         AppendQuoted(builder, AbbreviateType(service.Type));
 
         if(service.ServiceEndpoint is not null)
         {
-            builder.Append(",\"s\":");
+            _ = builder.Append(",\"s\":");
             AppendQuoted(builder, service.ServiceEndpoint);
         }
         else if(service.ServiceEndpointMap is not null)
@@ -62,11 +60,11 @@ internal static class PeerDidServiceWriter
         //An explicit id is carried verbatim; an id-less service takes its positional default on resolution.
         if(service.Id is not null)
         {
-            builder.Append(",\"id\":");
+            _ = builder.Append(",\"id\":");
             AppendQuoted(builder, service.Id.ToString());
         }
 
-        builder.Append('}');
+        _ = builder.Append('}');
 
         return builder.ToString();
     }
@@ -75,12 +73,12 @@ internal static class PeerDidServiceWriter
     //The abbreviated endpoint object preserves the lookup-table order: uri, then accept (a), then routingKeys (r).
     private static void AppendEndpointMap(StringBuilder builder, IDictionary<string, object> endpoint)
     {
-        builder.Append(",\"s\":{");
+        _ = builder.Append(",\"s\":{");
         bool wrote = false;
 
         if(endpoint.TryGetValue("uri", out object? uri) && uri is string uriValue)
         {
-            builder.Append("\"uri\":");
+            _ = builder.Append("\"uri\":");
             AppendQuoted(builder, uriValue);
             wrote = true;
         }
@@ -92,10 +90,10 @@ internal static class PeerDidServiceWriter
 
         if(endpoint.TryGetValue("routingKeys", out object? routing) && routing is IEnumerable<string> routingValues)
         {
-            AppendArray(builder, "\"r\":", routingValues, wrote);
+            _ = AppendArray(builder, "\"r\":", routingValues, wrote);
         }
 
-        builder.Append('}');
+        _ = builder.Append('}');
     }
 
 
@@ -103,23 +101,23 @@ internal static class PeerDidServiceWriter
     {
         if(needsLeadingComma)
         {
-            builder.Append(',');
+            _ = builder.Append(',');
         }
 
-        builder.Append(key).Append('[');
+        _ = builder.Append(key).Append('[');
         bool first = true;
         foreach(string value in values)
         {
             if(!first)
             {
-                builder.Append(',');
+                _ = builder.Append(',');
             }
 
             AppendQuoted(builder, value);
             first = false;
         }
 
-        builder.Append(']');
+        _ = builder.Append(']');
 
         return true;
     }
@@ -132,46 +130,46 @@ internal static class PeerDidServiceWriter
     //Writes a JSON string literal, escaping the RFC 8259 §7 mandatory characters.
     private static void AppendQuoted(StringBuilder builder, string value)
     {
-        builder.Append('"');
+        _ = builder.Append('"');
         foreach(char character in value)
         {
             switch(character)
             {
                 case '"':
-                    builder.Append("\\\"");
+                    _ = builder.Append("\\\"");
                     break;
                 case '\\':
-                    builder.Append("\\\\");
+                    _ = builder.Append("\\\\");
                     break;
                 case '\b':
-                    builder.Append("\\b");
+                    _ = builder.Append("\\b");
                     break;
                 case '\f':
-                    builder.Append("\\f");
+                    _ = builder.Append("\\f");
                     break;
                 case '\n':
-                    builder.Append("\\n");
+                    _ = builder.Append("\\n");
                     break;
                 case '\r':
-                    builder.Append("\\r");
+                    _ = builder.Append("\\r");
                     break;
                 case '\t':
-                    builder.Append("\\t");
+                    _ = builder.Append("\\t");
                     break;
                 default:
                     if(character < ' ')
                     {
-                        builder.Append("\\u").Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
+                        _ = builder.Append("\\u").Append(((int)character).ToString("x4", CultureInfo.InvariantCulture));
                     }
                     else
                     {
-                        builder.Append(character);
+                        _ = builder.Append(character);
                     }
 
                     break;
             }
         }
 
-        builder.Append('"');
+        _ = builder.Append('"');
     }
 }

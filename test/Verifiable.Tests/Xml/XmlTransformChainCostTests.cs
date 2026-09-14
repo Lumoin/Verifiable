@@ -44,7 +44,7 @@ internal sealed class XmlTransformChainCostTests
 
     private static XmlReferenceResolver CreateFixedResolver(byte[] octets)
     {
-        return (ReadOnlySpan<byte> uri, BaseMemoryPool pool, out PooledMemory? result) =>
+        return (uri, pool, out result) =>
         {
             result = PooledMemory.FromBytes(octets, pool, BufferTags.XmlDigestInput);
 
@@ -62,13 +62,13 @@ internal sealed class XmlTransformChainCostTests
     private static byte[] BuildMegabyteScalePayloadDocument()
     {
         var builder = new StringBuilder(PayloadElementCount * 24);
-        builder.Append("<Root>");
+        _ = builder.Append("<Root>");
         for(int i = 0; i < PayloadElementCount; ++i)
         {
-            builder.Append("<Item>content</Item>");
+            _ = builder.Append("<Item>content</Item>");
         }
 
-        builder.Append("</Root>");
+        _ = builder.Append("</Root>");
 
         return Encoding.UTF8.GetBytes(builder.ToString());
     }
@@ -90,7 +90,7 @@ internal sealed class XmlTransformChainCostTests
         var builder = new StringBuilder((QuantumCount * 5) + 16);
         for(int i = 0; i < QuantumCount; ++i)
         {
-            builder.Append("AAAA\n");
+            _ = builder.Append("AAAA\n");
         }
 
         byte[] noise = Encoding.ASCII.GetBytes(builder.ToString());
@@ -197,8 +197,8 @@ internal sealed class XmlTransformChainCostTests
         var references = new StringBuilder(WideReferenceCount * 128);
         for(int i = 0; i < WideReferenceCount; ++i)
         {
-            targets.Append(CultureInfo.InvariantCulture, $"<Target Id=\"target{i:D4}\">content{i}</Target>");
-            references.Append(CultureInfo.InvariantCulture,
+            _ = targets.Append(CultureInfo.InvariantCulture, $"<Target Id=\"target{i:D4}\">content{i}</Target>");
+            _ = references.Append(CultureInfo.InvariantCulture,
                 $"""<Reference URI="#target{i:D4}"><DigestMethod Algorithm="{DigestMethodAlgorithm}"/><DigestValue>AQ==</DigestValue></Reference>""");
         }
 

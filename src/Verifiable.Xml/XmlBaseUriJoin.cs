@@ -86,8 +86,8 @@ internal static class XmlBaseUriJoin
         bool isBaseTrailingDotDot = baseComponents.Path.SequenceEqual(".."u8) || baseComponents.Path.EndsWith("/.."u8);
         if(reference.HasScheme)
         {
-            destination.AddRange(reference.Scheme);
-            destination.Add((byte)':');
+            _ = destination.AddRange(reference.Scheme);
+            _ = destination.Add((byte)':');
             AppendAuthority(reference, destination);
             RemoveDotSegments(reference.Path, pool, destination);
             AppendQuery(reference.Query, reference.HasQuery, destination);
@@ -97,8 +97,8 @@ internal static class XmlBaseUriJoin
 
         if(baseComponents.HasScheme)
         {
-            destination.AddRange(baseComponents.Scheme);
-            destination.Add((byte)':');
+            _ = destination.AddRange(baseComponents.Scheme);
+            _ = destination.Add((byte)':');
         }
 
         if(reference.HasAuthority)
@@ -113,10 +113,10 @@ internal static class XmlBaseUriJoin
         AppendAuthority(baseComponents, destination);
         if(reference.Path.IsEmpty)
         {
-            destination.AddRange(baseComponents.Path);
+            _ = destination.AddRange(baseComponents.Path);
             if(isBaseTrailingDotDot)
             {
-                destination.Add((byte)'/');
+                _ = destination.Add((byte)'/');
             }
 
             bool isQueryFromReference = reference.HasQuery;
@@ -139,23 +139,23 @@ internal static class XmlBaseUriJoin
         using var merged = new PooledStructList<byte>(pool, baseValue.Length + referenceValue.Length + 2);
         if(baseComponents.HasAuthority && baseComponents.Path.IsEmpty)
         {
-            merged.Add((byte)'/');
+            _ = merged.Add((byte)'/');
         }
         else if(isBaseTrailingDotDot)
         {
-            merged.AddRange(baseComponents.Path);
-            merged.Add((byte)'/');
+            _ = merged.AddRange(baseComponents.Path);
+            _ = merged.Add((byte)'/');
         }
         else
         {
             int lastSeparator = baseComponents.Path.LastIndexOf((byte)'/');
             if(lastSeparator >= 0)
             {
-                merged.AddRange(baseComponents.Path[..(lastSeparator + 1)]);
+                _ = merged.AddRange(baseComponents.Path[..(lastSeparator + 1)]);
             }
         }
 
-        merged.AddRange(reference.Path);
+        _ = merged.AddRange(reference.Path);
         RemoveDotSegments(merged.AsSpan(), pool, destination);
         AppendQuery(reference.Query, reference.HasQuery, destination);
     }
@@ -231,29 +231,29 @@ internal static class XmlBaseUriJoin
             isLastSegmentDotSegment = false;
             if(retained.Count > 0)
             {
-                retained.Add((byte)'/');
+                _ = retained.Add((byte)'/');
             }
 
-            retained.AddRange(segment);
+            _ = retained.AddRange(segment);
         }
 
         bool hasTrailingSeparator = isEndingWithSeparator || isLastSegmentDotSegment;
         if(isAbsolute)
         {
-            destination.Add((byte)'/');
+            _ = destination.Add((byte)'/');
         }
 
         for(int i = 0; i < upCount; ++i)
         {
-            destination.AddRange("../"u8);
+            _ = destination.AddRange("../"u8);
         }
 
         if(retained.Count > 0)
         {
-            destination.AddRange(retained.AsSpan());
+            _ = destination.AddRange(retained.AsSpan());
             if(hasTrailingSeparator)
             {
-                destination.Add((byte)'/');
+                _ = destination.Add((byte)'/');
             }
         }
     }
@@ -320,8 +320,8 @@ internal static class XmlBaseUriJoin
     {
         if(components.HasAuthority)
         {
-            destination.AddRange("//"u8);
-            destination.AddRange(components.Authority);
+            _ = destination.AddRange("//"u8);
+            _ = destination.AddRange(components.Authority);
         }
     }
 
@@ -336,8 +336,8 @@ internal static class XmlBaseUriJoin
     {
         if(hasQuery)
         {
-            destination.Add((byte)'?');
-            destination.AddRange(query);
+            _ = destination.Add((byte)'?');
+            _ = destination.AddRange(query);
         }
     }
 }

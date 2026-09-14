@@ -1,11 +1,7 @@
-using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -100,7 +96,7 @@ internal class HwTpmCapabilityTests
 
     [TestMethod]
     public async Task DumpSupportedAlgorithms()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -162,7 +158,7 @@ internal class HwTpmCapabilityTests
 
     [TestMethod]
     public async Task DumpPcrBanks()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -234,7 +230,7 @@ internal class HwTpmCapabilityTests
 
     [TestMethod]
     public async Task DumpAllPcrBanksAndValues()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 
@@ -311,7 +307,7 @@ internal class HwTpmCapabilityTests
         var remainingPcrs = new HashSet<int>();
         for(int i = 0; i < pcrCount; i++)
         {
-            remainingPcrs.Add(i);
+            _ = remainingPcrs.Add(i);
         }
 
         int maxIterations = 10;
@@ -364,7 +360,7 @@ internal class HwTpmCapabilityTests
                 byte[] digestCopy = digest.AsReadOnlySpan().ToArray();
 
                 results.Add((pcrIndex, digestCopy, response.PcrUpdateCounter));
-                remainingPcrs.Remove(pcrIndex);
+                _ = remainingPcrs.Remove(pcrIndex);
             }
         }
 
@@ -421,7 +417,7 @@ internal class HwTpmCapabilityTests
             {
                 if((bitmap[byteIndex] & (1 << bitIndex)) != 0)
                 {
-                    indices.Add(byteIndex * 8 + bitIndex);
+                    indices.Add((byteIndex * 8) + bitIndex);
                 }
             }
         }
@@ -453,5 +449,5 @@ internal class HwTpmCapabilityTests
         }
 
         return true;
-    }    
+    }
 }

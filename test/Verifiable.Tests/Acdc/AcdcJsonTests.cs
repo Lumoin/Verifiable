@@ -47,7 +47,7 @@ internal sealed class AcdcJsonTests
         MessageFieldMap map = AcdcJson.DecodeFieldMap(input.Memory);
 
         Assert.IsTrue(map.TryGetValue(AcdcMessageFields.Attribute, out object? attribute));
-        Assert.IsInstanceOfType<MessageFieldMap>(attribute, "A nested section block must decode as an order-preserving field map.");
+        _ = Assert.IsInstanceOfType<MessageFieldMap>(attribute, "A nested section block must decode as an order-preserving field map.");
     }
 
 

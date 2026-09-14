@@ -169,5 +169,26 @@ public static class ExchangeContextServerExtensions
             ArgumentNullException.ThrowIfNull(issuer);
             context[Pipeline.AuthorizationServerHandlers.ResolvedIssuerKey] = issuer;
         }
+
+
+        /// <summary>
+        /// Gets the raw authorization code an authorize-completion endpoint generated during
+        /// <c>BuildInputAsync</c>, for consumption by the non-JARM redirect builder in
+        /// <c>BuildResponse</c>. The persisted <c>ServerCodeIssuedState</c> carries only the
+        /// SHA-256 hash of this value (<see href="https://www.rfc-editor.org/rfc/rfc6749#section-10.5">RFC 6749 §10.5</see>:
+        /// "Authorization codes MUST be short lived and single-use.") — the raw code exists
+        /// only transiently, here and on the wire.
+        /// </summary>
+        public string? RawAuthorizationCode =>
+            context.TryGetValue(Pipeline.AuthorizationServerHandlers.RawAuthorizationCodeKey, out object? v)
+                && v is string code ? code : null;
+
+        /// <summary>Sets the raw authorization code generated during authorize-completion processing.</summary>
+        /// <param name="rawCode">The raw, unhashed authorization code.</param>
+        public void SetRawAuthorizationCode(string rawCode)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(rawCode);
+            context[Pipeline.AuthorizationServerHandlers.RawAuthorizationCodeKey] = rawCode;
+        }
     }
 }

@@ -1,7 +1,7 @@
 <Project>
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -28,8 +28,7 @@
     AND !$(MSBuildProjectName.EndsWith('.Benchmarks'))
     AND $(MSBuildProjectName) != 'Verifiable'
     AND $(MSBuildProjectName) != 'Verifiable.BouncyCastle'
-    AND $(MSBuildProjectName) != 'Verifiable.Microsoft'
-    AND $(MSBuildProjectName) != 'Verifiable.Libsodium'">
+    AND $(MSBuildProjectName) != 'Verifiable.Microsoft'">
     <SupportedPlatform Include="browser" />
   </ItemGroup>
 
@@ -133,7 +132,9 @@
          System.Security.Cryptography.Pkcs assembly into every project's closure (MSB3277). -->
     <PackageReleaseNotes>See the full changelog at https://github.com/lumoin/Verifiable/blob/main/CHANGELOG.md.</PackageReleaseNotes>
 
-    <AnalysisLevel>latest</AnalysisLevel>
+    <!-- The analysis level is pinned to the rule set this tree builds clean at. Raising it (11.0) is
+         its own lane, taken with the full diagnostic inventory in hand. -->
+    <AnalysisLevel>10.0</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 

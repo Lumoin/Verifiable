@@ -1,23 +1,16 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Linq;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
@@ -28,7 +21,6 @@ using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.TokenExchange;
-using Verifiable.Server;
 using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -147,7 +139,7 @@ internal sealed class AgenticFlowCapstoneTests
             "The six hosts must present six distinct TLS identities.");
 
         using Activity root = new("agentic-flow-capstone");
-        root.Start();
+        _ = root.Start();
 
         //Step 1 — unauthenticated probe at RS1: 401, RFC 6750 §3 Bearer challenge WITHOUT an error
         //code, carrying the RFC 9728 §5.1 resource_metadata parameter that starts discovery.
@@ -658,7 +650,7 @@ internal sealed class AgenticFlowCapstoneTests
     {
         Assert.IsTrue(response.Headers.TryGetValues("WWW-Authenticate", out IEnumerable<string>? challenges),
             "The refusal must carry a WWW-Authenticate challenge.");
-        string challenge = challenges!.Single();
+        string challenge = challenges.Single();
         Assert.IsTrue(BearerTokenChallenge.TryParse(challenge, out BearerTokenChallengeParameters parameters),
             $"The challenge must parse under the RFC 6750 §3 grammar. Header: {challenge}");
 
@@ -756,7 +748,7 @@ internal sealed class AgenticFlowCapstoneTests
     //can discard, yielding a no-op "tamper" that still verifies.
     private static string TamperSignature(string compactJws)
     {
-        int signatureStart = compactJws.LastIndexOf('.') + 1;
+        int signatureStart = compactJws.LastIndexOf('.', StringComparison.Ordinal) + 1;
         char first = compactJws[signatureStart];
         char replacement = first == 'A' ? 'B' : 'A';
 
@@ -941,13 +933,13 @@ internal sealed class AgenticFlowCapstoneTests
     private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)
     {
         StringBuilder sb = new();
-        sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
+        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
         foreach(KeyValuePair<string, string> member in jwk)
         {
-            sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
         }
 
-        sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
+        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
 
         return sb.ToString();
     }
@@ -1468,7 +1460,7 @@ internal sealed class AgenticFlowCapstoneTests
         {
             host.Registrations[updated.TenantId.Value] = updated;
             host.Registrations[updated.ClientId] = updated;
-            host.Server.UpdateClient(original, updated, new ExchangeContext());
+            host.Server.UpdateClient(original, updated, []);
 
             return updated;
         }

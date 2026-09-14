@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography;
@@ -41,7 +40,7 @@ public sealed class MessageFieldMap: OrderedDictionary<string, object?>
     /// Creates an empty message field map that compares field labels with the given comparer.
     /// </summary>
     /// <param name="comparer">The comparer for field labels, or <see langword="null"/> for the default.</param>
-    public MessageFieldMap(IEqualityComparer<string>? comparer): base(comparer)
+    public MessageFieldMap(IEqualityComparer<string>? comparer) : base(comparer)
     {
     }
 
@@ -52,7 +51,7 @@ public sealed class MessageFieldMap: OrderedDictionary<string, object?>
     /// </summary>
     /// <param name="capacity">The initial number of fields the map can hold.</param>
     /// <param name="comparer">The comparer for field labels, or <see langword="null"/> for the default.</param>
-    public MessageFieldMap(int capacity, IEqualityComparer<string>? comparer): base(capacity, comparer)
+    public MessageFieldMap(int capacity, IEqualityComparer<string>? comparer) : base(capacity, comparer)
     {
     }
 

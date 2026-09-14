@@ -1,13 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
-using Lumoin.Base;
 using Verifiable.Acdc;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -643,7 +638,7 @@ internal static class AcdcFlowKit
     /// <returns>The reconstructed signature.</returns>
     private static Signature DeserializeSignature(string signatureBase64, BaseMemoryPool pool)
     {
-        int maxLength = (signatureBase64.Length / 4) * 3;
+        int maxLength = signatureBase64.Length / 4 * 3;
         using IMemoryOwner<byte> decoded = pool.Rent(maxLength);
         if(!Convert.TryFromBase64String(signatureBase64, decoded.Memory.Span, out int written))
         {
@@ -755,7 +750,7 @@ internal static class AcdcFlowKit
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         IMemoryOwner<byte> owner = pool.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return (owner, length, said);
     }
@@ -788,7 +783,7 @@ internal static class AcdcFlowKit
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         using IMemoryOwner<byte> owner = pool.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return await CesrSaid.ComputeAsync(owner.Memory[..length], Code, AcdcTestSupport.AgileDigest, pool).ConfigureAwait(false);
     }
@@ -818,27 +813,12 @@ internal static class AcdcFlowKit
     {
         int length = Encoding.UTF8.GetByteCount(text);
         IMemoryOwner<byte> owner = pool.Rent(length);
-        Encoding.UTF8.GetBytes(text, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(text, owner.Memory.Span);
         disposables.Add(owner);
 
         return owner.Memory[..length];
     }
 
-
-    /// <summary>Adapts the entry list to the async stream the replayer consumes.</summary>
-    /// <param name="entries">The log entries.</param>
-    /// <param name="cancellationToken">A token to cancel the enumeration.</param>
-    /// <returns>The entries as an async stream.</returns>
-    private static async IAsyncEnumerable<LogEntry<KeriKeyEvent, CryptoProof>> ToAsync(List<LogEntry<KeriKeyEvent, CryptoProof>> entries, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
-    {
-        foreach(LogEntry<KeriKeyEvent, CryptoProof> entry in entries)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            yield return entry;
-
-            await Task.CompletedTask.ConfigureAwait(false);
-        }
-    }
 
 
     /// <summary>One party in a minted edge chain: its AID, its disclosed ACDC, and its signed KEL.</summary>

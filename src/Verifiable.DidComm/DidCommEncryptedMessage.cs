@@ -39,7 +39,7 @@ public sealed class DidCommEncryptedMessage: SensitiveMemory, IEquatable<DidComm
     /// Optional OTel activity spanning this message's lifetime. Stopped on
     /// <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/> when no OTel listener is active.
     /// </param>
-    public DidCommEncryptedMessage(IMemoryOwner<byte> wireBytes, Tag tag, Activity? lifetime = null): base(wireBytes, tag, lifetime)
+    public DidCommEncryptedMessage(IMemoryOwner<byte> wireBytes, Tag tag, Activity? lifetime = null) : base(wireBytes, tag, lifetime)
     {
     }
 

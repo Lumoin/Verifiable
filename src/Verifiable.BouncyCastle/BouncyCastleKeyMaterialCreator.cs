@@ -5,7 +5,6 @@ using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Security;
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -112,9 +111,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = CryptoTags.Ed25519PrivateKey.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var generator = new Ed25519KeyPairGenerator();
@@ -147,9 +146,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = CryptoTags.X25519PrivateKey.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var generator = new X25519KeyPairGenerator();
@@ -198,9 +197,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = CryptoTags.P256ExchangePrivateKey.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var secCurve = SecNamedCurves.GetByName("secp256r1");
@@ -463,9 +462,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         //Brainpool curves live in the TeleTrust namespace; ECNamedCurveTable
@@ -527,9 +526,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         X9ECParameters curve = ECNamedCurveTable.GetByName(brainpoolCurveName)
@@ -587,9 +586,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var curve = SecNamedCurves.GetByName(secCurveName);
@@ -642,9 +641,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var curve = SecNamedCurves.GetByName(secCurveName);
@@ -704,9 +703,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var generator = new RsaKeyPairGenerator();
@@ -752,9 +751,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var keyGenParameters = new MLDsaKeyGenerationParameters(Random, parameters);
@@ -787,9 +786,9 @@ public static class BouncyCastleKeyMaterialCreator
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
             CryptoAlgorithm keyAlgorithm = privateKeyTag.Get<CryptoAlgorithm>();
-            activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-            activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-            activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+            _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+            _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+            _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
         }
 
         var keyGenParameters = new MLKemKeyGenerationParameters(Random, parameters);

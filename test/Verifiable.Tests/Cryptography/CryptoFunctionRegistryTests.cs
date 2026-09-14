@@ -5,8 +5,8 @@ using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.Cryptography
 {
-[TestClass]
-internal class CryptoFunctionRegistryTests
+    [TestClass]
+    internal class CryptoFunctionRegistryTests
     {
         private static byte[] TestData { get; } = Encoding.UTF8.GetBytes("Hello, CryptoFunctionRegistryTests!");
 

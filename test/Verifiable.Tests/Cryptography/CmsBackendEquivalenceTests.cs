@@ -1,8 +1,6 @@
-using System;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -300,7 +298,7 @@ internal sealed class CmsBackendEquivalenceTests
         using CmsSignedData carrier = CmsSignedDataTestFactory.SignAsCAdES("the cross-backend content"u8, signerCertificate, SigningTime);
         using CmsSignedData tampered = CmsSignedDataTestFactory.TamperContent(carrier, "the cross-backend content"u8);
 
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () =>
             {
                 using CmsVerifiedContent _ = await Resolve(ManagedQualifier)(tampered, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
@@ -358,7 +356,7 @@ internal sealed class CmsBackendEquivalenceTests
         foreach(string? qualifier in new[] { null, BouncyCastleQualifier, ManagedQualifier })
         {
             VerifyDetachedCmsSignedDataDelegate verify = ResolveDetached(qualifier);
-            await Assert.ThrowsExactlyAsync<CryptographicException>(
+            _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
                 async () =>
                 {
                     using CmsVerifiedContent _ = await verify(encapsulating, same, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
@@ -384,7 +382,7 @@ internal sealed class CmsBackendEquivalenceTests
         foreach(CmsSignedAttribute attribute in reference.SignedAttributes)
         {
             Assert.IsTrue(other.TryGetSignedAttribute(attribute.AttributeType, out CmsSignedAttribute? match), $"The {backendName} backend must surface the signed attribute {attribute.AttributeType}.");
-            Assert.IsTrue(attribute.AsReadOnlySpan().SequenceEqual(match!.AsReadOnlySpan()), $"The signed attribute {attribute.AttributeType} must have the same value under the {backendName} backend.");
+            Assert.IsTrue(attribute.AsReadOnlySpan().SequenceEqual(match.AsReadOnlySpan()), $"The signed attribute {attribute.AttributeType} must have the same value under the {backendName} backend.");
         }
     }
 

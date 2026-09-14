@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
@@ -96,8 +96,8 @@ internal sealed class MdocCborMsoReaderTests
         Assert.AreEqual(CoseKeyCurves.P256, deviceKey.Curve);
         Assert.IsNotNull(deviceKey.X);
         Assert.IsNotNull(deviceKey.Y);
-        Assert.HasCount(32, deviceKey.X!.Value);
-        Assert.HasCount(32, deviceKey.Y!.Value);
+        Assert.HasCount(32, deviceKey.X.Value);
+        Assert.HasCount(32, deviceKey.Y.Value);
         Assert.IsNull(mso.DeviceKeyInfo.EncodedKeyAuthorizations);
         Assert.IsNull(mso.DeviceKeyInfo.EncodedKeyInfo);
     }

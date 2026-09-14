@@ -1,9 +1,6 @@
-using System.Text.Json;
 using CsCheck;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Json.Sd;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
@@ -216,7 +213,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             Assert.HasCount(disclosable.Count, disclosures);
             Assert.IsTrue(mandatory.ContainsKey(parentName), "Parent object must remain in mandatory.");
 
-            var mandatoryNested = (Dictionary<string, object?>)mandatory[parentName]!;
+            var mandatoryNested = (Dictionary<string, object?>)mandatory[parentName];
             foreach(string key in leaves.Keys)
             {
                 if(!disclosable.Contains(key))
@@ -288,7 +285,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
             {
                 if(mask[i])
                 {
-                    subset.Add(keys[i]);
+                    _ = subset.Add(keys[i]);
                 }
             }
 
@@ -299,7 +296,7 @@ internal sealed class SdJwtRfc9901IssuancePropertyTests
 
     private static HashSet<CredentialPath> ToCredentialPaths(IEnumerable<string> propertyNames)
     {
-        return new HashSet<CredentialPath>(
+        return new(
             propertyNames.Select(k => CredentialPath.FromJsonPointer($"/{EscapeJsonPointer(k)}")));
     }
 

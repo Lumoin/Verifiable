@@ -1,12 +1,10 @@
-using System;
+using Lumoin.Base.Libsodium;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text;
-using System.Threading.Tasks;
-using Lumoin.Base.Libsodium;
 using Verifiable.Cryptography;
 using Verifiable.Libsodium;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -374,7 +372,7 @@ namespace Verifiable.Tests.Cryptography
             byte[] wrongLengthPrivateKey = new byte[LibsodiumCrypto.Ed25519SeedLength - 1];
             ReadOnlyMemory<byte> data = TestData;
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await LibsodiumCryptographicFunctions.SignEd25519Async(wrongLengthPrivateKey, data, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
                 .ConfigureAwait(false)).ConfigureAwait(false);
         }
@@ -392,7 +390,7 @@ namespace Verifiable.Tests.Cryptography
             byte[] arbitrarySignature = new byte[LibsodiumCrypto.Ed25519SignatureLength];
             ReadOnlyMemory<byte> data = TestData;
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await LibsodiumCryptographicFunctions.VerifyEd25519Async(data, arbitrarySignature, wrongLengthPublicKey, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
                 .ConfigureAwait(false)).ConfigureAwait(false);
         }
@@ -410,7 +408,7 @@ namespace Verifiable.Tests.Cryptography
             byte[] wrongLengthSignature = new byte[LibsodiumCrypto.Ed25519SignatureLength - 1];
             ReadOnlyMemory<byte> data = TestData;
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await LibsodiumCryptographicFunctions.VerifyEd25519Async(data, wrongLengthSignature, arbitraryPublicKey, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch))
                 .ConfigureAwait(false)).ConfigureAwait(false);
         }

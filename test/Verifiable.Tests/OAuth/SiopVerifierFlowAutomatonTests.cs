@@ -24,18 +24,18 @@ internal sealed class SiopVerifierFlowAutomatonTests
     {
         var pda = SiopVerifierFlowAutomaton.Create("siop-run-1", TimeProvider);
 
-        await pda.StepAsync(Prepared(), TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(pda.CurrentState);
+        _ = await pda.StepAsync(Prepared(), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(pda.CurrentState);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new SiopResponsePosted { IdToken = "header.body.sig", ReceivedAt = TimeProvider.GetUtcNow() },
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsInstanceOfType<SiopResponseReceivedState>(pda.CurrentState);
-        Assert.IsInstanceOfType<ValidateSelfIssuedIdToken>(pda.CurrentState.NextAction,
+        _ = Assert.IsInstanceOfType<SiopResponseReceivedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<ValidateSelfIssuedIdToken>(pda.CurrentState.NextAction,
             "The received-but-unverified state must declare the validation action the executor runs.");
 
         //The executor would produce this input; the PDA transition itself is pure.
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new SelfIssuedAuthenticationVerified
             {
                 Subject = "urn:ietf:params:oauth:jwk-thumbprint:sha-256:abc",
@@ -45,7 +45,7 @@ internal sealed class SiopVerifierFlowAutomatonTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<SelfIssuedAuthenticationVerifiedState>(pda.CurrentState);
         Assert.IsTrue(pda.IsAccepted, "The verified state is the PDA's accept state.");
     }
 
@@ -55,15 +55,15 @@ internal sealed class SiopVerifierFlowAutomatonTests
     {
         var pda = SiopVerifierFlowAutomaton.Create("siop-run-2", TimeProvider);
 
-        await pda.StepAsync(Prepared(), TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(Prepared(), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(
             new SiopResponsePosted { IdToken = "header.body.sig", ReceivedAt = TimeProvider.GetUtcNow() },
             TestContext.CancellationToken).ConfigureAwait(false);
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new SiopFlowFailed { Reason = "id_token validation failed.", FailedAt = TimeProvider.GetUtcNow() },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(pda.CurrentState);
         Assert.IsFalse(pda.IsAccepted);
     }
 

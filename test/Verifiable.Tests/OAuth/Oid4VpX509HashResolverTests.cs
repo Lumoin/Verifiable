@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -68,7 +68,7 @@ internal sealed class Oid4VpX509HashResolverTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(chain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(now);
 
@@ -109,11 +109,11 @@ internal sealed class Oid4VpX509HashResolverTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(chain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(now);
 
-            await Assert.ThrowsExactlyAsync<SecurityException>(
+            _ = await Assert.ThrowsExactlyAsync<SecurityException>(
                 async () => await resolver(
                     context, spoofedClientId, jarHeader, TestContext.CancellationToken).ConfigureAwait(false));
         }
@@ -145,11 +145,11 @@ internal sealed class Oid4VpX509HashResolverTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(chain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(now);
 
-            await Assert.ThrowsExactlyAsync<SecurityException>(
+            _ = await Assert.ThrowsExactlyAsync<SecurityException>(
                 async () => await resolver(
                     context, clientId, jarHeader, TestContext.CancellationToken).ConfigureAwait(false));
         }
@@ -186,11 +186,11 @@ internal sealed class Oid4VpX509HashResolverTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(anchorChain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(now);
 
-            await Assert.ThrowsExactlyAsync<SecurityException>(
+            _ = await Assert.ThrowsExactlyAsync<SecurityException>(
                 async () => await resolver(
                     context, clientId, jarHeader, TestContext.CancellationToken).ConfigureAwait(false));
         }
@@ -231,7 +231,7 @@ internal sealed class Oid4VpX509HashResolverTests
             MicrosoftX509Functions.ParseX5c(chain.RootX5c, Pool);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(now);
 
@@ -269,10 +269,10 @@ internal sealed class Oid4VpX509HashResolverTests
 
         //An application that forgot to place the tenant's trust anchors on the
         //context must NOT silently resolve — the handler fails closed.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetValidationTime(now);
 
-        await Assert.ThrowsExactlyAsync<SecurityException>(
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(
             async () => await resolver(
                 context, clientId, jarHeader, TestContext.CancellationToken).ConfigureAwait(false));
     }
@@ -381,6 +381,6 @@ internal sealed class Oid4VpX509HashResolverTests
                 bytes, TestSetup.DefaultSerializationOptions)!,
             Pool);
 
-        return new UnverifiedJwtHeader(unverified.Signatures[0].ProtectedHeader);
+        return new(unverified.Signatures[0].ProtectedHeader);
     }
 }

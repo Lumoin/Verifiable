@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;

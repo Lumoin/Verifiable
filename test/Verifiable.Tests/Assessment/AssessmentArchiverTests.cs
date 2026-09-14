@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Assessment;
 using Verifiable.Tests.TestInfrastructure;
@@ -264,7 +259,7 @@ internal sealed class AssessmentArchiverTests
     [TestMethod]
     public void ConstructorThrowsArgumentNullExceptionWhenArchivingIdGeneratorIsNull()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             new AssessmentArchiver(EchoArchiver, TestArchiverId, new FakeTimeProvider(TestClock.CanonicalEpoch), null!));
     }
 
@@ -306,7 +301,7 @@ internal sealed class AssessmentArchiverTests
 
         await cancellationSource.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await archiver.ArchiveAsync(assessmentResult, cancellationSource.Token).ConfigureAwait(false))
             .ConfigureAwait(false);
 

@@ -1,14 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Siop.Wallet;
@@ -79,7 +76,7 @@ internal sealed class SiopDidSubjectFlowTests
         string requestHandle = await host.HandleSiopRequestPreparationAsync(
             rpKeys, SiopNonce, RelyingPartyClientId, AllowedSiopAlgorithms,
             TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         //=== Step 2: the Wallet mints a DID-subject Self-Issued ID Token bound to the transaction. ===
         string idToken = await SelfIssuedIdTokenIssuance.IssueWithDecentralizedIdentifierAsync(
@@ -133,7 +130,7 @@ internal sealed class SiopDidSubjectFlowTests
             .ConfigureAwait(false);
 
         Assert.AreNotEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
-        Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(host.GetFlowState(requestHandle).State);
     }
 
 
@@ -148,6 +145,6 @@ internal sealed class SiopDidSubjectFlowTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 }

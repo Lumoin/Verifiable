@@ -250,9 +250,12 @@ public static class PolicyExchangeContextExtensions
         /// <c>iss</c> response parameter. Defaults to <see langword="true"/>
         /// (FAPI 2.0 §5.3.1.2).
         /// </summary>
-        //Kept as a ternary rather than the De Morgan-equivalent boolean expression (here and on the two
-        //other "defaults true" getters below): the ternary keeps the "policy key absent or the wrong
-        //shape" case reading as its own true-default, rather than folding it into a negated conjunction.
+        /// <remarks>
+        /// A ternary rather than the De Morgan-equivalent boolean expression, here and on the two
+        /// other true-default getters below: the ternary keeps the "policy key absent or the wrong
+        /// shape" case reading as its own true default rather than folding it into a negated
+        /// conjunction.
+        /// </remarks>
         public bool EmitIssOnRedirect =>
             context.TryGetValue(PolicyContextKeys.EmitIssOnRedirect, out object? v)
                 && v is bool b ? b : true;
@@ -268,7 +271,7 @@ public static class PolicyExchangeContextExtensions
         /// Gets whether <c>scope</c> is required on PKCE PAR / direct
         /// Authorize / JAR requests. Defaults to <see langword="true"/>.
         /// </summary>
-        //See EmitIssOnRedirect's remark above for why this stays a ternary.
+        /// <remarks>A ternary for the reason stated on <see cref="EmitIssOnRedirect"/>.</remarks>
         public bool ScopeRequiredOnRequest =>
             context.TryGetValue(PolicyContextKeys.ScopeRequiredOnRequest, out object? v)
                 && v is bool b ? b : true;
@@ -286,7 +289,7 @@ public static class PolicyExchangeContextExtensions
         /// paths and requires the client to push the request first. Defaults to
         /// <see langword="true"/> (FAPI 2.0 §5.2.2 mandates PAR).
         /// </summary>
-        //See EmitIssOnRedirect's remark above for why this stays a ternary.
+        /// <remarks>A ternary for the reason stated on <see cref="EmitIssOnRedirect"/>.</remarks>
         public bool RequirePushedAuthorizationRequests =>
             context.TryGetValue(PolicyContextKeys.RequirePushedAuthorizationRequests, out object? v)
                 && v is bool b ? b : true;
@@ -390,6 +393,38 @@ public static class PolicyExchangeContextExtensions
         public void SetJtiReplayPolicy(JtiReplayPolicy value)
         {
             context[PolicyContextKeys.JtiReplayPolicy] = value;
+        }
+
+
+        /// <summary>
+        /// Gets whether the RFC 8252 §7.3 loopback redirect fallback
+        /// (<see cref="RedirectUriMatching.IsRegisteredLoopback"/>) recognizes the <c>localhost</c>
+        /// host literal alongside the two IP literals. Defaults to <see langword="false"/> when
+        /// unset — <see href="https://www.rfc-editor.org/rfc/rfc8252#section-8.3">RFC 8252 §8.3</see>:
+        /// "the use of localhost is NOT RECOMMENDED. Specifying a redirect URI with the loopback IP
+        /// literal rather than localhost avoids inadvertently listening on network interfaces other
+        /// than the loopback interface. It is also less susceptible to client-side firewalls and
+        /// misconfigured host name resolution on the user's device." A deployment opts in when its
+        /// native clients present <c>http://localhost:{port}/...</c> (the
+        /// <see href="https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization">
+        /// MCP authorization specification</see>'s "All redirect URIs MUST be either `localhost` or
+        /// use HTTPS.") and accepts the residual risk sec 8.3 names — a hosts-file or resolver
+        /// misconfiguration that maps <c>localhost</c> off the loopback interface.
+        /// </summary>
+        /// <remarks>
+        /// See <see cref="EmitIssOnRedirect"/>'s remark for why a "defaults false" getter here would
+        /// read as a ternary elsewhere in this file; this one instead mirrors
+        /// <see cref="EnforceMinimumSaltLength"/>'s "observe, do not reject by default" shape, since
+        /// both default to the safer, narrower reading.
+        /// </remarks>
+        public bool IsLocalhostNameAcceptedForLoopbackRedirects =>
+            context.TryGetValue(PolicyContextKeys.IsLocalhostNameAcceptedForLoopbackRedirects, out object? v)
+                && v is bool b && b;
+
+        /// <summary>Sets whether the loopback redirect fallback recognizes the <c>localhost</c> host literal.</summary>
+        public void SetIsLocalhostNameAcceptedForLoopbackRedirects(bool value)
+        {
+            context[PolicyContextKeys.IsLocalhostNameAcceptedForLoopbackRedirects] = value;
         }
     }
 }

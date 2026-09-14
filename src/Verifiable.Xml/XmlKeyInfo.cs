@@ -1,7 +1,6 @@
-using System.Collections.Generic;
+using Lumoin.Base;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Base;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -158,10 +157,10 @@ public readonly struct XmlDsaKeyValue: IEquatable<XmlDsaKeyValue>
                 return false;
             }
 
-            scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, child, out child);
+            scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, child, out _);
         }
 
-        if(scan == ElementScanResult.Found || scan == ElementScanResult.UnexpectedContent)
+        if(scan is ElementScanResult.Found or ElementScanResult.UnexpectedContent)
         {
             error = new XmlSignatureReadError(
                 scan == ElementScanResult.UnexpectedContent ? XmlSignatureReadFailure.UnexpectedElementContent : XmlSignatureReadFailure.UnknownCoreElement, 0);
@@ -857,7 +856,7 @@ public readonly struct XmlPgpData: IEquatable<XmlPgpData>
             scan = XmlSignatureModelGrammar.TryFindNextElementSibling(table, child, out _);
         }
 
-        if(scan == ElementScanResult.Found || scan == ElementScanResult.UnexpectedContent)
+        if(scan is ElementScanResult.Found or ElementScanResult.UnexpectedContent)
         {
             error = new XmlSignatureReadError(
                 scan == ElementScanResult.UnexpectedContent ? XmlSignatureReadFailure.UnexpectedElementContent : XmlSignatureReadFailure.UnknownCoreElement, 0);

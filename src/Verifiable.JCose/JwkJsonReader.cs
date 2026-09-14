@@ -892,7 +892,7 @@ public static class JwkJsonReader
         byte c = json[pos];
 
         //Object or array: track depth.
-        if(c == (byte)'{' || c == (byte)'[')
+        if(c is ((byte)'{') or ((byte)'['))
         {
             byte open = c;
             byte close = c == (byte)'{' ? (byte)'}' : (byte)']';
@@ -1020,11 +1020,11 @@ public static class JwkJsonReader
                 continue;
             }
 
-            if(b == (byte)'{' || b == (byte)'[')
+            if(b is ((byte)'{') or ((byte)'['))
             {
                 depth++;
             }
-            else if(b == (byte)'}' || b == (byte)']')
+            else if(b is ((byte)'}') or ((byte)']'))
             {
                 depth--;
             }
@@ -1087,11 +1087,11 @@ public static class JwkJsonReader
                 continue;
             }
 
-            if(b == (byte)'{' || b == (byte)'[')
+            if(b is ((byte)'{') or ((byte)'['))
             {
                 depth++;
             }
-            else if(b == (byte)'}' || b == (byte)']')
+            else if(b is ((byte)'}') or ((byte)']'))
             {
                 depth--;
             }
@@ -1144,11 +1144,11 @@ public static class JwkJsonReader
                 continue;
             }
 
-            if(b == (byte)'{' || b == (byte)'[')
+            if(b is ((byte)'{') or ((byte)'['))
             {
                 depth++;
             }
-            else if(b == (byte)'}' || b == (byte)']')
+            else if(b is ((byte)'}') or ((byte)']'))
             {
                 depth--;
             }
@@ -1200,7 +1200,7 @@ public static class JwkJsonReader
 
     /// <summary>Whether <paramref name="b"/> is a JSON insignificant-whitespace byte.</summary>
     private static bool IsJsonWhitespace(byte b) =>
-        b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n';
+        b is ((byte)' ') or ((byte)'\t') or ((byte)'\r') or ((byte)'\n');
 
 
     /// <summary>
@@ -1317,7 +1317,7 @@ public static class JwkJsonReader
             char current = value[index];
             if(current != '\\' || index + 1 >= value.Length)
             {
-                builder.Append(current);
+                _ = builder.Append(current);
                 index++;
 
                 continue;
@@ -1339,7 +1339,7 @@ public static class JwkJsonReader
 
             if(simple is char decoded)
             {
-                builder.Append(decoded);
+                _ = builder.Append(decoded);
                 index += 2;
 
                 continue;
@@ -1347,14 +1347,14 @@ public static class JwkJsonReader
 
             if(escape == 'u' && TryDecodeHex4(value, index + 2, out char unicode))
             {
-                builder.Append(unicode);
+                _ = builder.Append(unicode);
                 index += 6;
 
                 continue;
             }
 
             //Unknown or truncated escape: keep the backslash literally and continue.
-            builder.Append(current);
+            _ = builder.Append(current);
             index++;
         }
 

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.OAuth.Server;

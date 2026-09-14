@@ -26,9 +26,9 @@ public static class VcalmInteractionResponseWriter
         try
         {
             //§3.7.4: the response is a single object carrying the protocols map.
-            sb.Append("{\"");
+            _ = sb.Append("{\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Protocols);
-            sb.Append("\":{");
+            _ = sb.Append("\":{");
 
             bool protocolsFirst = true;
 
@@ -62,7 +62,7 @@ public static class VcalmInteractionResponseWriter
                 JsonAppender.AppendStringField(sb, VcalmParameterNames.Interact, protocols.InteractUrl, ref protocolsFirst);
             }
 
-            sb.Append("}}");
+            _ = sb.Append("}}");
 
             return sb.ToString();
         }

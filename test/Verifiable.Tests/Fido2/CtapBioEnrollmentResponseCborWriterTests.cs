@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
@@ -228,6 +227,6 @@ internal sealed class CtapBioEnrollmentResponseCborWriterTests
         writer.WriteEndArray();
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapBioEnrollmentResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 }

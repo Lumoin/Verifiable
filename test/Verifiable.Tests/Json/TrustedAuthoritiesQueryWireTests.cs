@@ -79,7 +79,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
         JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         const string json = """{"type":"aki"}""";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<TrustedAuthoritiesQuery>(json, options),
             "Section 6.1.1 makes 'values' REQUIRED, so an entry omitting it is refused.");
     }
@@ -97,7 +97,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
         JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         const string json = """{"type":"aki","values":[]}""";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<TrustedAuthoritiesQuery>(json, options),
             "Section 6.1.1 requires a non-empty 'values' array, so an empty one is refused.");
     }
@@ -114,7 +114,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
         JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         const string json = """{"type":"aki","values":["a",1]}""";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<TrustedAuthoritiesQuery>(json, options),
             "Section 6.1.1 requires an array of strings, so a numeric element is refused.");
     }
@@ -131,7 +131,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
         JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         const string json = """{"type":5,"values":["a"]}""";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<TrustedAuthoritiesQuery>(json, options),
             "Section 6.1.1 requires 'type' to be a string, so a numeric 'type' is refused.");
     }
@@ -149,7 +149,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
         JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         const string json = "\"aki\"";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<TrustedAuthoritiesQuery>(json, options),
             "Section 6.1.1 requires each entry to be an object, so a bare string is refused.");
     }
@@ -167,7 +167,7 @@ internal sealed class TrustedAuthoritiesQueryWireTests
         JsonSerializerOptions options = new JsonSerializerOptions().ApplyVerifiableDefaults(requireDcqlMeta: false);
         const string json = """{"id":"c","format":"mso_mdoc","trusted_authorities":[]}""";
 
-        Assert.ThrowsExactly<JsonException>(
+        _ = Assert.ThrowsExactly<JsonException>(
             () => JsonSerializerExtensions.Deserialize<CredentialQuery>(json, options),
             "Section 6.1 makes trusted_authorities a non-empty array when present, so an empty one is refused.");
     }

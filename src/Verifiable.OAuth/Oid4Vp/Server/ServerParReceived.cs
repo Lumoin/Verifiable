@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Diagnostics;
 using Verifiable.Core.Dcql;
 using Verifiable.Cryptography;

@@ -1,8 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
-using System.Collections.Generic;
-using Verifiable.Core;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -78,7 +74,7 @@ internal sealed class TrustChainValidationTests
         Assert.IsTrue(outcome.IsValid,
             $"A sound chain must validate through the production validator. Reason: {outcome.FailureReason}");
         Assert.IsNotNull(outcome.Chain, "A validated outcome must carry the parsed chain.");
-        Assert.HasCount(3, outcome.Chain!.Statements, "The direct chain has three positions.");
+        Assert.HasCount(3, outcome.Chain.Statements, "The direct chain has three positions.");
     }
 
 

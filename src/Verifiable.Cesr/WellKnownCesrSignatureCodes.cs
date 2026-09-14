@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Cesr;
@@ -61,9 +60,9 @@ public static class WellKnownCesrSignatureCodes
     /// <returns>The equivalent interned instance of <paramref name="code"/>, or the original instance if none match.</returns>
     public static string GetCanonicalizedValue(string code) => code switch
     {
-        string _ when IsEd25519(code) => Ed25519,
-        string _ when IsEd25519CurrentIndexOnly(code) => Ed25519CurrentIndexOnly,
-        string _ => code
+        string when IsEd25519(code) => Ed25519,
+        string when IsEd25519CurrentIndexOnly(code) => Ed25519CurrentIndexOnly,
+        string => code
     };
 
 

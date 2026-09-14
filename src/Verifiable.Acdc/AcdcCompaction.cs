@@ -1,7 +1,5 @@
 using Lumoin.Base;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 
@@ -156,7 +154,7 @@ public static class AcdcCompaction
 
             //The block's subblocks are all compacted; take its SAID over its block-level expanded form and attach it
             //to the enclosing block's slot, or return it as the section SAID when there is no enclosing block.
-            stack.Pop();
+            _ = stack.Pop();
             string said = await ComputeSaidAsync(frame.BlockLevelExpanded, SaidOf(frame.BlockLevelExpanded), serialize, computeDigest, pool, cancellationToken).ConfigureAwait(false);
             if(stack.Count == 0)
             {
@@ -225,8 +223,8 @@ public static class AcdcCompaction
         /// <param name="parentLabel">The label in the enclosing block's block-level expanded form this block's SAID fills, or <see langword="null"/> for the section root.</param>
         public Frame(MessageFieldMap block, string? parentLabel)
         {
-            Fields = new List<KeyValuePair<string, object?>>(block);
-            BlockLevelExpanded = new MessageFieldMap(StringComparer.Ordinal);
+            Fields = new(block);
+            BlockLevelExpanded = new(StringComparer.Ordinal);
             ParentLabel = parentLabel;
         }
 

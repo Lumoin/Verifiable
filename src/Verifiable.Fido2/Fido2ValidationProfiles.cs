@@ -36,8 +36,7 @@ public static class Fido2ValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<RegistrationCeremonyInput>> RegistrationRules() =>
-        new List<ClaimDelegate<RegistrationCeremonyInput>>
-        {
+        [
             new(Fido2RegistrationChecks.CheckRegistrationClientDataType,
                 [Fido2ClaimIds.Fido2RegistrationClientDataType]),
 
@@ -76,7 +75,7 @@ public static class Fido2ValidationProfiles
 
             new(Fido2ExtensionChecks.CheckRegistrationExtensionOutputs,
                 [Fido2ClaimIds.Fido2RegistrationExtensionOutputs]),
-        };
+        ];
 
 
     /// <summary>
@@ -86,8 +85,7 @@ public static class Fido2ValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<AssertionCeremonyInput>> AssertionRules() =>
-        new List<ClaimDelegate<AssertionCeremonyInput>>
-        {
+        [
             new(Fido2AssertionChecks.CheckAssertionClientDataType,
                 [Fido2ClaimIds.Fido2AssertionClientDataType]),
 
@@ -135,5 +133,5 @@ public static class Fido2ValidationProfiles
 
             new(Fido2ExtensionChecks.CheckAssertionExtensionOutputs,
                 [Fido2ClaimIds.Fido2AssertionExtensionOutputs]),
-        };
+        ];
 }

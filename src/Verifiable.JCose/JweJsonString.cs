@@ -22,46 +22,46 @@ internal static class JweJsonString
     /// </summary>
     public static void Append(StringBuilder builder, string value)
     {
-        builder.Append('"');
+        _ = builder.Append('"');
         foreach(char c in value)
         {
             switch(c)
             {
                 case '"':
                 {
-                    builder.Append("\\\"");
+                    _ = builder.Append("\\\"");
                     break;
                 }
                 case '\\':
                 {
-                    builder.Append("\\\\");
+                    _ = builder.Append("\\\\");
                     break;
                 }
                 case '\n':
                 {
-                    builder.Append("\\n");
+                    _ = builder.Append("\\n");
                     break;
                 }
                 case '\r':
                 {
-                    builder.Append("\\r");
+                    _ = builder.Append("\\r");
                     break;
                 }
                 case '\t':
                 {
-                    builder.Append("\\t");
+                    _ = builder.Append("\\t");
                     break;
                 }
                 default:
                 {
                     if(c < ' ')
                     {
-                        builder.Append("\\u");
-                        builder.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                        _ = builder.Append("\\u");
+                        _ = builder.Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
                     }
                     else
                     {
-                        builder.Append(c);
+                        _ = builder.Append(c);
                     }
 
                     break;
@@ -69,6 +69,6 @@ internal static class JweJsonString
             }
         }
 
-        builder.Append('"');
+        _ = builder.Append('"');
     }
 }

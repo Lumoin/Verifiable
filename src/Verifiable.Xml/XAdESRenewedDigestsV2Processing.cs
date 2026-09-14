@@ -1,6 +1,5 @@
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Base;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -203,7 +202,7 @@ public static class XAdESRenewedDigestsV2Processing
             //TryCanonicalizeForAlgorithm tags its result BufferTags.XmlCanonical; every sibling engine's PUBLIC
             //result carries BufferTags.XmlDigestInput instead, so this single-step engine retags to match rather
             //than leaking the intermediate tag, the same posture XAdESSignatureTimeStampImprint already takes.
-            input = PooledMemory.FromBytes(canonical!.AsReadOnlySpan(), pool, BufferTags.XmlDigestInput);
+            input = PooledMemory.FromBytes(canonical.AsReadOnlySpan(), pool, BufferTags.XmlDigestInput);
             error = default;
 
             return true;

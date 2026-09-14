@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.Foundation;
@@ -331,7 +326,7 @@ internal sealed class PreservationParameterNameTests
         {
             if(!membersByElement.TryGetValue(name.XmlElementName, out HashSet<string>? members))
             {
-                members = new HashSet<string>(StringComparer.Ordinal);
+                members = new(StringComparer.Ordinal);
                 membersByElement.Add(name.XmlElementName, members);
             }
 

@@ -1,6 +1,5 @@
-using System.Buffers;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Time.Testing;
+using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
@@ -170,7 +169,7 @@ internal sealed class X509ChainTestRingTests
         using X509ChainTestRingNode root = X509ChainTestRing.CreateRootCa(TimeProvider);
         using X509ChainTestRingNode leaf = X509ChainTestRing.CreateLeaf(root, DnsName, TimeProvider);
 
-        Assert.ThrowsExactly<InvalidOperationException>(
+        _ = Assert.ThrowsExactly<InvalidOperationException>(
             () => X509ChainTestRing.CreateIntermediate(leaf, TimeProvider),
             "A Leaf must not be allowed to issue further nodes.");
     }

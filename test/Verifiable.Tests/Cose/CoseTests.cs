@@ -1,11 +1,10 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -290,7 +289,7 @@ internal sealed class CoseTests
     {
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString([]);
         writer.WriteStartMap(0);
@@ -452,7 +451,7 @@ internal sealed class CoseTests
     [TestMethod]
     public void DefaultTagToCoseConverterThrowsForUnsupported()
     {
-        Assert.Throws<NotSupportedException>(() =>
+        _ = Assert.Throws<NotSupportedException>(() =>
             CryptoFormatConversions.DefaultTagToCoseConverter(CryptoTags.X25519PublicKey));
     }
 

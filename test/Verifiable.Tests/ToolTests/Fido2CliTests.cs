@@ -1,12 +1,12 @@
+using Lumoin.Veritas.Cbor;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using System.Buffers;
 using System.Buffers.Text;
-using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
-using ModelContextProtocol.Client;
-using ModelContextProtocol.Protocol;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cryptography;
@@ -56,7 +56,7 @@ internal sealed class Fido2CliTests
     public void Initialize()
     {
         tempDirectory = Path.Join(Path.GetTempPath(), $"fido2-cli-tests-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempDirectory);
+        _ = Directory.CreateDirectory(tempDirectory);
     }
 
 
@@ -297,7 +297,7 @@ internal sealed class Fido2CliTests
         //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
         //exercised against a value it did not produce.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 7);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 7);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -382,7 +382,7 @@ internal sealed class Fido2CliTests
         //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
         //exercised against a value it did not produce.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 3);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 3);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -424,7 +424,7 @@ internal sealed class Fido2CliTests
         //Oracle: recomputed independently of the CLI so its own rpIdHash derivation from --rp-id is
         //exercised against a value it did not produce.
         byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(RpId));
-        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit), signCount: 1);
+        byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags: AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit, signCount: 1);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Get, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);
         byte[] toBeSigned = Fido2AttestationTestVectors.BuildToBeSigned(authenticatorData, clientDataHash);
@@ -560,7 +560,7 @@ internal sealed class Fido2CliTests
     private static int DecodedBase64UrlLength(string value)
     {
         using IMemoryOwner<byte> buffer = BaseMemoryPool.Shared.Rent(Base64Url.GetMaxDecodedLength(value.Length));
-        Base64Url.TryDecodeFromChars(value, buffer.Memory.Span, out int bytesWritten);
+        _ = Base64Url.TryDecodeFromChars(value, buffer.Memory.Span, out int bytesWritten);
 
         return bytesWritten;
     }
@@ -633,7 +633,7 @@ internal sealed class Fido2CliTests
         byte[] credentialId = RandomNumberGenerator.GetBytes(16);
         byte[] coseKeyCbor = credentialPublicKeyCbor ?? MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, coseKeyCbor);
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(effectiveRpIdHash, flags, signCount: 0, attestedCredentialData);
 
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
@@ -678,7 +678,7 @@ internal sealed class Fido2CliTests
 
         byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialData = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] authenticatorData = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialData);
         byte[] clientDataJson = WebAuthnClientDataFixtures.BuildClientDataJson(WellKnownClientDataTypes.Create, Challenge, Origin);
         using DigestValue clientDataHash = Fido2AttestationTestVectors.ComputeClientDataHash(clientDataJson, BaseMemoryPool.Shared);

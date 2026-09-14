@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Text;
@@ -241,8 +236,8 @@ public static class BackChannelLogout
         }
 
         //§2.6: a Logout Token MUST contain a sub Claim, a sid Claim, or both.
-        TryGetString(payload, WellKnownJwtClaimNames.Sub, out string? subject);
-        TryGetString(payload, WellKnownJwtClaimNames.Sid, out string? sessionId);
+        _ = TryGetString(payload, WellKnownJwtClaimNames.Sub, out string? subject);
+        _ = TryGetString(payload, WellKnownJwtClaimNames.Sid, out string? sessionId);
         if(string.IsNullOrEmpty(subject) && string.IsNullOrEmpty(sessionId))
         {
             return BackChannelLogoutVerificationResult.Failed(BackChannelLogoutValidationError.MissingSubjectAndSession);

@@ -173,7 +173,7 @@ public sealed class CoseSign1Message: IEquatable<CoseSign1Message>, IDisposable
             hash.Add(b);
         }
 
-        foreach(byte b in Payload.Span.Slice(0, Math.Min(16, Payload.Length)))
+        foreach(byte b in Payload.Span[..Math.Min(16, Payload.Length)])
         {
             hash.Add(b);
         }

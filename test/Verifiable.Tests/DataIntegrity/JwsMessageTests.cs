@@ -252,7 +252,7 @@ internal sealed class JwsMessageTests
 
         using var message = new JwsMessage(payload, [component1, component2]);
 
-        Assert.Throws<InvalidOperationException>(() => JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
+        _ = Assert.Throws<InvalidOperationException>(() => JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
     }
 
 
@@ -267,7 +267,7 @@ internal sealed class JwsMessageTests
         using var component = new JwsSignatureComponent("encoded", header, sig);
         using var message = new JwsMessage(payload, component, isDetachedPayload: true);
 
-        Assert.Throws<InvalidOperationException>(() => JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
+        _ = Assert.Throws<InvalidOperationException>(() => JwsSerialization.SerializeCompact(message, TestSetup.Base64UrlEncoder));
     }
 
 
@@ -276,7 +276,7 @@ internal sealed class JwsMessageTests
     {
         byte[] payload = [1, 2, 3, 4];
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             new JwsMessage(payload, Array.Empty<JwsSignatureComponent>().ToList()));
     }
 

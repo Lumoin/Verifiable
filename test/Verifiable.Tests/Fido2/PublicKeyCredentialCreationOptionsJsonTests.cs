@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -137,7 +135,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
     {
         string json = MinimalValidDocument().Replace("\"challenge\":\"AQIDBA\"", "\"challenge\":\"AQIDBA\",\"unexpected\":1", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -150,7 +148,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
             "\"pubKeyCredParams\":[{\"type\":\"public-key\",\"alg\":-7}],\"extensions\":{\"credProps\":true}",
             StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -163,7 +161,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
             "\"pubKeyCredParams\":[{\"type\":\"public-key\",\"alg\":-7}],\"extensions\":{\"credentialProtectionPolicy\":\"unknownPolicy\"}",
             StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -179,7 +177,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
             "\"pubKeyCredParams\":[{\"type\":\"public-key\",\"alg\":-7}],\"extensions\":{\"enforceCredentialProtectionPolicy\":true}",
             StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -219,7 +217,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
     {
         string json = MinimalValidDocument().Replace("\"challenge\":\"AQIDBA\",", "\"challenge\":\"AQIDBA\",\"challenge\":\"AQIDBA\",", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -229,7 +227,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
     {
         string json = MinimalValidDocument().Replace("\"id\":\"AQ\"", "\"id\":\"not base64url!!\"", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -239,7 +237,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
     {
         string json = MinimalValidDocument().Replace("\"rp\":{\"name\":\"example.com\"},", "", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -252,7 +250,7 @@ internal sealed class PublicKeyCredentialCreationOptionsJsonTests
             "\"pubKeyCredParams\":[{\"type\":\"public-key\",\"alg\":-7}],\"attestation\":\"unknown-preference\"",
             StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => PublicKeyCredentialCreationOptionsJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 

@@ -3,7 +3,6 @@ using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthZen;
 
@@ -308,7 +307,7 @@ public static class AuthZenEndpoints
             //overlay yields exactly that.
             : [new AccessEvaluationItem()];
 
-        items = new List<AccessEvaluationRequest>(entries.Count);
+        items = new(entries.Count);
         for(int i = 0; i < entries.Count; ++i)
         {
             AccessEvaluationItem entry = entries[i];
@@ -352,21 +351,21 @@ public static class AuthZenEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append("{\"");
+            _ = sb.Append("{\"");
             JsonAppender.AppendEscapedString(sb, AuthZenFieldNames.Evaluations);
-            sb.Append("\":[");
+            _ = sb.Append("\":[");
 
             for(int i = 0; i < decisions.Count; ++i)
             {
                 if(i > 0)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
                 AppendDecisionObject(sb, decisions[i]);
             }
 
-            sb.Append("]}");
+            _ = sb.Append("]}");
 
             return sb.ToString();
         }
@@ -637,33 +636,33 @@ public static class AuthZenEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
 
             AppendPageObject(sb, page);
 
             if(context is { Count: > 0 } responseContext)
             {
-                sb.Append(",\"");
+                _ = sb.Append(",\"");
                 JsonAppender.AppendEscapedString(sb, AuthZenFieldNames.Context);
-                sb.Append("\":");
+                _ = sb.Append("\":");
                 JsonAppender.AppendObject(sb, responseContext);
             }
 
-            sb.Append(",\"");
+            _ = sb.Append(",\"");
             JsonAppender.AppendEscapedString(sb, AuthZenFieldNames.Results);
-            sb.Append("\":[");
+            _ = sb.Append("\":[");
 
             for(int i = 0; i < results.Count; ++i)
             {
                 if(i > 0)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
                 appendEntity(sb, results[i]);
             }
 
-            sb.Append("]}");
+            _ = sb.Append("]}");
 
             return sb.ToString();
         }
@@ -681,9 +680,9 @@ public static class AuthZenEndpoints
     /// </summary>
     private static void AppendPageObject(StringBuilder sb, AccessSearchPage page)
     {
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, AuthZenFieldNames.Page);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool first = true;
         JsonAppender.AppendStringField(sb, AuthZenFieldNames.NextToken, page.NextToken ?? "", ref first);
@@ -700,48 +699,48 @@ public static class AuthZenEndpoints
         //§7 OPTIONAL implementation-specific page attributes, nested under page.
         AppendPropertiesIfAny(sb, page.Properties);
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
     /// <summary>Appends a Subject entity <c>{ "type": …, "id": …, "properties"?: { … } }</c>.</summary>
     private static void AppendSubjectEntity(StringBuilder sb, AuthZenSubject subject)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
 
         bool first = true;
         JsonAppender.AppendStringField(sb, AuthZenFieldNames.Type, subject.Type, ref first);
         JsonAppender.AppendStringField(sb, AuthZenFieldNames.Id, subject.Id, ref first);
         AppendPropertiesIfAny(sb, subject.Properties);
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
     /// <summary>Appends a Resource entity <c>{ "type": …, "id": …, "properties"?: { … } }</c>.</summary>
     private static void AppendResourceEntity(StringBuilder sb, AuthZenResource resource)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
 
         bool first = true;
         JsonAppender.AppendStringField(sb, AuthZenFieldNames.Type, resource.Type, ref first);
         JsonAppender.AppendStringField(sb, AuthZenFieldNames.Id, resource.Id, ref first);
         AppendPropertiesIfAny(sb, resource.Properties);
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
     /// <summary>Appends an Action entity <c>{ "name": …, "properties"?: { … } }</c>.</summary>
     private static void AppendActionEntity(StringBuilder sb, AuthZenAction action)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
 
         bool first = true;
         JsonAppender.AppendStringField(sb, AuthZenFieldNames.Name, action.Name, ref first);
         AppendPropertiesIfAny(sb, action.Properties);
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -754,9 +753,9 @@ public static class AuthZenEndpoints
     {
         if(properties is { Count: > 0 } bag)
         {
-            sb.Append(",\"");
+            _ = sb.Append(",\"");
             JsonAppender.AppendEscapedString(sb, AuthZenFieldNames.Properties);
-            sb.Append("\":");
+            _ = sb.Append("\":");
             JsonAppender.AppendObject(sb, bag);
         }
     }
@@ -915,7 +914,7 @@ public static class AuthZenEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
 
             bool first = true;
             JsonAppender.AppendUriField(
@@ -946,7 +945,7 @@ public static class AuthZenEndpoints
                     sb, AuthZenMetadataParameterNames.SignedMetadata, signedMetadata, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -1057,19 +1056,19 @@ public static class AuthZenEndpoints
     /// </summary>
     private static void AppendDecisionObject(StringBuilder sb, AccessEvaluationDecision decision)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
 
         bool first = true;
         JsonAppender.AppendBoolField(sb, AuthZenFieldNames.Decision, decision.Decision, ref first);
 
         if(decision.Context is { Count: > 0 } responseContext)
         {
-            sb.Append(",\"");
+            _ = sb.Append(",\"");
             JsonAppender.AppendEscapedString(sb, AuthZenFieldNames.Context);
-            sb.Append("\":");
+            _ = sb.Append("\":");
             JsonAppender.AppendObject(sb, responseContext);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 }

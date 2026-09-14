@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -116,6 +111,9 @@ public static class CryptographicVerification
             SignatureCryptographicOutcome.SignedDataNotFound => BuildingBlockConclusion.Indeterminate(
                 SignatureValidationSubIndication.SignedDataNotFound,
                 [new SignedDataNotFoundReportData(verification.FailingObjectIdentifiers)]),
+            SignatureCryptographicOutcome.NotVerified => BuildingBlockConclusion.Indeterminate(
+                SignatureValidationSubIndication.Custom,
+                [new CustomDiagnosticReportData(verification.Reason ?? "The format binding performed no cryptographic verification.")]),
             _ => BuildingBlockConclusion.Indeterminate(
                 SignatureValidationSubIndication.Custom,
                 [new CustomDiagnosticReportData(verification.Reason ?? "The format binding performed no cryptographic verification.")])

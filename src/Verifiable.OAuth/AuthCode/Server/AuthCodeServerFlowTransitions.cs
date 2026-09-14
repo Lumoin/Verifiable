@@ -1,6 +1,5 @@
 using Verifiable.Foundation.Automata;
 using Verifiable.OAuth.AuthCode.Server.States;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server;
 
@@ -39,8 +38,13 @@ namespace Verifiable.OAuth.AuthCode.Server;
 ///   </item>
 ///   <item>
 ///     <description>
-///       Terminal state guard: transitions out of <see cref="ServerTokenIssuedState"/>
-///       or <see cref="ServerFlowFailedState"/> return <see langword="null"/>, halting the PDA.
+///       Terminal state guard: transitions out of <see cref="ServerFlowFailedState"/>, and every
+///       transition out of <see cref="ServerTokenIssuedState"/> except a
+///       <see cref="ServerAuthorizationCodeReplayDetected"/> or
+///       <see cref="ServerRefreshTokenReuseDetected"/> input, return <see langword="null"/>,
+///       halting the PDA. Both marker inputs re-enter the same state with its
+///       <see cref="ServerTokenIssuedState.RevokedAt"/> marker set, so a detected replay is
+///       persisted rather than left as an unrecorded early exit.
 ///     </description>
 ///   </item>
 /// </list>
@@ -85,6 +89,7 @@ public static class AuthCodeServerFlowTransitions
                                 Kind = FlowKind.AuthCodeServer,
                                 RequestUri = par.RequestUri,
                                 CodeChallenge = par.CodeChallenge,
+                                CodeChallengeMethod = par.CodeChallengeMethod,
                                 RedirectUri = par.RedirectUri,
                                 Scope = par.Scope,
                                 ClientId = par.ClientId,
@@ -116,6 +121,7 @@ public static class AuthCodeServerFlowTransitions
                                 CodeHash = direct.CodeHash,
                                 RedirectUri = direct.RedirectUri,
                                 CodeChallenge = direct.CodeChallenge,
+                                CodeChallengeMethod = direct.CodeChallengeMethod,
                                 Scope = direct.Scope,
                                 SubjectId = direct.SubjectId,
                                 AuthTime = direct.AuthTime,
@@ -131,7 +137,10 @@ public static class AuthCodeServerFlowTransitions
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerCodeIssued"),
 
-                    //ParRequestReceived + ServerAuthorizeCompleted → ServerCodeIssued.
+                    //ParRequestReceived + ServerAuthorizeCompleted → ServerCodeIssued. The issued
+                    //code's ExpiresAt comes from the input, not from the loaded ParRequestReceived
+                    //state — RFC 6749 §4.1.2 governs the code's own lifetime, which is independent
+                    //of (and normally longer than) the request_uri's own RFC 9126 §4 lifetime.
                     (ParRequestReceivedState received, ServerAuthorizeCompleted auth) =>
                         Transition(
                             new ServerCodeIssuedState
@@ -139,11 +148,12 @@ public static class AuthCodeServerFlowTransitions
                                 FlowId = received.FlowId,
                                 ExpectedIssuer = received.ExpectedIssuer,
                                 EnteredAt = auth.CompletedAt,
-                                ExpiresAt = received.ExpiresAt,
+                                ExpiresAt = auth.ExpiresAt,
                                 Kind = FlowKind.AuthCodeServer,
                                 CodeHash = auth.CodeHash,
                                 RedirectUri = received.RedirectUri,
                                 CodeChallenge = received.CodeChallenge,
+                                CodeChallengeMethod = received.CodeChallengeMethod,
                                 Scope = auth.Scope,
                                 SubjectId = auth.SubjectId,
                                 AuthTime = auth.AuthTime,
@@ -179,7 +189,15 @@ public static class AuthCodeServerFlowTransitions
                                 SubjectId = issued.SubjectId,
                                 Scope = issued.Scope,
                                 IssuedAt = token.IssuedAt,
-                                Confirmation = token.Confirmation
+                                Confirmation = token.Confirmation,
+                                //OAuth 2.1 §7.5.3: carried forward so a later replay of this exact
+                                //code can be re-verified — PKCE, client_id, redirect_uri — exactly
+                                //as this first presentation was, before deciding whether to revoke.
+                                ClientId = issued.ClientId,
+                                RedirectUri = issued.RedirectUri,
+                                CodeChallenge = issued.CodeChallenge,
+                                CodeChallengeMethod = issued.CodeChallengeMethod,
+                                RefreshFlowId = token.RefreshFlowId
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerTokenIssued"),
@@ -189,9 +207,11 @@ public static class AuthCodeServerFlowTransitions
                     //replaces the loaded refresh state at the same flow id with the
                     //new access-token issuance audit set. The new rotated refresh
                     //token has already been side-saved at a fresh flow id by
-                    //BuildRefreshToken.BuildInputAsync; the old refresh token's
-                    //flow record persists only momentarily before
-                    //DeleteFlowStateAsync removes it.
+                    //BuildRefreshToken.BuildInputAsync; the old refresh token's flow
+                    //record is retired IN PLACE, deliberately kept resolvable rather
+                    //than deleted, so a later presentation of the just-rotated-out
+                    //token reaches HandleRefreshTokenReuseAsync's reuse-detection
+                    //path instead of a generic "not found".
                     (ServerRefreshTokenIssuedState refresh, ServerTokenExchangeSucceeded token) =>
                         Transition(
                             new ServerTokenIssuedState
@@ -205,10 +225,36 @@ public static class AuthCodeServerFlowTransitions
                                 SubjectId = refresh.SubjectId,
                                 Scope = refresh.Scope,
                                 IssuedAt = token.IssuedAt,
-                                Confirmation = token.Confirmation
+                                Confirmation = token.Confirmation,
+                                //Carried forward so a later reuse of THIS retired refresh token —
+                                //resolved back to this exact record — can re-verify client_id and
+                                //the DPoP binding exactly as a live redemption would, per
+                                //HandleRefreshTokenReuseAsync.
+                                ClientId = refresh.ClientId,
+                                PredecessorFlowId = refresh.PredecessorFlowId,
+                                SuccessorRefreshFlowId = token.SuccessorRefreshFlowId
                             },
                             StackAction<AuthCodeServerStackSymbol>.None,
                             "ServerTokenIssued"),
+
+                    //ServerTokenIssued + ServerAuthorizationCodeReplayDetected → ServerTokenIssued.
+                    //A VALID replay of an unrevoked issuance writes the RevokedAt marker; every
+                    //other field carries forward unchanged via the record `with` expression. This
+                    //is a marker transition out of a nominally terminal state — the replay
+                    //endpoint re-enters it deliberately so the runner steps and persists the
+                    //marker, rather than treating ServerTokenIssuedState as universally halting.
+                    (ServerTokenIssuedState replayed, ServerAuthorizationCodeReplayDetected replay) =>
+                        Transition(
+                            replayed with { RevokedAt = replay.RevokedAt },
+                            StackAction<AuthCodeServerStackSymbol>.None,
+                            "ServerTokenIssuedReplayRevoked"),
+
+                    //A valid refresh reuse persists the same sequential marker as code replay.
+                    (ServerTokenIssuedState retired, ServerRefreshTokenReuseDetected reuse) =>
+                        Transition(
+                            retired with { RevokedAt = reuse.RevokedAt },
+                            StackAction<AuthCodeServerStackSymbol>.None,
+                            "ServerTokenIssuedReuseRevoked"),
 
                     //Terminal states produce no transition — the PDA halts.
                     (ServerTokenIssuedState, _) => null,
@@ -222,6 +268,10 @@ public static class AuthCodeServerFlowTransitions
         };
 
 
+    /// <summary>
+    /// Packages a pure next state and stack action with its diagnostic label. It performs no
+    /// storage work; the endpoint runner persists the result after the transition succeeds.
+    /// </summary>
     private static TransitionResult<FlowState, AuthCodeServerStackSymbol> Transition(
         FlowState nextState,
         StackAction<AuthCodeServerStackSymbol> stackAction,

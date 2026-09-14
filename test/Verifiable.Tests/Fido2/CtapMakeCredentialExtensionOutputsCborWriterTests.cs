@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;

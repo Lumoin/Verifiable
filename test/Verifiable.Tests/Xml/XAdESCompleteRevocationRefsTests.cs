@@ -85,14 +85,6 @@ internal sealed class XAdESCompleteRevocationRefsTests
     }
 
 
-    private static string OcspRefByKey(byte[] keyDigest, string producedAt) => $"""
-        <OCSPRef>
-          <OCSPIdentifier>
-            <ResponderID><ByKey>{Convert.ToBase64String(keyDigest)}</ByKey></ResponderID>
-            <ProducedAt>{producedAt}</ProducedAt>
-          </OCSPIdentifier>
-        </OCSPRef>
-        """;
 
 
     /// <summary>
@@ -211,7 +203,7 @@ internal sealed class XAdESCompleteRevocationRefsTests
     [TestMethod]
     public void NumberAtTheDigitBoundParsesButOneDigitBeyondIsRefused()
     {
-        string atBound = new string('9', 18);
+        string atBound = new('9', 18);
         string acceptedDocument = Document("CompleteRevocationRefs", $"<CRLRefs>{CrlRef([0x01], CrlIdentifier("CN=Test CA", "2024-01-01T00:00:00Z", number: atBound))}</CRLRefs>");
         using XmlNodeTable acceptedTable = Parse(acceptedDocument, BaseMemoryPool.Shared);
         bool isAccepted = XAdESCompleteRevocationRefs.TryReadCompleteRevocationRefs(acceptedTable, acceptedTable.DocumentElementIndex, BaseMemoryPool.Shared, out XAdESCompleteRevocationRefs? acceptedValue, out XAdESReadError acceptedError);
@@ -221,7 +213,7 @@ internal sealed class XAdESCompleteRevocationRefsTests
             Assert.AreEqual(999999999999999999L, acceptedValue!.CrlRefs[0].CrlIdentifier.Number);
         }
 
-        string beyondBound = new string('9', 19);
+        string beyondBound = new('9', 19);
         string refusedDocument = Document("CompleteRevocationRefs", $"<CRLRefs>{CrlRef([0x01], CrlIdentifier("CN=Test CA", "2024-01-01T00:00:00Z", number: beyondBound))}</CRLRefs>");
         using XmlNodeTable refusedTable = Parse(refusedDocument, BaseMemoryPool.Shared);
         bool isRefused = XAdESCompleteRevocationRefs.TryReadCompleteRevocationRefs(refusedTable, refusedTable.DocumentElementIndex, BaseMemoryPool.Shared, out _, out XAdESReadError refusedError);

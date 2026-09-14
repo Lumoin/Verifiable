@@ -1,7 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -9,7 +8,6 @@ using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Apdu;

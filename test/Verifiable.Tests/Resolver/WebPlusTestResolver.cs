@@ -1,17 +1,11 @@
-using System;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
-using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -90,7 +84,7 @@ internal static class WebPlusTestResolver
     /// <returns>The resolution result.</returns>
     public static async Task<DidResolutionResult> ResolveAsync(string did, RoutingTransport transport, DidResolutionOptions? options, CancellationToken cancellationToken)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         DidMethodResolverDelegate resolver = Build(transport.Delegate);

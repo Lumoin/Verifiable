@@ -1,7 +1,5 @@
 using System.Buffers;
 using System.Text;
-using System.Text.Json;
-using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
@@ -39,7 +37,7 @@ internal sealed class EcdsaSd2023W3cVectorTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
 
     /// <summary>

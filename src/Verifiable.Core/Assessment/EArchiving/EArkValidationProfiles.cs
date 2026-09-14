@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Verifiable.Core.Assessment.EArchiving;
 
 /// <summary>
@@ -35,11 +33,10 @@ public static class EArkValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<EArkValidationContext>> PackageIntegrityRules() =>
-        new List<ClaimDelegate<EArkValidationContext>>
-        {
+        [
             new(EArkValidationChecks.CheckPackageWithinStatedLimits,
                 [EArkClaimIds.PackageWithinStatedLimits]),
-        };
+        ];
 
 
     /// <summary>
@@ -136,15 +133,14 @@ public static class EArkValidationProfiles
     /// structural-only validation from reading as a conformant package.
     /// </remarks>
     public static IList<ClaimDelegate<EArkValidationContext>> CsipMetsProfileRules() =>
-        new List<ClaimDelegate<EArkValidationContext>>
-        {
+        [
             new(EArkValidationChecks.CheckMetsRootElement, [.. EArkValidationChecks.MetsRootElementClaimIds]),
             new(EArkValidationChecks.CheckMetsHeader, [.. EArkValidationChecks.MetsHeaderClaimIds]),
             new(EArkValidationChecks.CheckDescriptiveMetadataSections, [.. EArkValidationChecks.DescriptiveMetadataClaimIds]),
             new(EArkValidationChecks.CheckAdministrativeMetadata, [.. EArkValidationChecks.AdministrativeMetadataClaimIds]),
             new(EArkValidationChecks.CheckFileSection, [.. EArkValidationChecks.FileSectionClaimIds]),
             new(EArkValidationChecks.CheckStructuralMap, [.. EArkValidationChecks.StructuralMapClaimIds]),
-        };
+        ];
 
 
     /// <summary>
@@ -161,12 +157,11 @@ public static class EArkValidationProfiles
     /// claims, so that a requirements matrix can name them rather than leave them silent.
     /// </remarks>
     public static IList<ClaimDelegate<EArkValidationContext>> PackageFixityAndReferenceRules() =>
-        new List<ClaimDelegate<EArkValidationContext>>
-        {
+        [
             new(EArkValidationChecks.CheckPackageFixityAsync, [.. EArkValidationChecks.PackageFixityClaimIds]),
             new(EArkValidationChecks.CheckManifestReferencesResolve, [EArkClaimIds.PackageReferencesResolve]),
             new(EArkValidationChecks.CheckManifestIdentifiersAreNCNames, [EArkClaimIds.PackageIdentifiersAreNCNames]),
-        };
+        ];
 
 
     /// <summary>
@@ -176,8 +171,7 @@ public static class EArkValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<EArkValidationContext>> PreservationMetadataRules() =>
-        new List<ClaimDelegate<EArkValidationContext>>
-        {
+        [
             new(EArkValidationChecks.CheckPreservationMetadataRoot, [.. EArkValidationChecks.PreservationRootClaimIds]),
             new(EArkValidationChecks.CheckPreservationIntellectualEntities, [.. EArkValidationChecks.PreservationIntellectualEntityClaimIds]),
             new(EArkValidationChecks.CheckPreservationRepresentations, [.. EArkValidationChecks.PreservationRepresentationClaimIds]),
@@ -185,7 +179,7 @@ public static class EArkValidationProfiles
             new(EArkValidationChecks.CheckPreservationAgents, [.. EArkValidationChecks.PreservationAgentClaimIds]),
             new(EArkValidationChecks.CheckPreservationEvents, [.. EArkValidationChecks.PreservationEventClaimIds]),
             new(EArkValidationChecks.CheckPreservationRights, [.. EArkValidationChecks.PreservationRightsClaimIds]),
-        };
+        ];
 
 
     /// <summary>
@@ -211,12 +205,11 @@ public static class EArkValidationProfiles
     /// </para>
     /// </remarks>
     public static IList<ClaimDelegate<EArkValidationContext>> EvidencePlacementRules() =>
-        new List<ClaimDelegate<EArkValidationContext>>
-        {
+        [
             new(EArkValidationChecks.CheckPackageEvidencePlacement, [.. EArkValidationChecks.PackageEvidencePlacementClaimIds]),
             new(EArkValidationChecks.CheckPackageEvidenceSelfDescription, [.. EArkValidationChecks.PackageEvidenceSelfDescriptionClaimIds]),
             new(EArkValidationChecks.CheckPackageProvenanceAnchoredAsync, [.. EArkValidationChecks.PackageProvenanceAnchorClaimIds]),
-        };
+        ];
 
 
     /// <summary>

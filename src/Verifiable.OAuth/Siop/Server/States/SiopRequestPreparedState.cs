@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Verifiable.JCose;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
 

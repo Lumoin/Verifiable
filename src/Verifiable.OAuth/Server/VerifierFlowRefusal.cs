@@ -1,6 +1,4 @@
-using System;
 using Verifiable.Core.StatusList;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Server;
 
@@ -98,6 +96,10 @@ public readonly record struct VerifierFlowRefusal
     public string ErrorCode => Kind switch
     {
         VerifierFlowRefusalKind.PolicyRefused => OAuthErrors.AccessDenied,
+        VerifierFlowRefusalKind.Malformed => OAuthErrors.InvalidRequest,
+        VerifierFlowRefusalKind.Unverifiable => OAuthErrors.InvalidRequest,
+        VerifierFlowRefusalKind.StatusUndeterminable => OAuthErrors.InvalidRequest,
+
         _ => OAuthErrors.InvalidRequest
     };
 

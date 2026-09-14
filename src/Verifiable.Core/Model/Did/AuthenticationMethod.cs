@@ -78,7 +78,7 @@ public sealed class AuthenticationMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="verificationReferenceId"/> is <c>null</c>.
     /// </exception>
-    public AuthenticationMethod(string verificationReferenceId): base(verificationReferenceId)
+    public AuthenticationMethod(string verificationReferenceId) : base(verificationReferenceId)
     {
     }
 
@@ -93,7 +93,7 @@ public sealed class AuthenticationMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="embeddedVerification"/> is <c>null</c>.
     /// </exception>
-    public AuthenticationMethod(VerificationMethod embeddedVerification): base(embeddedVerification)
+    public AuthenticationMethod(VerificationMethod embeddedVerification) : base(embeddedVerification)
     {
     }
 }

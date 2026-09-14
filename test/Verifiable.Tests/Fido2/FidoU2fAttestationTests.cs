@@ -1,5 +1,6 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
@@ -13,7 +14,6 @@ using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -87,7 +87,7 @@ internal sealed class FidoU2fAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
         var certified = (CertifiedAttestationResult)result;
         Assert.AreEqual(AttestationType.Unknown, certified.Type);
         Assert.HasCount(1, certified.TrustPath);
@@ -136,7 +136,7 @@ internal sealed class FidoU2fAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -190,7 +190,7 @@ internal sealed class FidoU2fAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 
@@ -216,7 +216,7 @@ internal sealed class FidoU2fAttestationTests
         CoseKey credentialPublicKey = Fido2AttestationTestVectors.CreateP256CoseKey(credentialKey, WellKnownCoseAlgorithms.Es256);
         byte[] credentialId = [0x21, 0x22, 0x23, 0x24];
         byte[] rpIdHash = Fido2TestVectors.CreateRpIdHash();
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialDataBytes = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
         byte[] authDataBytes = Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialDataBytes);
@@ -257,7 +257,7 @@ internal sealed class FidoU2fAttestationTests
 
         Fido2RegistrationOutcome outcome = await Fido2RegistrationVerifier.VerifyAsync(WellKnownWebAuthnAttestationFormats.FidoU2f, attestationStatement: parts.AttestationStatement, authenticatorDataBytes: parts.AuthenticatorData, clientDataJson, ceremonyInput, selectVerifier, AlwaysUnique, trustAnchors: [rootPki], validationTime: TestClock.CanonicalEpoch, CorrelationId, BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken, timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
         Assert.IsTrue(outcome.IsAcceptable);
 
         using Fido2CredentialRecord? record = outcome.CredentialRecord;
@@ -278,7 +278,7 @@ internal sealed class FidoU2fAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(result);
         Assert.AreEqual(Fido2AttestationErrors.MalformedStatement.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 

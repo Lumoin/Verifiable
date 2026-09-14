@@ -156,7 +156,7 @@ public static class EllipticCurveConstants
         /// <summary>
         /// The byte length of an uncompressed P-256 point encoding: 0x04 prefix + X + Y.
         /// </summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>
         /// The byte length of a compressed P-256 point encoding: 0x02/0x03 prefix + X.
@@ -195,7 +195,7 @@ public static class EllipticCurveConstants
         /// <summary>
         /// The byte length of an uncompressed P-384 point encoding: 0x04 prefix + X + Y.
         /// </summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>
         /// The byte length of a compressed P-384 point encoding: 0x02/0x03 prefix + X.
@@ -307,7 +307,7 @@ public static class EllipticCurveConstants
         /// <summary>
         /// The byte length of an uncompressed P-521 point encoding: 0x04 prefix + X + Y.
         /// </summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>
         /// The byte length of a compressed P-521 point encoding: 0x02/0x03 prefix + X.
@@ -535,7 +535,7 @@ public static class EllipticCurveConstants
         public const int PointArrayLength = 32;
 
         /// <summary>The byte length of an uncompressed Brainpool P-256r1 point encoding: 0x04 prefix + X + Y.</summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>The byte length of a compressed Brainpool P-256r1 point encoding: 0x02/0x03 prefix + X.</summary>
         public const int CompressedPointByteCount = 1 + PointArrayLength;
@@ -574,7 +574,7 @@ public static class EllipticCurveConstants
         public const int PointArrayLength = 28;
 
         /// <summary>The byte length of an uncompressed Brainpool P-224r1 point encoding: 0x04 prefix + X + Y.</summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>The byte length of a compressed Brainpool P-224r1 point encoding: 0x02/0x03 prefix + X.</summary>
         public const int CompressedPointByteCount = 1 + PointArrayLength;
@@ -613,7 +613,7 @@ public static class EllipticCurveConstants
         public const int PointArrayLength = 40;
 
         /// <summary>The byte length of an uncompressed Brainpool P-320r1 point encoding: 0x04 prefix + X + Y.</summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>The byte length of a compressed Brainpool P-320r1 point encoding: 0x02/0x03 prefix + X.</summary>
         public const int CompressedPointByteCount = 1 + PointArrayLength;
@@ -652,7 +652,7 @@ public static class EllipticCurveConstants
         public const int PointArrayLength = 48;
 
         /// <summary>The byte length of an uncompressed Brainpool P-384r1 point encoding: 0x04 prefix + X + Y.</summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>The byte length of a compressed Brainpool P-384r1 point encoding: 0x02/0x03 prefix + X.</summary>
         public const int CompressedPointByteCount = 1 + PointArrayLength;
@@ -691,7 +691,7 @@ public static class EllipticCurveConstants
         public const int PointArrayLength = 64;
 
         /// <summary>The byte length of an uncompressed Brainpool P-512r1 point encoding: 0x04 prefix + X + Y.</summary>
-        public const int UncompressedPointByteCount = 1 + 2 * PointArrayLength;
+        public const int UncompressedPointByteCount = 1 + (2 * PointArrayLength);
 
         /// <summary>The byte length of a compressed Brainpool P-512r1 point encoding: 0x02/0x03 prefix + X.</summary>
         public const int CompressedPointByteCount = 1 + PointArrayLength;

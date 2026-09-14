@@ -53,7 +53,7 @@ public abstract record CoseHeaderLabel
 /// </summary>
 /// <param name="Value">The integer label.</param>
 [DebuggerDisplay("CoseHeaderIntegerLabel: {Value}")]
-public sealed record CoseHeaderIntegerLabel(int Value) : CoseHeaderLabel;
+public sealed record CoseHeaderIntegerLabel(int Value): CoseHeaderLabel;
 
 
 /// <summary>
@@ -63,4 +63,4 @@ public sealed record CoseHeaderIntegerLabel(int Value) : CoseHeaderLabel;
 /// </summary>
 /// <param name="Value">The textual label.</param>
 [DebuggerDisplay("CoseHeaderTextLabel: {Value}")]
-public sealed record CoseHeaderTextLabel(string Value) : CoseHeaderLabel;
+public sealed record CoseHeaderTextLabel(string Value): CoseHeaderLabel;

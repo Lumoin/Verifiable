@@ -137,7 +137,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle(value);
 
         Assert.IsFalse(TpmiShHmac.IsHmacSession(value));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseShHmac(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseShHmac(wireBytes));
     }
 
     /// <summary>
@@ -209,7 +209,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle(value);
 
         Assert.IsFalse(TpmiShPolicy.IsPolicySession(value));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseShPolicy(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseShPolicy(wireBytes));
     }
 
     /// <summary>
@@ -281,7 +281,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
 
         Assert.IsFalse(TpmiDhPcr.IsPcr(value));
         Assert.IsFalse(TpmiDhPcr.IsPcr(value, isNullAdmitted: true));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhPcr(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhPcr(wireBytes));
     }
 
     /// <summary>
@@ -295,7 +295,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle((uint)TpmRh.TPM_RH_NULL);
 
         Assert.IsFalse(TpmiDhPcr.IsPcr((uint)TpmRh.TPM_RH_NULL));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhPcr(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhPcr(wireBytes));
     }
 
     /// <summary>
@@ -388,7 +388,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle(value);
 
         Assert.IsFalse(TpmiDhPersistent.IsPersistent(value));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhPersistent(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhPersistent(wireBytes));
     }
 
     /// <summary>
@@ -462,7 +462,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle(value);
 
         Assert.IsFalse(TpmiDhContext.IsContext(value));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhContext(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhContext(wireBytes));
     }
 
     /// <summary>
@@ -564,7 +564,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle(value);
 
         Assert.IsFalse(TpmiDhEntity.IsEntity(value));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhEntity(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhEntity(wireBytes));
     }
 
     /// <summary>
@@ -578,7 +578,7 @@ internal sealed class TpmInterfaceSessionAndEntityHandleTests
         byte[] wireBytes = EncodeHandle((uint)TpmRh.TPM_RH_NULL);
 
         Assert.IsFalse(TpmiDhEntity.IsEntity((uint)TpmRh.TPM_RH_NULL));
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhEntity(wireBytes));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseDhEntity(wireBytes));
     }
 
     /// <summary>

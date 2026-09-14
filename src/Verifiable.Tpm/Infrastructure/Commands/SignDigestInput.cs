@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -117,7 +113,7 @@ public sealed class SignDigestInput: ITpmCommandInput, IDisposable
         IMemoryOwner<byte> owner = pool.Rent(digest.Length);
         digest.CopyTo(owner.Memory.Span);
 
-        return new SignDigestInput(keyHandle, owner, owner.Memory.Slice(0, digest.Length), validation);
+        return new SignDigestInput(keyHandle, owner, owner.Memory[..digest.Length], validation);
     }
 
     private SignDigestInput(

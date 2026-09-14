@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Text;
-using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
@@ -330,21 +329,21 @@ internal sealed class Fido2AssertionOracle: IDisposable
     internal static byte[] BuildClientDataJson(string type, string challenge, string origin, bool? crossOrigin, string? topOrigin)
     {
         var builder = new StringBuilder();
-        builder.Append('{');
-        builder.Append("\"type\":\"").Append(type).Append("\",");
-        builder.Append("\"challenge\":\"").Append(challenge).Append("\",");
-        builder.Append("\"origin\":\"").Append(origin).Append('"');
+        _ = builder.Append('{');
+        _ = builder.Append("\"type\":\"").Append(type).Append("\",");
+        _ = builder.Append("\"challenge\":\"").Append(challenge).Append("\",");
+        _ = builder.Append("\"origin\":\"").Append(origin).Append('"');
         if(crossOrigin is bool cross)
         {
-            builder.Append(",\"crossOrigin\":").Append(cross ? "true" : "false");
+            _ = builder.Append(",\"crossOrigin\":").Append(cross ? "true" : "false");
         }
 
         if(topOrigin is not null)
         {
-            builder.Append(",\"topOrigin\":\"").Append(topOrigin).Append('"');
+            _ = builder.Append(",\"topOrigin\":\"").Append(topOrigin).Append('"');
         }
 
-        builder.Append('}');
+        _ = builder.Append('}');
 
         return Encoding.UTF8.GetBytes(builder.ToString());
     }

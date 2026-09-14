@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
 using Verifiable.Tests.X509;
@@ -689,7 +684,7 @@ internal sealed class AnnexAValidationScenario: IDisposable
     /// <typeparam name="T">The artefact's type.</typeparam>
     /// <param name="artefact">The artefact.</param>
     /// <returns>The same artefact.</returns>
-    private T Own<T>(T artefact) where T: IDisposable
+    private T Own<T>(T artefact) where T : IDisposable
     {
         Owned.Add(artefact);
 

@@ -1,13 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 
 namespace Verifiable.DidComm;
 
@@ -197,7 +192,7 @@ public static class AttachmentDataResolutionExtensions
         //(MalformedInline), never a fall-back to fetch.
         if(hasBase64)
         {
-            return ResolveInline(attachmentData.Base64!, isBase64: true, attachmentData,
+            return ResolveInline(attachmentData.Base64, isBase64: true, attachmentData,
                 base64UrlDecoder, hashBase58Decoder, hashFunctionSelector, jsonValueSerializer, memoryPool);
         }
 

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -175,8 +173,8 @@ internal sealed class StatusClaimTests
         var supplied = new HashSet<string>(StringComparer.Ordinal) { StatusMechanismNames.StatusList };
         var claim = new StatusClaim(new StatusListReference(SuspendedCredentialIndex, ExampleTokenSubject), supplied);
 
-        supplied.Add(StatusMechanismNames.IdentifierList);
-        supplied.Remove(StatusMechanismNames.StatusList);
+        _ = supplied.Add(StatusMechanismNames.IdentifierList);
+        _ = supplied.Remove(StatusMechanismNames.StatusList);
 
         Assert.HasCount(1, claim.Mechanisms, "The claim's own set is unaffected by mutating the caller's source collection.");
         Assert.Contains(StatusMechanismNames.StatusList, claim.Mechanisms, "The mechanism present at construction time must survive.");

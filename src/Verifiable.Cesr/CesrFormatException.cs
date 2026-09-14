@@ -18,7 +18,7 @@ public sealed class CesrFormatException: Exception
     /// Initializes a new instance of the <see cref="CesrFormatException"/> class with a message.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    public CesrFormatException(string message): base(message)
+    public CesrFormatException(string message) : base(message)
     {
     }
 
@@ -29,7 +29,7 @@ public sealed class CesrFormatException: Exception
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of this exception.</param>
-    public CesrFormatException(string message, Exception innerException): base(message, innerException)
+    public CesrFormatException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

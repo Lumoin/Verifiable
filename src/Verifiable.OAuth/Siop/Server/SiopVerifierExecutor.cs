@@ -10,7 +10,6 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Siop.Server.States;
 
 namespace Verifiable.OAuth.Siop.Server;
 
@@ -326,6 +325,8 @@ public static class SiopVerifierExecutor
 
                     SiopFlowFailed? nonceReplayFailure = nonceReplayOutcome switch
                     {
+                        JtiReplayOutcome.FirstUse => null,
+
                         //A replayed nonce is a Wallet-attributable input the RP cannot verify a second
                         //time — SIOPv2 §11.2's cross-device replay defense rejects it, the same way an
                         //unverifiable Authorization Response does on the OID4VP seat.
@@ -356,6 +357,7 @@ public static class SiopVerifierExecutor
                                 + "no replay store is configured (SIOPv2 §11.2).",
                             FailedAt = now
                         },
+
                         _ => null
                     };
                     if(nonceReplayFailure is not null)
@@ -522,7 +524,7 @@ public static class SiopVerifierExecutor
                 };
             }
 
-            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = new();
+            Dictionary<CredentialQueryId, CredentialStatusOutcome> credentialStatuses = [];
             if(statusCheck.Kind == CredentialStatusCheckKind.Determined)
             {
                 credentialStatuses[resolvedVpTokenCredentialQueryId] = statusCheck.Outcome!;

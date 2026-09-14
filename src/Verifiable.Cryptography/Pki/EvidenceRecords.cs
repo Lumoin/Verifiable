@@ -1,11 +1,7 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -1181,6 +1177,11 @@ public static class EvidenceRecords
             EvidenceRecordVerificationStatus status = computation.Status switch
             {
                 EvidenceRecordRootStatus.HashValueNotInFirstList => EvidenceRecordVerificationStatus.DataObjectNotCovered,
+                EvidenceRecordRootStatus.NotComputed => EvidenceRecordVerificationStatus.Malformed,
+                EvidenceRecordRootStatus.Computed => EvidenceRecordVerificationStatus.Malformed,
+                EvidenceRecordRootStatus.PartialHashtreeEmpty => EvidenceRecordVerificationStatus.Malformed,
+                EvidenceRecordRootStatus.HashValueLengthMismatch => EvidenceRecordVerificationStatus.Malformed,
+                EvidenceRecordRootStatus.ReducedHashtreeTooDeep => EvidenceRecordVerificationStatus.Malformed,
                 _ => EvidenceRecordVerificationStatus.Malformed
             };
 

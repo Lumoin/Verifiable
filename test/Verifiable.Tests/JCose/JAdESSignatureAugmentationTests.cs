@@ -1,17 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
@@ -70,7 +65,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddSignatureTimestampAsync_HappyPath_AppendsOneSigTstElement()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -141,7 +136,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddSignatureTimestampAsync_Base64UrlIncorporation_MintsOpaqueSigTstAndKeepsRetainedElementByteExact()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -194,7 +189,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddSignatureTimestampAsync_RepeatedCall_AppendsSiblingElementWithoutMutatingTheFirst()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -219,8 +214,8 @@ internal sealed class JAdESSignatureAugmentationTests
 
         using JAdESUnsignedHeaders both = DecodeUnsignedHeaders(twiceAugmented);
         Assert.AreEqual(2, both.Count);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(both[0]);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(both[1]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(both[0]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(both[1]);
 
         byte[] firstTokenValAfter = ExtractSigTstTokenBytes(both, 0);
         Assert.AreSequenceEqual(firstTokenValBefore, firstTokenValAfter, "The first sigTst instance's own token bytes must be untouched by the second call.");
@@ -234,7 +229,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddValidationDataAsync_SeparatePlacement_AppendsXValsThenRVals()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] withSigTst = await CreateWireBytesWithSigTstAsync(privateKey, tsa, TestContext.CancellationToken).ConfigureAwait(false);
@@ -254,9 +249,9 @@ internal sealed class JAdESSignatureAugmentationTests
 
         using JAdESUnsignedHeaders unsignedHeaders = DecodeUnsignedHeaders(augmented);
         Assert.AreEqual(3, unsignedHeaders.Count);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(unsignedHeaders[0]);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementCertificateValues>(unsignedHeaders[1]);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementRevocationValues>(unsignedHeaders[2]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(unsignedHeaders[0]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementCertificateValues>(unsignedHeaders[1]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementRevocationValues>(unsignedHeaders[2]);
     }
 
 
@@ -268,7 +263,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddValidationDataAsync_AnyValDataPlacement_AppendsSingleElement()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] withSigTst = await CreateWireBytesWithSigTstAsync(privateKey, tsa, TestContext.CancellationToken).ConfigureAwait(false);
@@ -287,8 +282,8 @@ internal sealed class JAdESSignatureAugmentationTests
 
         using JAdESUnsignedHeaders unsignedHeaders = DecodeUnsignedHeaders(augmented);
         Assert.AreEqual(2, unsignedHeaders.Count);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(unsignedHeaders[0]);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementAnyValidationData>(unsignedHeaders[1]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(unsignedHeaders[0]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementAnyValidationData>(unsignedHeaders[1]);
     }
 
 
@@ -300,7 +295,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddValidationDataAsync_DuplicateAgainstExistingXVals_IsSkipped()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] withSigTst = await CreateWireBytesWithSigTstAsync(privateKey, tsa, TestContext.CancellationToken).ConfigureAwait(false);
@@ -342,7 +337,7 @@ internal sealed class JAdESSignatureAugmentationTests
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] baseline = await CreateBaselineWireBytesAsync(privateKey, TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
             () => AddValidationDataAsync(
                 new JAdESValidationDataContext { WireBytes = baseline, Material = JAdESValidationMaterial.None, TargetLevel = AdESBaselineLevel.BLT },
                 TestContext.CancellationToken).AsTask()).ConfigureAwait(false);
@@ -402,7 +397,7 @@ internal sealed class JAdESSignatureAugmentationTests
         var clearXRefs = Assert.IsInstanceOfType<JAdESClearUnsignedValue<JAdESCertificateReferenceCollection>>(xRefs.Carriage);
         Assert.HasCount(1, clearXRefs.Value.Items);
         Assert.AreEqual(new AdESDigestAlgorithmTextIdentifier(WellKnownHashAlgorithms.Sha256Iana), clearXRefs.Value.Items[0].HashAlgorithm);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementRevocationReferences>(unsignedHeaders[1]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementRevocationReferences>(unsignedHeaders[1]);
     }
 
 
@@ -467,7 +462,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddSignatureAndReferencesTimestampAsync_HappyPath_AppendsSigRTst()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] withXRefs = await CreateWireBytesWithXRefsAsync(privateKey, TestContext.CancellationToken).ConfigureAwait(false);
@@ -561,7 +556,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddSignatureAndReferencesTimestampAsync_ThenLaterXRefs_DoesNotMutateEarlierSigRTst()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] withXRefs = await CreateWireBytesWithXRefsAsync(privateKey, TestContext.CancellationToken).ConfigureAwait(false);
@@ -611,7 +606,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddArchiveTimestampAsync_HappyPath_ReachesBLTAWithGapFill()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -653,8 +648,8 @@ internal sealed class JAdESSignatureAugmentationTests
 
         using JAdESUnsignedHeaders unsignedHeaders = DecodeUnsignedHeaders(withArcTst);
         Assert.AreEqual(3, unsignedHeaders.Count, "sigTst, the gap-filled xVals, then arcTst, in that order (JA-5.3.1-03).");
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(unsignedHeaders[0]);
-        Assert.IsInstanceOfType<JAdESUnsignedHeaderElementCertificateValues>(unsignedHeaders[1]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(unsignedHeaders[0]);
+        _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementCertificateValues>(unsignedHeaders[1]);
         var arcTst = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementArchiveTimestamp>(unsignedHeaders[2]);
         var clear = Assert.IsInstanceOfType<JAdESClearUnsignedValue<AdESTimestampContainer>>(arcTst.Carriage);
         Assert.AreEqual("urn:test:canon", clear.Value.CanonAlg);
@@ -697,7 +692,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddArchiveTimestampAsync_ChainCompletenessNotAttested_NeverBillsTsa()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] baseline = await CreateBaselineWireBytesAsync(privateKey, TestContext.CancellationToken).ConfigureAwait(false);
@@ -732,7 +727,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddArchiveTimestampAsync_NoSignatureTimestampInstance_NeverBillsTsa()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
         byte[] baseline = await CreateBaselineWireBytesAsync(privateKey, TestContext.CancellationToken).ConfigureAwait(false);
@@ -771,7 +766,7 @@ internal sealed class JAdESSignatureAugmentationTests
     [TestMethod]
     public async Task AddArchiveTimestampAsync_ReferencesFamilyElementStillPresent_NeverBillsTsa()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -820,7 +815,7 @@ internal sealed class JAdESSignatureAugmentationTests
     public async Task FullLadder_MeteredPool_LeavesNoOutstandingRentals()
     {
         using var metered = new MeteredHousePool();
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -1099,7 +1094,7 @@ internal sealed class JAdESSignatureAugmentationTests
         }
 
 
-        public static TsaFixture Create(CancellationToken cancellationToken)
+        public static TsaFixture Create()
         {
             var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
             X509ChainTestRingNode root = X509ChainTestRing.CreateRootCa(timeProvider);

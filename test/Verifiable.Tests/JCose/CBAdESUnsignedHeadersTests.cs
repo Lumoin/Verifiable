@@ -1,16 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.IO;
-using System.Linq;
+using System.Buffers;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Tests.Foundation;
 
@@ -60,7 +53,7 @@ internal sealed class CBAdESUnsignedHeadersTests
     [TestMethod]
     public void ConstructingUnsignedHeadersWithNullElementsThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESUnsignedHeaders(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESUnsignedHeaders(null!));
     }
 
 
@@ -72,7 +65,7 @@ internal sealed class CBAdESUnsignedHeadersTests
     [TestMethod]
     public void ConstructingUnsignedHeadersWithEmptyElementsThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESUnsignedHeaders([]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESUnsignedHeaders([]));
     }
 
 
@@ -123,7 +116,7 @@ internal sealed class CBAdESUnsignedHeadersTests
     {
         using var headers = new CBAdESUnsignedHeaders([MakeUnknownElement(1, [0x01])]);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => headers.Append(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => headers.Append(null!));
     }
 
 
@@ -163,8 +156,8 @@ internal sealed class CBAdESUnsignedHeadersTests
     {
         using var headers = new CBAdESUnsignedHeaders([MakeUnknownElement(1, [0x01])]);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(-1));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(headers.Count + 1));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(-1));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => headers.ElementsBefore(headers.Count + 1));
     }
 
 
@@ -277,7 +270,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         Assert.IsNotNull(result);
         using(result)
         {
-            CBAdESUnsignedHeaders header = result!;
+            CBAdESUnsignedHeaders header = result;
             Assert.AreEqual(10, header.Count);
             Assert.IsTrue(header[0] is CBAdESUnsignedHeaderElementSignatureTimestamp, "Element 0 must be sigTst (label 1).");
             Assert.IsTrue(header[1] is CBAdESUnsignedHeaderElementValidationData, "Element 1 must be valData (label 2).");
@@ -396,7 +389,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         Assert.IsNotNull(result);
         using(result)
         {
-            CBAdESUnsignedHeaders header = result!;
+            CBAdESUnsignedHeaders header = result;
             Assert.HasCount(1, header);
             Assert.IsTrue(header[0] is CBAdESUnsignedHeaderElementUnknown, "An unrecognized integer label must round-trip as the catch-all arm, not be dropped.");
 
@@ -427,7 +420,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         Assert.IsNotNull(result);
         using(result)
         {
-            CBAdESUnsignedHeaders header = result!;
+            CBAdESUnsignedHeaders header = result;
             Assert.HasCount(1, header);
             Assert.IsTrue(header[0] is CBAdESUnsignedHeaderElementUnknown, "An unrecognized text label must round-trip as the catch-all arm, not be dropped.");
 
@@ -537,7 +530,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         Assert.IsNotNull(result);
         using(result)
         {
-            Assert.AreEqual(1, result!.Count);
+            Assert.AreEqual(1, result.Count);
             var fullCounterSignature = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementFullCounterSignature>(result[0]);
             Assert.IsTrue(
                 counterSignatureValue.AsSpan().SequenceEqual(fullCounterSignature.Value.Span),
@@ -571,7 +564,7 @@ internal sealed class CBAdESUnsignedHeadersTests
         Assert.IsNotNull(result);
         using(result)
         {
-            Assert.AreEqual(1, result!.Count);
+            Assert.AreEqual(1, result.Count);
             var abbreviatedCounterSignature = Assert.IsInstanceOfType<CBAdESUnsignedHeaderElementAbbreviatedCounterSignature>(result[0]);
             Assert.IsTrue(
                 abbreviatedSignatureValue.AsSpan().SequenceEqual(abbreviatedCounterSignature.Value.Span),

@@ -4,7 +4,6 @@ using Verifiable.Core.StatusList;
 using Verifiable.JCose;
 using Verifiable.Json.StatusList;
 using Verifiable.OAuth;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.StatusList;
 

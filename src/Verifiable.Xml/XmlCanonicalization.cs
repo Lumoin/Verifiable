@@ -1,7 +1,7 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -86,6 +86,10 @@ public static class XmlCanonicalization
         {
             XmlCanonicalizationAlgorithm.CanonicalXml10 or XmlCanonicalizationAlgorithm.CanonicalXml10WithComments => XmlCanonicalVariant.Inclusive10,
             XmlCanonicalizationAlgorithm.CanonicalXml11 or XmlCanonicalizationAlgorithm.CanonicalXml11WithComments => XmlCanonicalVariant.Inclusive11,
+
+            //The exclusive variants are rendered by the sibling exclusive-canonicalization entry point, never this one.
+            XmlCanonicalizationAlgorithm.ExclusiveCanonicalXml10 or XmlCanonicalizationAlgorithm.ExclusiveCanonicalXml10WithComments =>
+                throw new ArgumentOutOfRangeException(nameof(algorithm)),
             _ => throw new ArgumentOutOfRangeException(nameof(algorithm))
         };
         bool isWithComments = algorithm is XmlCanonicalizationAlgorithm.CanonicalXml10WithComments
@@ -223,8 +227,8 @@ public static class XmlCanonicalization
                 using IMemoryOwner<byte> scratch = pool.Rent(byteCount);
                 int written = Encoding.UTF8.GetBytes(token, scratch.Memory.Span);
                 int rangeStart = tokenOctets.AddRange(scratch.Memory.Span[..written]);
-                tokenRanges.Add(rangeStart);
-                tokenRanges.Add(written);
+                _ = tokenRanges.Add(rangeStart);
+                _ = tokenRanges.Add(written);
             }
         }
 

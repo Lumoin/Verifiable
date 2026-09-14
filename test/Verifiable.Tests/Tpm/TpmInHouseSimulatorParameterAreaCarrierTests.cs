@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -12,13 +9,6 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -93,7 +83,7 @@ internal sealed class TpmInHouseSimulatorParameterAreaCarrierTests
         using TpmDevice tpm = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        await DefineIndexAsync(tpm, registry, pool, SelfAuthIndexHandle, SelfAuthorizedAttributes, IndexData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(tpm, registry, pool, SelfAuthIndexHandle, SelfAuthorizedAttributes, IndexData).ConfigureAwait(false);
         (uint sessionHandle, _) = await StartUnboundSessionAsync(tpm, registry, pool).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;

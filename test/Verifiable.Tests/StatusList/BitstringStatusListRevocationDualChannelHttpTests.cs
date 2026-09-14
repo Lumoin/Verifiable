@@ -1,12 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Net.Http;
+using Microsoft.Extensions.Time.Testing;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.SecurityEvents;
@@ -17,7 +11,6 @@ using Verifiable.Json;
 using Verifiable.Tests.DataIntegrity;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -120,7 +113,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
         //plus the issuer public key alone through the full reception pipeline.
         SecurityEventToken? receivedToken = null;
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen = (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+        ValueTask<bool> isSeen(string jti, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(jti));
 
         async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken token)
         {
@@ -133,7 +126,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, issuerPublic, Issuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: token).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool, cancellationToken: token).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -175,7 +168,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
 
         //The single trigger: the issuer revokes the credential through the seam, fanning out to both
         //channels exactly as a deployment would compose them.
-        UpdateCredentialStatusesDelegate revoke = async (changes, token) =>
+        async ValueTask<CredentialStatusUpdateOutcome> revoke(IReadOnlyList<CredentialStatusChange> changes, CancellationToken token)
         {
             //Channel 1 (pull): flip every change's bit, then re-sign and republish the list once.
             foreach(CredentialStatusChange change in changes)
@@ -221,7 +214,7 @@ internal sealed class BitstringStatusListRevocationDualChannelHttpTests
             Assert.AreEqual(202, (int)push.StatusCode, "The SSF Receiver must accept the credential-change SET.");
 
             return CredentialStatusUpdateOutcome.Updated;
-        };
+        }
 
         CredentialStatusUpdateOutcome outcome = await revoke([new CredentialStatusChange(RevocationEntry(Example4Index), 1)], ct).ConfigureAwait(false);
         Assert.AreEqual(CredentialStatusUpdateOutcome.Updated, outcome);

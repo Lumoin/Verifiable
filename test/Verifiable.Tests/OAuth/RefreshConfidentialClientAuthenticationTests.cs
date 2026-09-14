@@ -1,8 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Net.Http;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -386,6 +386,266 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
 
     /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>'s reuse-detection revocation is gated on the SAME client
+    /// authentication bar a live rotation clears
+    /// (<see cref="AuthCodeClient.RefreshAsync(ClientRegistration, RefreshTokenRequest, System.Threading.CancellationToken)"/>'s
+    /// declared-method requirement): a party holding only a rotated-out refresh token, without the
+    /// declared <c>client_secret_post</c> credential, cannot trigger the family revocation this
+    /// method's own denial-of-service reasoning exists to prevent. The reuse presentation carries
+    /// the correct <c>client_id</c> but NO <c>client_secret</c> — a raw wire push, since the real
+    /// client would never omit a credential it has been configured to attach — and is refused
+    /// <c>invalid_grant</c> without revoking the successor, which a subsequent authenticated
+    /// refresh proves still usable.
+    /// </summary>
+    [TestMethod]
+    public async Task ReuseOfRotatedOutRefreshTokenWithoutClientCredentialsLeavesSuccessorUsable()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            DeclareServerSideAuthMethod(host, material, ClientAuthenticationMethod.ClientSecretPost);
+
+            host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration,
+                    RedirectUri.OriginalString,
+                    profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            ClientRegistration authenticated = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretPost,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+
+            AuthCodeFlowDriveResult drive = await AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync(
+                hosted, client, authenticated, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            string originalRefreshToken = (string)drive.TokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+            //A single legitimate, AUTHENTICATED rotation.
+            RefreshTokenRequest rotateRequest = new()
+            {
+                ClientId = registration.ClientId.Value,
+                RefreshToken = originalRefreshToken
+            };
+            AuthCodeFlowEndpointResult rotation = await client.AuthCode.RefreshAsync(
+                authenticated, rotateRequest, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, rotation.Outcome,
+                $"The authenticated rotation must succeed. ErrorCode={rotation.ErrorCode}");
+            string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
+
+            //The reuse presentation: correct client_id, NO client_secret — a raw wire push, since
+            //an attacker holding only the stolen refresh token has no reason to also hold the
+            //client's secret.
+            (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, originalRefreshToken),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(400, reuse.StatusCode, reuse.Body);
+            Assert.Contains(OAuthErrors.InvalidGrant, reuse.Body, StringComparison.Ordinal);
+
+            //The successor must remain usable — an authenticated refresh of it still succeeds.
+            RefreshTokenRequest successorRefreshRequest = new()
+            {
+                ClientId = registration.ClientId.Value,
+                RefreshToken = successorRefreshToken
+            };
+            AuthCodeFlowEndpointResult successorRefresh = await client.AuthCode.RefreshAsync(
+                authenticated, successorRefreshRequest, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, successorRefresh.Outcome,
+                $"An unauthenticated reuse presentation must not revoke the successor. ErrorCode={successorRefresh.ErrorCode}");
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>: "if client authentication is included in the request, ensure that
+    /// the refresh token was issued to the authenticated client". Basic credentials identify the
+    /// bound confidential client even when the refresh form omits client_id.
+    /// </summary>
+    [TestMethod]
+    public async Task BasicOnlyRefreshWithoutFormClientIdRotatesNormally()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        string original = await IssueBasicAuthenticatedRefreshTokenAsync(host, material).ConfigureAwait(false);
+        OutgoingHeaders headers = OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, material.Registration.TenantId.Value,
+            RawAuthCodeWirePushers.BuildRefreshTokenFields(null, original), headers,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, rotation.StatusCode, "Authenticated Basic identity must suffice without form client_id.");
+        using JsonDocument document = JsonDocument.Parse(rotation.Body);
+        Assert.AreNotEqual(original,
+            document.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString());
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §4.3.1</see>: "it will revoke the active refresh token as well as the access
+    /// authorization grant associated with it." A valid Basic-only reuse identifies its bound
+    /// confidential client and revokes the successor without a form client_id.
+    /// </summary>
+    [TestMethod]
+    public async Task BasicOnlyRefreshReuseWithoutFormClientIdRevokesTheSuccessor()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(
+            ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+        string original = await IssueBasicAuthenticatedRefreshTokenAsync(host, material).ConfigureAwait(false);
+        string segment = material.Registration.TenantId.Value;
+        OutgoingHeaders headers = OutgoingHeaders.Empty.WithClientSecretBasic(ClientId, Encoding.UTF8.GetBytes(ClientSecret));
+        (int StatusCode, string Body) rotation = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, original), headers,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(200, rotation.StatusCode, rotation.Body);
+        using JsonDocument document = JsonDocument.Parse(rotation.Body);
+        string successor = document.RootElement.GetProperty(OAuthRequestParameterNames.RefreshToken).GetString()!;
+
+        (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(null, original), headers,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, reuse.StatusCode, reuse.Body);
+        (int StatusCode, string Body) afterReuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, successor), headers,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, afterReuse.StatusCode,
+            "Valid Basic-only reuse must revoke the current successor without form client_id.");
+        Assert.Contains(OAuthErrors.InvalidGrant, afterReuse.Body, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> maps a
+    /// failed client authentication attempt to <c>invalid_client</c> (401), distinct from
+    /// <c>invalid_grant</c> (400) for a grant-level defect such as a mismatched bound client_id.
+    /// A live refresh presenting BOTH a wrong form client_id and a failing client_secret answers
+    /// the authentication failure — client identity is verified before the bound-client
+    /// comparison — and consumes nothing: the successor refresh with correct credentials still
+    /// succeeds.
+    /// </summary>
+    [TestMethod]
+    public async Task LiveRefreshWithWrongFormClientIdAndFailingCredentialAnswersInvalidClient()
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            await using TestHostShell host = new(TimeProvider);
+            using VerifierKeyMaterial material = host.RegisterDpopClient(
+                ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
+            DeclareServerSideAuthMethod(host, material, ClientAuthenticationMethod.ClientSecretPost);
+            host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(
+                    fields.TryGetValue(OAuthRequestParameterNames.ClientSecret, out string? secret)
+                    && string.Equals(secret, ClientSecret, StringComparison.Ordinal));
+
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration, RedirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            ClientRegistration authenticated = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretPost,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            HostedAuthorizationServer hosted = host.Host("default");
+            string segment = material.Registration.TenantId.Value;
+
+            AuthCodeFlowDriveResult drive = await AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync(
+                hosted, client, authenticated, clientFlowStore, segment, RedirectUri, SubjectId, browserClient,
+                scope: WellKnownScopes.OpenId, cancellationToken: TestContext.CancellationToken)
+                .ConfigureAwait(false);
+            string original = (string)drive.TokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+            Dictionary<string, string> fields = RawAuthCodeWirePushers.BuildRefreshTokenFields(
+                "https://a-different-client.test", original);
+            fields[OAuthRequestParameterNames.ClientSecret] = WrongClientSecret;
+
+            (int StatusCode, string Body) failedAuth = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment, fields, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(401, failedAuth.StatusCode, failedAuth.Body);
+            Assert.Contains(OAuthErrors.InvalidClient, failedAuth.Body, StringComparison.Ordinal);
+
+            RefreshTokenRequest rotateRequest = new()
+            {
+                ClientId = registration.ClientId.Value,
+                RefreshToken = original
+            };
+            AuthCodeFlowEndpointResult rotation = await client.AuthCode.RefreshAsync(
+                authenticated, rotateRequest, TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, rotation.Outcome,
+                $"The failed authentication attempt must not consume the refresh token. ErrorCode={rotation.ErrorCode}");
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
+    /// Issues an initial refresh token through a complete real-wire authorization using Basic
+    /// credentials. The setup binds the registration and validates the header so raw refresh
+    /// tests can vary only the presence of form client_id.
+    /// </summary>
+    private async Task<string> IssueBasicAuthenticatedRefreshTokenAsync(TestHostShell host, VerifierKeyMaterial material)
+    {
+        PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> secretMaterial = BuildSecretKeyMaterial(ClientSecret);
+        try
+        {
+            DeclareServerSideAuthMethod(host, material, ClientAuthenticationMethod.ClientSecretBasic);
+            host.Server.OAuth().ValidateClientCredentialsAsync = static (request, fields, registration, context, ct) =>
+                ValueTask.FromResult(DecodeAndMatchBasicHeader(request, registration.ClientId, ClientSecret));
+            (OAuthClient client, ClientRegistration registration, Dictionary<string, FlowState> clientFlowStore) =
+                await host.CreateOAuthClientAndRegistrationAsync(
+                    material.Registration, RedirectUri.OriginalString, profile: PolicyProfile.Rfc6749WithPkce,
+                    TestContext.CancellationToken).ConfigureAwait(false);
+            registration = registration with
+            {
+                AuthenticationMethod = ClientAuthenticationMethod.ClientSecretBasic,
+                AuthenticationKeyMaterial = secretMaterial
+            };
+            using HttpClient browserClient = LoopbackTls.CreateSingleHopPinnedHttpClient(host.ServerCertificate);
+            AuthCodeFlowDriveResult drive = await AuthCodeFlowDriver.DriveParAuthorizeCallbackAndTokenAsync(
+                host.Host("default"), client, registration, clientFlowStore, material.Registration.TenantId.Value,
+                RedirectUri, SubjectId, browserClient, scope: WellKnownScopes.OpenId,
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
+
+            return (string)drive.TokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+        }
+        finally
+        {
+            secretMaterial.PublicKey.Dispose();
+            secretMaterial.PrivateKey.Dispose();
+        }
+    }
+
+
+    /// <summary>
     /// Drives PAR → authorize → callback → token over the real wire to obtain an initial refresh
     /// token, then refreshes through <see cref="AuthCodeFlowDriver.DriveRefreshAsync"/> — asserting
     /// both legs, including the refresh the confidential-auth attachment under test gates, succeeded
@@ -458,7 +718,7 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
 
         hosted.Registrations[segment] = updated;
         hosted.Registrations[updated.ClientId] = updated;
-        hosted.Server.UpdateClient(previous, updated, new ExchangeContext());
+        hosted.Server.UpdateClient(previous, updated, []);
 
         material.Registration = updated;
 
@@ -539,13 +799,13 @@ internal sealed class RefreshConfidentialClientAuthenticationTests
     private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)
     {
         StringBuilder sb = new();
-        sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
+        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
         foreach(KeyValuePair<string, string> member in jwk)
         {
-            sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
         }
 
-        sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
+        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
 
         return sb.ToString();
     }

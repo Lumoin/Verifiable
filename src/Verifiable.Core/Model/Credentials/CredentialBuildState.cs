@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Credentials;
@@ -139,7 +137,7 @@ public struct CredentialBuildState: IEquatable<CredentialBuildState>, IBuilderSt
     /// <c>true</c> if the specified object is a <see cref="CredentialBuildState"/>
     /// and is equal to the current instance; otherwise, <c>false</c>.
     /// </returns>
-    public override bool Equals(object? obj)
+    public override readonly bool Equals(object? obj)
     {
         return obj is CredentialBuildState other && Equals(other);
     }

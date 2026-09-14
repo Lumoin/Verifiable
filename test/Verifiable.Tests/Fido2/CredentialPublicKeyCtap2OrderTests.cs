@@ -1,10 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Fido2;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 

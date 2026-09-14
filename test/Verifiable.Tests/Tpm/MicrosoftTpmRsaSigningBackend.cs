@@ -1,14 +1,9 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Automata;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -270,8 +265,8 @@ internal static class MicrosoftTpmRsaSigningBackend
         while(r != BigInteger.Zero)
         {
             BigInteger quotient = oldR / r;
-            (oldR, r) = (r, oldR - quotient * r);
-            (oldS, s) = (s, oldS - quotient * s);
+            (oldR, r) = (r, oldR - (quotient * r));
+            (oldS, s) = (s, oldS - (quotient * s));
         }
 
         if(oldR != BigInteger.One)

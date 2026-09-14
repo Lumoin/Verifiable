@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Verifiable.Cryptography.Pki;
@@ -169,6 +167,7 @@ public static class QualifiedTrustedListComposition
         EuQualifiedCertificateType.ElectronicSignature => (TrustServiceAdditionalInformationType.ForElectronicSignatures, ServiceQualifier.ForElectronicSignature),
         EuQualifiedCertificateType.ElectronicSeal => (TrustServiceAdditionalInformationType.ForElectronicSeals, ServiceQualifier.ForElectronicSeal),
         EuQualifiedCertificateType.WebsiteAuthentication => (TrustServiceAdditionalInformationType.ForWebSiteAuthentication, ServiceQualifier.ForWebSiteAuthentication),
+        EuQualifiedCertificateType.None => throw new ArgumentException("Clause 4.4.4's Tables 1/2/3 have no row for EuQualifiedCertificateType.None.", nameof(qualificationDimension)),
         _ => throw new ArgumentException("Clause 4.4.4's Tables 1/2/3 have no row for EuQualifiedCertificateType.None.", nameof(qualificationDimension))
     };
 }

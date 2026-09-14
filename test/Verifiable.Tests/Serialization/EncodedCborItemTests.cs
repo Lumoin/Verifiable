@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 
 namespace Verifiable.Tests.Serialization;
@@ -92,7 +92,7 @@ internal sealed class EncodedCborItemTests
         byte[] bytes = buffer.WrittenSpan.ToArray();
         var reader = new CborReader(bytes, CborOptions.Strict);
 
-        Assert.ThrowsExactly<CborContentException>(() => EncodedCborItem.Read(reader));
+        _ = Assert.ThrowsExactly<CborContentException>(() => EncodedCborItem.Read(reader));
     }
 
 
@@ -107,7 +107,7 @@ internal sealed class EncodedCborItemTests
         byte[] bytes = buffer.WrittenSpan.ToArray();
         var reader = new CborReader(bytes, CborOptions.Strict);
 
-        Assert.ThrowsExactly<CborContentException>(() => EncodedCborItem.Read(reader));
+        _ = Assert.ThrowsExactly<CborContentException>(() => EncodedCborItem.Read(reader));
     }
 
 

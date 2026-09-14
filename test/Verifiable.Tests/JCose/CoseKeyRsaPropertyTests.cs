@@ -34,7 +34,7 @@ internal sealed class CoseKeyRsaPropertyTests
             }
             else
             {
-                Assert.ThrowsExactly<ArgumentException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
+                _ = Assert.ThrowsExactly<ArgumentException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
             }
         });
     }

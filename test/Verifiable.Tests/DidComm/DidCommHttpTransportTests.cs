@@ -1,14 +1,8 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
@@ -38,7 +32,7 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode: 202);
         using DidCommEncryptedMessage message = Encrypted("{\"protected\":\"abc\",\"ciphertext\":\"xyz\"}"u8);
 
-        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAccepted);
         Assert.AreEqual(202, result.TransportStatusCode);
@@ -50,7 +44,7 @@ internal sealed class DidCommHttpTransportTests
         Assert.IsTrue(request.Headers.TryGetValue("Content-Type", out string? contentType));
         Assert.AreEqual("application/didcomm-encrypted+json", contentType, "The Content-Type MUST be the message's media type.");
         Assert.IsNotNull(request.Body);
-        Assert.IsTrue(request.Body!.Value.Memory.Span.SequenceEqual(message.AsReadOnlySpan()), "The POST body MUST be the message bytes.");
+        Assert.IsTrue(request.Body.Value.Memory.Span.SequenceEqual(message.AsReadOnlySpan()), "The POST body MUST be the message bytes.");
     }
 
 
@@ -60,12 +54,12 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode: 202);
 
         using DidCommSignedMessage signed = DidCommSignedMessage.Create("{\"payload\":\"p\",\"signatures\":[]}"u8, BufferTags.Json, Pool);
-        await signed.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        _ = await signed.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
         Assert.AreEqual("POST", transport.Calls[0].Method);
         Assert.AreEqual("application/didcomm-signed+json", ContentTypeOf(transport.Calls[0]));
 
         using DidCommPlaintextMessage plaintext = DidCommPlaintextMessage.Create("{\"id\":\"1\",\"type\":\"t\"}"u8, BufferTags.Json, Pool);
-        await plaintext.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        _ = await plaintext.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
         Assert.AreEqual("POST", transport.Calls[1].Method);
         Assert.AreEqual("application/didcomm-plain+json", ContentTypeOf(transport.Calls[1]));
     }
@@ -81,7 +75,7 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode);
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
-        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAccepted, $"A {statusCode} status is in the 2xx range and MUST be accepted.");
         Assert.AreEqual(DidCommTransmitError.None, result.Error);
@@ -98,7 +92,7 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode);
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
-        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAccepted, $"A {statusCode} status is not 2xx and MUST NOT be accepted.");
         Assert.AreEqual(DidCommTransmitError.Rejected, result.Error);
@@ -113,7 +107,7 @@ internal sealed class DidCommHttpTransportTests
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
         //An empty context is the secure default: a loopback IP-literal endpoint is denied before any transport call.
-        DidCommTransmitResult result = await message.TransmitAsync(LoopbackEndpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(LoopbackEndpoint, [], transport.Send, default).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAccepted);
         Assert.AreEqual(DidCommTransmitError.DeniedByPolicy, result.Error);
@@ -128,7 +122,7 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode: 202, throwOnSend: true);
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
-        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsAccepted);
         Assert.AreEqual(DidCommTransmitError.TransportFailed, result.Error);
@@ -145,8 +139,8 @@ internal sealed class DidCommHttpTransportTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
-            async () => await message.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await message.TransmitAsync(Endpoint, [], transport.Send, cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -156,12 +150,12 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode: 202);
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
-            async () => await message.TransmitAsync(null!, new ExchangeContext(), transport.Send, default).ConfigureAwait(false)).ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+            async () => await message.TransmitAsync(null!, [], transport.Send, default).ConfigureAwait(false)).ConfigureAwait(false);
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
             async () => await message.TransmitAsync(Endpoint, null!, transport.Send, default).ConfigureAwait(false)).ConfigureAwait(false);
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(
-            async () => await message.TransmitAsync(Endpoint, new ExchangeContext(), null!, default).ConfigureAwait(false)).ConfigureAwait(false);
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(
+            async () => await message.TransmitAsync(Endpoint, [], null!, default).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -172,7 +166,7 @@ internal sealed class DidCommHttpTransportTests
         var transport = new FakeTransport(statusCode: 202, responseBody: "an-ignored-reply-body"u8.ToArray());
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
-        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, new ExchangeContext(), transport.Send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, [], transport.Send, default).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAccepted, "A 2xx with a response body is accepted; the body is ignored.");
         Assert.AreEqual(202, result.TransportStatusCode);
@@ -189,7 +183,7 @@ internal sealed class DidCommHttpTransportTests
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
 
         DidCommSendDelegate send = DidCommHttpTransport.CreateSendDelegate(transport.SendAsync);
-        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, new ExchangeContext(), send, default).ConfigureAwait(false);
+        DidCommTransmitResult result = await message.TransmitAsync(Endpoint, [], send, default).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAccepted);
         Assert.AreEqual(202, result.TransportStatusCode);
@@ -202,7 +196,7 @@ internal sealed class DidCommHttpTransportTests
     [TestMethod]
     public void CreateSendDelegateRejectsNullTransport()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => DidCommHttpTransport.CreateSendDelegate(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => DidCommHttpTransport.CreateSendDelegate(null!));
     }
 
 
@@ -214,12 +208,12 @@ internal sealed class DidCommHttpTransportTests
     [TestMethod]
     public async Task ServiceEndpointHostRebindingToLoopbackIsBlockedAtConnectionTime()
     {
-        HostResolverDelegate rebindToLoopback = (host, cancellationToken) =>
+        ValueTask<IReadOnlyList<IPAddress>> rebindToLoopback(string host, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Loopback]);
 
         bool pinned = false;
         bool dialed = false;
-        DidCommSendDelegate send = async (message, mediaType, endpoint, context, cancellationToken) =>
+        async ValueTask<DidCommTransmitResult> send(ReadOnlyMemory<byte> message, string mediaType, Uri endpoint, ExchangeContext context, CancellationToken cancellationToken)
         {
             pinned = true;
             try
@@ -234,7 +228,7 @@ internal sealed class DidCommHttpTransportTests
             dialed = true;
 
             return DidCommTransmitResult.Accepted(202);
-        };
+        }
 
         using DidCommEncryptedMessage message = Encrypted("{\"ciphertext\":\"x\"}"u8);
         var context = new ExchangeContext();

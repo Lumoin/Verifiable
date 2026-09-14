@@ -279,7 +279,7 @@ internal sealed class MetadataPolicyEvaluatorTests
         string parameterName,
         params (MetadataPolicyOperator Operator, object Value)[] operators)
     {
-        Dictionary<MetadataPolicyOperator, object> ops = new();
+        Dictionary<MetadataPolicyOperator, object> ops = [];
         foreach((MetadataPolicyOperator op, object val) in operators)
         {
             ops[op] = val;

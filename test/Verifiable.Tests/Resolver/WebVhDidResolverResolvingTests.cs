@@ -1,26 +1,18 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Linq;
 using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Peer;
-using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -143,12 +135,12 @@ internal sealed class WebVhDidResolverResolvingTests
         using WebVhController controller = WebVhController.Create();
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
 
-        HostResolverDelegate rebindToLoopback = (host, cancellationToken) =>
+        ValueTask<IReadOnlyList<IPAddress>> rebindToLoopback(string host, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlyList<IPAddress>>([IPAddress.Loopback]);
 
         bool pinned = false;
         bool dialed = false;
-        OutboundTransportDelegate pinningTransport = async (request, context, cancellationToken) =>
+        async ValueTask<OutboundResponse> pinningTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             pinned = true;
             try
@@ -165,13 +157,13 @@ internal sealed class WebVhDidResolverResolvingTests
             dialed = true;
 
             return new OutboundResponse { StatusCode = 200, Body = new TaggedMemory<byte>(Encoding.UTF8.GetBytes(string.Join('\n', log.Lines)), BufferTags.Json) };
-        };
+        }
 
         var context = new ExchangeContext();
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         DidMethodResolverDelegate resolver = WebVhDidResolver.Build(
-            pinningTransport,
+pinningTransport,
             WebVhLogEntryJson.Parser,
             WebVhLogEntryJson.WitnessFileParser,
             WebVhLogEntryJson.DocumentIdentityReader,
@@ -204,7 +196,7 @@ internal sealed class WebVhDidResolverResolvingTests
 
         Assert.IsTrue(result.IsSuccessful, $"A two-entry did:webvh log MUST resolve. Error: {result.ResolutionMetadata.Error?.Type}.");
         Assert.AreEqual(log.VersionIds[^1], result.DocumentMetadata.VersionId);
-        Assert.StartsWith("2-", result.DocumentMetadata.VersionId!);
+        Assert.StartsWith("2-", result.DocumentMetadata.VersionId);
     }
 
 
@@ -288,7 +280,7 @@ internal sealed class WebVhDidResolverResolvingTests
             static jsonUtf8 => null,
             additionalMethods: [(WellKnownDidMethodPrefixes.WebVhDidMethodPrefix, webVh)]);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         DidResolutionResult result = await composed.ResolveAsync(log.Did, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -623,7 +615,7 @@ internal sealed class WebVhDidResolverResolvingTests
         //and MUST be rejected at parse, not coerced to "no witnesses" (did:webvh v1.0, Parameters).
         const string line = "{\"versionId\":\"1-abc\",\"versionTime\":\"2025-01-01T00:00:00Z\",\"parameters\":{\"method\":\"did:webvh:1.0\",\"scid\":\"Qm\",\"updateKeys\":[\"z6Mk\"],\"witness\":[]},\"state\":{\"id\":\"did:webvh:Qm:example.com\"}}";
 
-        Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
     }
 
 
@@ -637,7 +629,7 @@ internal sealed class WebVhDidResolverResolvingTests
     {
         const string line = "{\"versionId\":\"1-abc\",\"versionTime\":\"2025-01-01T00:00:00Z\",\"parameters\":{\"method\":\"did:webvh:1.0\",\"scid\":\"Qm\",\"updateKeys\":[\"z6Mk\"],\"ttl\":-5},\"state\":{\"id\":\"did:webvh:Qm:example.com\"}}";
 
-        Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
     }
 
 
@@ -647,7 +639,7 @@ internal sealed class WebVhDidResolverResolvingTests
     {
         const string line = "{\"versionId\":\"1-abc\",\"versionTime\":\"2025-01-01T00:00:00Z\",\"parameters\":{\"method\":\"did:webvh:1.0\",\"scid\":\"Qm\",\"updateKeys\":[\"z6Mk\"],\"ttl\":\"3600\"},\"state\":{\"id\":\"did:webvh:Qm:example.com\"}}";
 
-        Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
     }
 
 
@@ -660,7 +652,7 @@ internal sealed class WebVhDidResolverResolvingTests
     {
         const string line = "{\"versionId\":\"1-abc\",\"versionTime\":\"2025-01-01T00:00:00Z\",\"parameters\":{\"method\":\"did:webvh:1.0\",\"scid\":\"Qm\",\"updateKeys\":\"z6Mk\"},\"state\":{\"id\":\"did:webvh:Qm:example.com\"}}";
 
-        Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
     }
 
 
@@ -670,7 +662,7 @@ internal sealed class WebVhDidResolverResolvingTests
     {
         const string line = "{\"versionId\":\"1-abc\",\"versionTime\":\"2025-01-01T00:00:00Z\",\"parameters\":{\"method\":\"did:webvh:1.0\",\"scid\":\"Qm\",\"updateKeys\":[\"z6Mk\"],\"portable\":\"true\"},\"state\":{\"id\":\"did:webvh:Qm:example.com\"}}";
 
-        Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
     }
 
 
@@ -683,7 +675,7 @@ internal sealed class WebVhDidResolverResolvingTests
     {
         const string line = "{\"versionId\":\"1-abc\",\"versionTime\":\"2025-01-01T00:00:00Z\",\"parameters\":{\"method\":\"did:webvh:1.0\",\"scid\":\"Qm\",\"updateKeys\":[\"z6Mk\"],\"undefinedParam\":true},\"state\":{\"id\":\"did:webvh:Qm:example.com\"}}";
 
-        Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line)));
     }
 
 
@@ -696,7 +688,7 @@ internal sealed class WebVhDidResolverResolvingTests
         WebVhRawEntry entry = WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line));
 
         Assert.IsNotNull(entry.DeclaredParameters.Witness, "A JSON null witness is the empty (disabled) declaration, not absent.");
-        Assert.IsNull(entry.DeclaredParameters.Witness!.Rule);
+        Assert.IsNull(entry.DeclaredParameters.Witness.Rule);
     }
 
 
@@ -713,16 +705,16 @@ internal sealed class WebVhDidResolverResolvingTests
         WebVhRawEntry entry = WebVhLogEntryJson.Parser(Encoding.UTF8.GetBytes(line));
 
         Assert.IsNotNull(entry.DeclaredParameters.UpdateKeys, "A JSON null updateKeys MUST normalize to the empty-array default, not 'retain'.");
-        Assert.IsEmpty(entry.DeclaredParameters.UpdateKeys!.Value);
+        Assert.IsEmpty(entry.DeclaredParameters.UpdateKeys.Value);
 
         Assert.IsNotNull(entry.DeclaredParameters.NextKeyHashes, "A JSON null nextKeyHashes MUST normalize to the empty-array default, not 'retain'.");
-        Assert.IsEmpty(entry.DeclaredParameters.NextKeyHashes!.Value);
+        Assert.IsEmpty(entry.DeclaredParameters.NextKeyHashes.Value);
 
         Assert.IsNotNull(entry.DeclaredParameters.Ttl, "A JSON null ttl MUST normalize to the documented default, not 'retain'.");
-        Assert.AreEqual(WebVhParameters.DefaultTtlSeconds, entry.DeclaredParameters.Ttl!.Value);
+        Assert.AreEqual(WebVhParameters.DefaultTtlSeconds, entry.DeclaredParameters.Ttl.Value);
 
         Assert.IsNotNull(entry.DeclaredParameters.Watchers, "A JSON null watchers MUST normalize to the empty-array default.");
-        Assert.IsEmpty(entry.DeclaredParameters.Watchers!.Value);
+        Assert.IsEmpty(entry.DeclaredParameters.Watchers.Value);
     }
 
 
@@ -806,7 +798,7 @@ internal sealed class WebVhDidResolverResolvingTests
 
         Assert.IsTrue(result.IsSuccessful, $"A prior version of a deactivated DID MUST resolve. Error: {result.ResolutionMetadata.Error?.Type}.");
         Assert.IsNotNull(result.Document, "A prior version of a deactivated DID returns that version's DIDDoc.");
-        Assert.AreEqual(log.Did, result.Document!.Id?.ToString());
+        Assert.AreEqual(log.Did, result.Document.Id?.ToString());
         Assert.AreEqual(log.VersionIds[0], result.DocumentMetadata.VersionId, "The resolved version MUST be the queried earlier version.");
         Assert.IsTrue(result.DocumentMetadata.Deactivated, "A prior version of a deactivated DID MUST still carry deactivated:true.");
     }
@@ -958,7 +950,7 @@ internal sealed class WebVhDidResolverResolvingTests
         //A 10-character SCID is not the required 46-character shape.
         const string malformedDid = "did:webvh:QmTooShort:example.com";
 
-        var transport = new RoutingTransport(new Dictionary<string, (int, string?)>(StringComparer.Ordinal));
+        var transport = new RoutingTransport(new(StringComparer.Ordinal));
 
         DidResolutionResult result = await ResolveAsync(malformedDid, transport).ConfigureAwait(false);
 
@@ -1313,7 +1305,7 @@ internal sealed class WebVhDidResolverResolvingTests
 
     private async Task<DidResolutionResult> ResolveAsync(string did, RoutingTransport transport, DidResolutionOptions? options = null)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         DidMethodResolverDelegate resolver = WebVhDidResolver.Build(

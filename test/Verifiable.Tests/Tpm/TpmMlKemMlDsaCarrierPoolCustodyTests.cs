@@ -1,8 +1,5 @@
-using System;
 using System.Buffers.Binary;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 

@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -153,7 +153,7 @@ internal sealed class DisclosureComputationTests
         //Email excluded by user but required by verifier — conflict.
         Assert.IsFalse(decision.SatisfiesRequirements);
         Assert.IsNotNull(decision.ConflictingPaths);
-        Assert.Contains(Email, decision.ConflictingPaths!);
+        Assert.Contains(Email, decision.ConflictingPaths);
     }
 
 
@@ -182,7 +182,7 @@ internal sealed class DisclosureComputationTests
         Assert.IsFalse(graph.Satisfied);
         Assert.IsEmpty(graph.Decisions);
         Assert.IsNotNull(graph.UnsatisfiedRequirements);
-        Assert.Contains("req-1", graph.UnsatisfiedRequirements!);
+        Assert.Contains("req-1", graph.UnsatisfiedRequirements);
         Assert.IsNull(graph.SelectedStrategy);
     }
 
@@ -226,7 +226,7 @@ internal sealed class DisclosureComputationTests
     {
         var executionOrder = new List<string>();
 
-        PolicyAssessorDelegate<string> first = (context, ct) =>
+        Task<PolicyAssessmentOutcome> first(PolicyAssessmentContext<string> context, CancellationToken ct)
         {
             executionOrder.Add("first");
             return Task.FromResult(new PolicyAssessmentOutcome
@@ -234,9 +234,9 @@ internal sealed class DisclosureComputationTests
                 Approved = true,
                 AssessorName = "First"
             });
-        };
+        }
 
-        PolicyAssessorDelegate<string> second = (context, ct) =>
+        Task<PolicyAssessmentOutcome> second(PolicyAssessmentContext<string> context, CancellationToken ct)
         {
             executionOrder.Add("second");
             return Task.FromResult(new PolicyAssessmentOutcome
@@ -244,7 +244,7 @@ internal sealed class DisclosureComputationTests
                 Approved = true,
                 AssessorName = "Second"
             });
-        };
+        }
 
         var computation = new DisclosureComputation<string>([first, second], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
@@ -255,7 +255,7 @@ internal sealed class DisclosureComputationTests
                 available: [GivenName])
         };
 
-        await computation.ComputeAsync(matches,
+        _ = await computation.ComputeAsync(matches,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(2, executionOrder);
@@ -269,7 +269,7 @@ internal sealed class DisclosureComputationTests
     {
         var executionOrder = new List<string>();
 
-        PolicyAssessorDelegate<string> rejecter = (context, ct) =>
+        Task<PolicyAssessmentOutcome> rejecter(PolicyAssessmentContext<string> context, CancellationToken ct)
         {
             executionOrder.Add("rejecter");
             return Task.FromResult(new PolicyAssessmentOutcome
@@ -277,9 +277,9 @@ internal sealed class DisclosureComputationTests
                 Approved = false,
                 AssessorName = "Rejecter"
             });
-        };
+        }
 
-        PolicyAssessorDelegate<string> shouldNotRun = (context, ct) =>
+        Task<PolicyAssessmentOutcome> shouldNotRun(PolicyAssessmentContext<string> context, CancellationToken ct)
         {
             executionOrder.Add("shouldNotRun");
             return Task.FromResult(new PolicyAssessmentOutcome
@@ -287,7 +287,7 @@ internal sealed class DisclosureComputationTests
                 Approved = true,
                 AssessorName = "ShouldNotRun"
             });
-        };
+        }
 
         var computation = new DisclosureComputation<string>([rejecter, shouldNotRun], new FakeTimeProvider(TestClock.CanonicalEpoch));
 
@@ -298,7 +298,7 @@ internal sealed class DisclosureComputationTests
                 available: [GivenName])
         };
 
-        await computation.ComputeAsync(matches,
+        _ = await computation.ComputeAsync(matches,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(1, executionOrder);
@@ -321,7 +321,7 @@ internal sealed class DisclosureComputationTests
         var graph = await computation.ComputeAsync(matches,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        var record = graph.DecisionRecord!;
+        var record = graph.DecisionRecord;
 
         Assert.IsNotNull(record);
         Assert.IsTrue(record.Satisfied);
@@ -450,7 +450,7 @@ internal sealed class DisclosureComputationTests
 
         Assert.IsNotNull(graph.SelectedStrategy);
         Assert.IsNotNull(graph.Frontier);
-        Assert.AreEqual(StrategyStatus.Feasible, graph.SelectedStrategy!.Status);
+        Assert.AreEqual(StrategyStatus.Feasible, graph.SelectedStrategy.Status);
     }
 
 
@@ -465,7 +465,7 @@ internal sealed class DisclosureComputationTests
             CreateMatch("cred-1", "req-1",
                 required: [GivenName, Birthdate],
                 available: [Iss, GivenName, Birthdate],
-                mandatory: new HashSet<CredentialPath> { Iss })
+                mandatory: [Iss])
         };
 
         var weights = new Dictionary<CredentialPath, double>
@@ -498,11 +498,11 @@ internal sealed class DisclosureComputationTests
             CreateMatch("national-id", "req-name",
                 required: [GivenName, Ssn],
                 available: [Iss, GivenName, Ssn],
-                mandatory: new HashSet<CredentialPath> { Iss }),
+                mandatory: [Iss]),
             CreateMatch("drivers-license", "req-name",
                 required: [GivenName, Address],
                 available: [Iss, GivenName, Address],
-                mandatory: new HashSet<CredentialPath> { Iss })
+                mandatory: [Iss])
         };
 
         var weights = new Dictionary<CredentialPath, double>
@@ -531,7 +531,7 @@ internal sealed class DisclosureComputationTests
         var narrower = new PolicyAssessorDelegate<string>((context, ct) =>
         {
             var narrowed = new HashSet<CredentialPath>(context.ProposedPaths);
-            narrowed.Remove(Birthdate);
+            _ = narrowed.Remove(Birthdate);
 
             return Task.FromResult(new PolicyAssessmentOutcome
             {
@@ -574,7 +574,7 @@ internal sealed class DisclosureComputationTests
     [TestMethod]
     public async Task CustomEntropyDelegateIsUsedByComputation()
     {
-        EntropyComputeDelegate<string> doubleEntropy = (contributions, signals) =>
+        static double doubleEntropy(IReadOnlyList<CredentialContribution<string>> contributions, IReadOnlyDictionary<Type, object>? signals)
         {
             double total = 0.0;
             foreach(var contribution in contributions)
@@ -586,7 +586,7 @@ internal sealed class DisclosureComputationTests
             }
 
             return total * 2.0;
-        };
+        }
 
         var computation = new DisclosureComputation<string>([], new FakeTimeProvider(TestClock.CanonicalEpoch), entropyCompute: doubleEntropy);
 
@@ -636,7 +636,7 @@ internal sealed class DisclosureComputationTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(graph.Frontier);
-        Assert.IsGreaterThanOrEqualTo(1, graph.Frontier!.Count);
+        Assert.IsGreaterThanOrEqualTo(1, graph.Frontier.Count);
 
         var allStrategies = graph.EnumerateStrategies().ToList();
         Assert.IsGreaterThanOrEqualTo(1, allStrategies.Count);
@@ -665,15 +665,15 @@ internal sealed class DisclosureComputationTests
             CreateMatch("national-id", "req-name",
                 required: [GivenName],
                 available: [Iss, GivenName, FamilyName, Birthdate, Ssn, Nationality],
-                mandatory: new HashSet<CredentialPath> { Iss }),
+                mandatory: [Iss]),
             CreateMatch("drivers-license", "req-birthdate",
                 required: [Birthdate],
                 available: [Iss, GivenName, Birthdate, Category, Address],
-                mandatory: new HashSet<CredentialPath> { Iss }),
+                mandatory: [Iss]),
             CreateMatch("utility-bill", "req-address",
                 required: [Address],
                 available: [Iss, GivenName, Address, AccountNumber],
-                mandatory: new HashSet<CredentialPath> { Iss })
+                mandatory: [Iss])
         };
 
         var graph = await computation.ComputeAsync(matches,
@@ -736,7 +736,7 @@ internal sealed class DisclosureComputationTests
                 available: [GivenName])
         };
 
-        await computation.ComputeAsync(matches,
+        _ = await computation.ComputeAsync(matches,
             requestingPartySignals: requestingPartySignals,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -851,7 +851,7 @@ internal sealed class DisclosureComputationTests
                     int variable = variableMap[(i, path)];
                     if(result.Assignment![variable])
                     {
-                        keptPaths.Add(path);
+                        _ = keptPaths.Add(path);
                     }
                 }
 

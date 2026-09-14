@@ -90,6 +90,18 @@ public static class PolicyProfiles
     /// scope-required-on-request requirement. Useful for interoperating with
     /// pre-FAPI-2 OAuth deployments that still want PKCE protection.
     /// </summary>
+    /// <remarks>
+    /// This is the ONLY built-in profile that sets
+    /// <see cref="PkceMethodSet.S256AndPlain"/>. <see cref="ApplyFapi20"/> and
+    /// <see cref="ApplyHaip10"/> stay on <see cref="PkceMethodSet.S256Only"/> because
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1
+    /// draft-16 §7.5.2</see>: "The plain code challenge method, defined in [RFC7636], is
+    /// explicitly forbidden in OAuth 2.1." and
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-2.1.1">RFC 9700 §2.1.1</see> adds
+    /// that a client SHOULD use a method that does not expose the verifier on the front channel —
+    /// "Currently, S256 is the only such method." Pre-OAuth-2.1 RFC 6749 + RFC 7636 deployments are
+    /// this profile's sole reason to accept <c>plain</c>.
+    /// </remarks>
     public static void ApplyRfc6749WithPkce(ExchangeContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

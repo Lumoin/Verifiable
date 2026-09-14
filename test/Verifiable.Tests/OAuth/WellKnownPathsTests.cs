@@ -42,14 +42,14 @@ internal sealed class WellKnownPathsTests
     [TestMethod]
     public void OAuthAuthorizationServerThrowsForEmptyIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WellKnownPaths.OAuthAuthorizationServer.ComputeUri(string.Empty));
     }
 
     [TestMethod]
     public void OAuthAuthorizationServerThrowsForWhitespaceIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WellKnownPaths.OAuthAuthorizationServer.ComputeUri("   "));
     }
 
@@ -148,7 +148,7 @@ internal sealed class WellKnownPathsTests
     [TestMethod]
     public void OpenIdCredentialIssuerThrowsForEmptyIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WellKnownPaths.OpenIdCredentialIssuer.ComputeUri(string.Empty));
     }
 
@@ -186,14 +186,14 @@ internal sealed class WellKnownPathsTests
     [TestMethod]
     public void DidWebThrowsForNonDidWebIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WellKnownPaths.DidWeb.ComputeUri("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"));
     }
 
     [TestMethod]
     public void DidWebThrowsForEmptyIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WellKnownPaths.DidWeb.ComputeUri(string.Empty));
     }
 

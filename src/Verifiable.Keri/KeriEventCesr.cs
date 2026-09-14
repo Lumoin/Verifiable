@@ -1,6 +1,5 @@
 using Lumoin.Base;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -249,7 +248,7 @@ public static class KeriEventCesr
     {
         using CesrParsedPrimitive primitive = CesrPrimitiveCodec.DecodeText(span, pool, out int consumed);
         int codeSize = CesrCodeTables.Sizes[primitive.Code].CodeSize;
-        ReadOnlySpan<char> infix = span.Slice(codeSize, consumed - codeSize).TrimStart(Base64UrlAlphabet.Zero);
+        ReadOnlySpan<char> infix = span[codeSize..consumed].TrimStart(Base64UrlAlphabet.Zero);
         value = ParseWeightedThreshold(infix);
 
         return consumed;
@@ -297,7 +296,7 @@ public static class KeriEventCesr
         }
 
         int end = (int)declaredEnd;
-        list = new List<string>();
+        list = [];
 
         int inner = codeLength;
         while(inner < end)

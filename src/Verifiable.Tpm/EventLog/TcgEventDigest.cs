@@ -1,7 +1,3 @@
-using System;
-using System.Linq;
-using Verifiable.Tpm.Spec.Constants;
-
 namespace Verifiable.Tpm.EventLog;
 
 /// <summary>

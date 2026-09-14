@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
@@ -103,7 +102,7 @@ public sealed class Tpm2bTimeout: IDisposable
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, Length);
+            return Storage.Memory.Span[..Length];
         }
     }
 
@@ -120,7 +119,7 @@ public sealed class Tpm2bTimeout: IDisposable
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return Storage.Memory.Slice(0, Length);
+        return Storage.Memory[..Length];
     }
 
     /// <summary>
@@ -200,7 +199,7 @@ public sealed class Tpm2bTimeout: IDisposable
 
         IMemoryOwner<byte> storage = pool.Rent(size);
         ReadOnlySpan<byte> source = reader.ReadBytes(size);
-        source.CopyTo(storage.Memory.Span.Slice(0, size));
+        source.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bTimeout(storage, size);
     }
@@ -248,7 +247,7 @@ public sealed class Tpm2bTimeout: IDisposable
         ulong combined = value | (expiresOnReset ? ExpiresOnResetFlag : 0UL);
 
         IMemoryOwner<byte> storage = pool.Rent(MaxSize);
-        BinaryPrimitives.WriteUInt64BigEndian(storage.Memory.Span.Slice(0, MaxSize), combined);
+        BinaryPrimitives.WriteUInt64BigEndian(storage.Memory.Span[..MaxSize], combined);
 
         return new Tpm2bTimeout(storage, MaxSize);
     }

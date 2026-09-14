@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 
 using Verifiable.Apdu;
@@ -42,7 +41,7 @@ internal sealed class ApduExchangeTests
         var exchange = new ApduExchange(start, start + 1000, command, response);
 
         Assert.IsNotNull(exchange.StatusWord);
-        Assert.AreEqual((ushort)0x6A82, exchange.StatusWord!.Value.Value);
+        Assert.AreEqual((ushort)0x6A82, exchange.StatusWord.Value.Value);
     }
 
     /// <summary>Proves an empty response carries no status word.</summary>
@@ -82,7 +81,7 @@ internal sealed class ApduExchangeTests
         var exchange = new ApduExchange(start, start + 1000, command, response);
 
         Assert.IsNotNull(exchange.StatusWord);
-        Assert.IsTrue(exchange.StatusWord!.Value.IsSuccess);
+        Assert.IsTrue(exchange.StatusWord.Value.IsSuccess);
     }
 
     /// <summary>

@@ -1,9 +1,3 @@
-using System;
-using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Crypto;
@@ -12,8 +6,10 @@ using Org.BouncyCastle.Crypto.Encodings;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using Verifiable.Tpm.Automata;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 

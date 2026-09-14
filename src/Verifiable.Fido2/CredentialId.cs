@@ -63,7 +63,7 @@ public sealed class CredentialId: SensitiveMemory, IEquatable<CredentialId>
     /// <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/> when no OTel listener is
     /// active.
     /// </param>
-    public CredentialId(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): base(sensitiveMemory, tag, lifetime)
+    public CredentialId(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null) : base(sensitiveMemory, tag, lifetime)
     {
     }
 

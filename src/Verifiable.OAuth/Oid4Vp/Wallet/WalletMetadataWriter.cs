@@ -351,18 +351,18 @@ public static class WalletMetadataWriter
     private static string JsonStringArray(IReadOnlyList<string> values)
     {
         StringBuilder builder = new((values.Count * EstimatedBytesPerArrayToken) + ArrayBracketsBytes);
-        builder.Append('[');
+        _ = builder.Append('[');
         for(int i = 0; i < values.Count; i++)
         {
             if(i > 0)
             {
-                builder.Append(',');
+                _ = builder.Append(',');
             }
 
-            builder.Append('"').Append(values[i]).Append('"');
+            _ = builder.Append('"').Append(values[i]).Append('"');
         }
 
-        builder.Append(']');
+        _ = builder.Append(']');
 
         return builder.ToString();
     }

@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 
 
@@ -382,7 +377,7 @@ public sealed class DisclosureComputation<TCredential>
             });
 
             //Layer 3: Build the disclosure lattice for this credential.
-            var mandatoryPaths = match.MandatoryPaths ?? (IReadOnlySet<CredentialPath>)new HashSet<CredentialPath>();
+            var mandatoryPaths = match.MandatoryPaths ?? new HashSet<CredentialPath>();
             var lattice = new SetDisclosureLattice<CredentialPath>(
                 match.AllAvailablePaths,
                 mandatoryPaths,
@@ -390,7 +385,7 @@ public sealed class DisclosureComputation<TCredential>
 
             //Compute user exclusions for this requirement.
             IReadOnlySet<CredentialPath>? exclusions = null;
-            userExclusions?.TryGetValue(match.QueryRequirementId, out exclusions);
+            _ = (userExclusions?.TryGetValue(match.QueryRequirementId, out exclusions));
 
             //Layer 3: Compute optimal disclosure via lattice.
             var latticeResult = SelectiveDisclosure.ComputeOptimalDisclosure(
@@ -532,7 +527,7 @@ public sealed class DisclosureComputation<TCredential>
             };
 
             decisions.Add(decision);
-            satisfiedRequirements.Add(match.QueryRequirementId);
+            _ = satisfiedRequirements.Add(match.QueryRequirementId);
         }
 
         //Layer 4b: Run cross-credential optimizer pipeline. Each pass returns a whole decision
@@ -555,7 +550,7 @@ public sealed class DisclosureComputation<TCredential>
         var allRequirementIds = new HashSet<string>();
         foreach(var match in matches)
         {
-            allRequirementIds.Add(match.QueryRequirementId);
+            _ = allRequirementIds.Add(match.QueryRequirementId);
         }
 
         var unsatisfied = new List<string>();
@@ -734,7 +729,7 @@ public sealed class DisclosureComputation<TCredential>
         foreach(var path in decision.SelectedPaths)
         {
             double weight = 0.0;
-            entropyWeights?.TryGetValue(path, out weight);
+            _ = (entropyWeights?.TryGetValue(path, out weight));
 
             disclosures.Add(new PathContribution
             {

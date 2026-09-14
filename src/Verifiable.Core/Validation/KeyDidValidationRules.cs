@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Assessment;
-using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 
 
@@ -114,7 +109,7 @@ public static class KeyDidValidationRules
         ArgumentNullException.ThrowIfNull(document);
         cancellationToken.ThrowIfCancellationRequested();
 
-        List<Claim> claims = new List<Claim>();
+        List<Claim> claims = [];
         if(document.Id != null)
         {
             var idFormat = document.Id.Id.AsSpan();
@@ -172,7 +167,7 @@ public static class KeyDidValidationRules
         ArgumentNullException.ThrowIfNull(document);
         cancellationToken.ThrowIfCancellationRequested();
 
-        List<Claim> claims = new List<Claim>(1);
+        List<Claim> claims = new(1);
         ClaimOutcome isFormatValid = ClaimOutcome.Failure;
         if(document.Id != null)
         {
@@ -206,7 +201,7 @@ public static class KeyDidValidationRules
         ArgumentNullException.ThrowIfNull(document);
         cancellationToken.ThrowIfCancellationRequested();
 
-        List<Claim> claims = new List<Claim>(1);
+        List<Claim> claims = new(1);
         bool isSuccess = document.VerificationMethod?.Length == 1;
         claims.Add(new Claim(ClaimId.KeyDidSingleVerificationMethod, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
 
@@ -235,7 +230,7 @@ public static class KeyDidValidationRules
         ArgumentNullException.ThrowIfNull(document);
         cancellationToken.ThrowIfCancellationRequested();
 
-        List<Claim> claims = new List<Claim>(1);
+        List<Claim> claims = new(1);
         //document is already proven non-null by the ArgumentNullException.ThrowIfNull guard above.
         bool isSuccess = document.VerificationMethod?[0].Id?.StartsWith(document.Id?.Id ?? string.Empty, StringComparison.Ordinal) ?? false;
         claims.Add(new Claim(ClaimId.KeyDidIdPrefixMatch, isSuccess ? ClaimOutcome.Success : ClaimOutcome.Failure));
@@ -279,10 +274,10 @@ public static class KeyDidValidationRules
             int hashIndex = vmIdSpan.LastIndexOf('#');
             if(hashIndex != -1)
             {
-                ReadOnlySpan<char> fragmentSpan = vmIdSpan.Slice(hashIndex + 1);
+                ReadOnlySpan<char> fragmentSpan = vmIdSpan[(hashIndex + 1)..];
 
                 //Remove the "did:key:" prefix from docIdSpan.
-                ReadOnlySpan<char> docIdSpanWithoutPrefix = docIdSpan.Slice(KeyDidMethod.Prefix.Length);
+                ReadOnlySpan<char> docIdSpanWithoutPrefix = docIdSpan[KeyDidMethod.Prefix.Length..];
                 isSuccess = fragmentSpan.SequenceEqual(docIdSpanWithoutPrefix);
             }
         }
@@ -334,4 +329,4 @@ public static class KeyDidValidationRules
 
         return ValueTask.FromResult(resultClaims);
     }
-}    
+}

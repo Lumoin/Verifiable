@@ -1,9 +1,7 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -60,12 +58,12 @@ internal sealed class ExchangeContextAccessorsTests
         using VerifierKeyMaterial keys = host.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        await host.DispatchAtEndpointAsync(
+        _ = await host.DispatchAtEndpointAsync(
             keys.Registration.TenantId,
             WellKnownEndpointNames.MetadataDiscovery,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreSame(host.Server, observedAtIncomingRequest,
@@ -94,12 +92,12 @@ internal sealed class ExchangeContextAccessorsTests
         using VerifierKeyMaterial keys = host.RegisterClient(
             VerifierClientId, VerifierBaseUri, Oid4VpCapabilities);
 
-        await host.DispatchAtEndpointAsync(
+        _ = await host.DispatchAtEndpointAsync(
             keys.Registration.TenantId,
             WellKnownEndpointNames.MetadataDiscovery,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(observedAtMatched,

@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Cryptography;
@@ -448,7 +445,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task ResetOnFactoryFreshSimulatorSucceeds()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-factory-fresh",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-factory-fresh", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         using PooledMemory response = await SendResetAsync(simulator, pool, TestContext.CancellationToken);
@@ -486,7 +483,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task PostResetGetInfoBytesEqualBirthGetInfoBytes()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-birth-getinfo",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-birth-getinfo", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -532,7 +529,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task PostResetGetPinRetriesShowsMaximum()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-getretries-max",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-getretries-max", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -563,7 +560,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task PostResetGetKeyAgreementDiffersFromPreResetCapture()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-keyagreement-differs",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-keyagreement-differs", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -588,7 +585,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task PreResetPinUvAuthTokenOnMakeCredentialPostResetReturnsPinAuthInvalid()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-stale-token-mc",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-stale-token-mc", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -616,7 +613,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task GetAssertionAllowListNamingPreResetCredentialReturnsNoCredentials()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-stale-credential-ga",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-stale-credential-ga", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] credentialIdBytes = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xD0), TestContext.CancellationToken);
@@ -639,7 +636,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task ColdGetNextAssertionPostResetReturnsNotAllowed()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-cold-gna",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-cold-gna", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xD1), TestContext.CancellationToken);
@@ -666,7 +663,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task CredentialManagementGetNextRpPostResetReturnsNotAllowed()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-cold-cm-getnext",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-cold-cm-getnext", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -699,7 +696,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task SetPinSucceedsFreshWithFourCodePointPinAfterMinPinLengthReverts()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-minpin-reverts",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-minpin-reverts", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -725,7 +722,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task MakeCredentialAndGetAssertionSucceedFactoryFreshAfterReset()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-factory-fresh-mcga",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-factory-fresh-mcga", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE6), TestContext.CancellationToken);
@@ -753,7 +750,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task ResetRecoversFromPinBlockedLockout()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-recovers-pinblocked",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-recovers-pinblocked", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 
@@ -794,7 +791,7 @@ internal sealed class CtapAuthenticatorResetTests
     [TestMethod]
     public async Task ResetSucceedsWhilePowerCycleRequiredAndClearsIt()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-clears-powercycle-latch",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("reset-clears-powercycle-latch", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapPinUvAuthProtocolId protocolId = CtapPinUvAuthProtocolId.Two;
 

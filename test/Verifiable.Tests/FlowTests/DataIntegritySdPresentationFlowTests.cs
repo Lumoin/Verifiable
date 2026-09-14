@@ -1,6 +1,5 @@
-using System.Linq;
-using System.Security.Cryptography;
 using Microsoft.Extensions.Time.Testing;
+using System.Security.Cryptography;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
@@ -57,7 +56,7 @@ internal sealed class DataIntegritySdPresentationFlowTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
 
     /// <summary>

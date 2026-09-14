@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
@@ -6,7 +5,6 @@ using System.Text.Json.Nodes;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.Model.Did;
-using Verifiable.Foundation;
 
 namespace Verifiable.Json;
 
@@ -96,7 +94,7 @@ public static class WebPlusDidDocumentJson
 
         ImmutableArray<string> proofs = ReadProofs(obj);
 
-        obj.Remove(ProofsProperty);
+        _ = obj.Remove(ProofsProperty);
 
         return new WebPlusProofExtraction(
             new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(obj.ToJsonString()), BufferTags.Json),

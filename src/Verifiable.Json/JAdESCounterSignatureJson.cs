@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 
@@ -44,11 +43,11 @@ public static class JAdESCounterSignatureJson
 {
     /// <summary>The <see cref="TryDecodeJAdESCounterSignatureDelegate"/> binding — see the type remarks.</summary>
     public static TryDecodeJAdESCounterSignatureDelegate TryDecode { get; } = static (
-        JAdESUnsignedHeaderElementCounterSignature element,
-        JAdESEtsiUIncorporationMode containerMode,
-        DecodeDelegate base64UrlDecoder,
-        BaseMemoryPool pool,
-        out UnverifiedJAdESMessage? decoded) =>
+        element,
+        containerMode,
+        base64UrlDecoder,
+        pool,
+        out decoded) =>
     {
         ArgumentNullException.ThrowIfNull(element);
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);

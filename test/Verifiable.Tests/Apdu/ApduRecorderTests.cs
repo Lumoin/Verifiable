@@ -1,6 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Tests.TestInfrastructure;
@@ -176,7 +173,7 @@ internal sealed class ApduRecorderTests
         Assert.AreEqual(InstructionCode.Verify.Code, exchange.Instruction);
         Assert.AreEqual("Verify", exchange.InstructionName);
         Assert.IsNotNull(exchange.StatusWord);
-        Assert.IsTrue(exchange.StatusWord!.Value.IsSuccess);
+        Assert.IsTrue(exchange.StatusWord.Value.IsSuccess);
 
         //Reads the production property into a local before asserting: this is a correctness check on
         //ApduExchange.Elapsed's own tick-to-TimeSpan arithmetic over the recorder's captured ticks, never a

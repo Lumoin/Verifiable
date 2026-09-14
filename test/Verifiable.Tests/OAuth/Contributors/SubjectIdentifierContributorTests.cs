@@ -94,7 +94,7 @@ internal sealed class SubjectIdentifierContributorTests
         EndpointServer server, string subject)
     {
         ClientRecord registration = ContributorTestFixtures.BuildRegistration();
-        ExchangeContext ExchangeContext = new();
+        ExchangeContext ExchangeContext = [];
         ExchangeContext.SetServer(server);
         IssuanceContext issuance = new()
         {
@@ -117,7 +117,7 @@ internal sealed class SubjectIdentifierContributorTests
         EndpointServer server, string subject)
     {
         ClientRecord registration = ContributorTestFixtures.BuildRegistration();
-        ExchangeContext ExchangeContext = new();
+        ExchangeContext ExchangeContext = [];
         ExchangeContext.SetServer(server);
         return new UserInfoTarget(
             registration, subject, WellKnownScopes.OpenId, ExchangeContext);

@@ -185,7 +185,7 @@ public abstract record AdESCertifiedAttribute
 /// </summary>
 /// <param name="Certificate">The encapsulated X.509 attribute certificate.</param>
 [DebuggerDisplay("AdESX509AttributeCertificate: {Certificate}")]
-public sealed record AdESX509AttributeCertificate(AdESPkiObject Certificate) : AdESCertifiedAttribute;
+public sealed record AdESX509AttributeCertificate(AdESPkiObject Certificate): AdESCertifiedAttribute;
 
 
 /// <summary>
@@ -195,4 +195,4 @@ public sealed record AdESX509AttributeCertificate(AdESPkiObject Certificate) : A
 /// </summary>
 /// <param name="Certificate">The encapsulated non-X.509 attribute certificate.</param>
 [DebuggerDisplay("AdESOtherAttributeCertificate: {Certificate}")]
-public sealed record AdESOtherAttributeCertificate(AdESPkiObject Certificate) : AdESCertifiedAttribute;
+public sealed record AdESOtherAttributeCertificate(AdESPkiObject Certificate): AdESCertifiedAttribute;

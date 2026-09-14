@@ -1,6 +1,3 @@
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Automata;
 
 /// <summary>

@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.ProtectedResource;
 
@@ -188,7 +184,7 @@ public static class ProtectedResourceMetadataEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
 
             bool first = true;
             JsonAppender.AppendUriField(
@@ -253,7 +249,7 @@ public static class ProtectedResourceMetadataEndpoints
                     sb, ProtectedResourceMetadataParameterNames.SignedMetadata, signedMetadata, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

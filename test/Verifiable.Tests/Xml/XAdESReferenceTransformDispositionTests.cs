@@ -95,7 +95,7 @@ internal sealed class XAdESReferenceTransformDispositionTests
             Assert.IsFalse(isComputed, $"A '{transformAlgorithmUri}' transform must be refused.");
             Assert.AreEqual(XAdESProcessingFailure.MessageImprintReferenceProcessingFailed, error.Failure);
             Assert.IsNotNull(error.InnerProcessingError);
-            Assert.AreEqual(expectedInnerFailure, error.InnerProcessingError!.Value.Failure);
+            Assert.AreEqual(expectedInnerFailure, error.InnerProcessingError.Value.Failure);
         }
     }
 

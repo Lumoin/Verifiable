@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Json;
@@ -40,7 +37,7 @@ internal sealed class WebFingerClientBehaviorTests
 
         Assert.IsTrue(result.IsSuccessful, $"Resolution MUST succeed. Error: {result.Error?.Code}.");
         Assert.IsNotNull(result.Jrd);
-        Assert.AreEqual("acct:alice@example.com", result.Jrd!.Subject);
+        Assert.AreEqual("acct:alice@example.com", result.Jrd.Subject);
         Assert.AreEqual("did:webs:example.com:AID", WebFingerClient.FindLinkHref(result.Jrd, WebFingerLinkRelationTypes.Did));
     }
 
@@ -126,7 +123,7 @@ internal sealed class WebFingerClientBehaviorTests
     /// <summary>Runs the resolve delegate against the fake transport under the secure-default outbound-fetch policy.</summary>
     private async Task<WebFingerResolutionResult> Resolve(FakeTransport transport)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         WebFingerResolveDelegate resolver = WebFingerClient.BuildResolving(transport.Delegate, WebFingerJrdJsonParsing.ParseJrd);

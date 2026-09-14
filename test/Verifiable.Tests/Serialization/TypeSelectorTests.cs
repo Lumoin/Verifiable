@@ -52,7 +52,7 @@ internal sealed class TypeSelectorTests
         var customServiceConverter = new ServiceConverter(serviceSelector ?? ServiceTypeSelectors.Default);
         var options = new JsonSerializerOptions();
         options.Converters.Insert(0, customServiceConverter);
-        options.ApplyVerifiableDefaults();
+        _ = options.ApplyVerifiableDefaults();
         //Combine so ServiceConverter.GetTypeInfo can resolve both library and test-internal types.
         options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
             VerifiableJsonContext.Default,
@@ -109,7 +109,7 @@ internal sealed class TypeSelectorTests
     public void CustomVerificationMethodTypeSelectorChainsToDefault()
     {
         var defaultSelector = VerificationMethodTypeSelectors.Default;
-        VerificationMethodTypeSelector custom = vmType => vmType switch
+        Type custom(string vmType) => vmType switch
         {
             "EcdsaSecp256k1RecoveryMethod2020" => typeof(TestBlockchainVerificationMethod),
             _ => defaultSelector(vmType)
@@ -137,7 +137,7 @@ internal sealed class TypeSelectorTests
         var service = JsonSerializerExtensions.Deserialize<Service>(json, options);
 
         Assert.IsNotNull(service);
-        Assert.IsInstanceOfType<TestIdentityResolverService>(service);
+        _ = Assert.IsInstanceOfType<TestIdentityResolverService>(service);
 
         var idr = (TestIdentityResolverService)service;
         Assert.AreEqual("gs1:linkType:certificationInfo", idr.SupportedLinkType);
@@ -193,7 +193,7 @@ internal sealed class TypeSelectorTests
         //Both VerificationMethodConverter and DataIntegrityProofConverter
         //should use the same selector instance.
         var defaultSelector = VerificationMethodTypeSelectors.Default;
-        VerificationMethodTypeSelector sharedSelector = vmType => vmType switch
+        Type sharedSelector(string vmType) => vmType switch
         {
             "EcdsaSecp256k1RecoveryMethod2020" => typeof(TestBlockchainVerificationMethod),
             _ => defaultSelector(vmType)
@@ -234,8 +234,8 @@ internal sealed class TypeSelectorTests
 
         Assert.IsNotNull(services);
         Assert.HasCount(2, services);
-        Assert.IsInstanceOfType<TestIdentityResolverService>(services[0]);
-        Assert.IsInstanceOfType<Service>(services[1]);
+        _ = Assert.IsInstanceOfType<TestIdentityResolverService>(services[0]);
+        _ = Assert.IsInstanceOfType<Service>(services[1]);
         Assert.AreEqual(typeof(Service), services[1].GetType());
     }
 }

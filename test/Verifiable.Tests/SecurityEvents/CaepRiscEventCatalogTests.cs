@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestDataProviders;
@@ -307,7 +302,7 @@ internal sealed class CaepRiscEventCatalogTests
         SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
             compact, transmitterPublic, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-            TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
+            TestSetup.Base64UrlDecoder, NeverSeen, [], Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Accepted, decision.Outcome);

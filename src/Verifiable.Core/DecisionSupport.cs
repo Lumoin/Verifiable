@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Core;
@@ -89,7 +87,7 @@ public sealed record DecisionSupport(string Summary)
         }
 
         var merged = new Dictionary<string, string>(
-            Context?.Count ?? 0 + additionalContext.Count);
+            Context?.Count ?? (0 + additionalContext.Count));
 
         if(Context is not null)
         {

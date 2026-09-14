@@ -1,10 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -13,7 +10,6 @@ using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.JCose;
 
@@ -234,7 +230,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -269,7 +265,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -305,7 +301,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -327,7 +323,7 @@ internal sealed class CBAdESSignatureValidationTests
             truncated, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -349,7 +345,7 @@ internal sealed class CBAdESSignatureValidationTests
             withTrailingByte, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -370,7 +366,7 @@ internal sealed class CBAdESSignatureValidationTests
 
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
+        writer.WriteTag(new CborTag(18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
         writer.WriteStartArray(3);
         writer.WriteByteString(protectedHeader);
         WriteEmptyUnprotectedMap(writer);
@@ -382,7 +378,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -400,7 +396,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
 
         /// <summary>
         /// Builds <paramref name="depth"/> nested single-element CBOR arrays around one integer -- otherwise
@@ -468,10 +464,10 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, ruleFailure.Violations);
-        Assert.IsInstanceOfType<CBAdESCwtClaimsMissingViolation>(ruleFailure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCwtClaimsMissingViolation>(ruleFailure.Violations[0]);
     }
 
 
@@ -509,8 +505,8 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(2, ruleFailure.Violations, "Both the missing-iat and the MD5-digest violations must be collected together.");
 
         bool sawCwtClaimsMissing = false;
@@ -525,12 +521,38 @@ internal sealed class CBAdESSignatureValidationTests
                 case CBAdESMd5DigestAlgorithmViolation md5:
                     md5Violation = md5;
                     break;
+                case CBAdESCertificateReferenceTriWayViolation:
+                case CBAdESContentTypeDetachedObjectsExclusivityViolation:
+                case CBAdESContentTypeCountersignedPayloadViolation:
+                case CBAdESDetachedObjectsCriticalLabelViolation:
+                case CBAdESDetachedObjectsAttachedPayloadViolation:
+                case CBAdESDetachedObjectsUriMechanismDigestViolation:
+                case CBAdESDetachedObjectsUriHashMechanismDigestViolation:
+                case CBAdESSignaturePolicyStoreGateViolation:
+                case CBAdESCoseSignBodyLayerPlacementViolation:
+                case CBAdESSignatureTimestampMissingViolation:
+                case CBAdESSignatureTimestampTokenCountViolation:
+                case CBAdESArchiveTimestampMissingViolation:
+                case CBAdESTimestampTokenNotBaselineViolation:
+                case CBAdESRefsFamilyForbiddenViolation:
+                case CBAdESReferencesTimestampGenerationGateViolation:
+                case CBAdESTimestampValidationDataServiceViolation:
+                case CBAdESReferencesSigningCertificateExclusionViolation:
+                case CBAdESRefsFamilyMd5DigestAlgorithmViolation:
+                case CBAdESReferencesValidationDataConsistencyViolation:
+                case CBAdESTimestampTokenBindingViolation:
+                case CBAdESTimestampSignerCertificateCoverageViolation:
+                case CBAdESUndisclosedAlternativeMechanismViolation:
+                case CBAdESCounterSignatureMalformedViolation:
+                case CBAdESCounterSignatureDetachedObjectsViolation:
+                case CBAdESCounterSignatureVerificationFailedViolation:
+                    break;
             }
         }
 
         Assert.IsTrue(sawCwtClaimsMissing, "The missing-iat violation must be among the collected violations.");
         Assert.IsNotNull(md5Violation, "The MD5-digest violation must be among the collected violations.");
-        Assert.AreEqual(CBAdESMd5DigestAlgorithmSurface.CertificateThumbprint, md5Violation!.Surface);
+        Assert.AreEqual(CBAdESMd5DigestAlgorithmSurface.CertificateThumbprint, md5Violation.Surface);
     }
 
 
@@ -685,7 +707,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 
@@ -712,10 +734,10 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, ruleFailure.Violations);
-        Assert.IsInstanceOfType<CBAdESCertificateReferenceTriWayViolation>(ruleFailure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCertificateReferenceTriWayViolation>(ruleFailure.Violations[0]);
     }
 
 
@@ -752,10 +774,10 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, ruleFailure.Violations);
-        Assert.IsInstanceOfType<CBAdESContentTypeDetachedObjectsExclusivityViolation>(ruleFailure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESContentTypeDetachedObjectsExclusivityViolation>(ruleFailure.Violations[0]);
     }
 
 
@@ -789,10 +811,10 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, ruleFailure.Violations);
-        Assert.IsInstanceOfType<CBAdESDetachedObjectsCriticalLabelViolation>(ruleFailure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESDetachedObjectsCriticalLabelViolation>(ruleFailure.Violations[0]);
     }
 
 
@@ -827,10 +849,10 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, ruleFailure.Violations);
-        Assert.IsInstanceOfType<CBAdESDetachedObjectsUriHashMechanismDigestViolation>(ruleFailure.Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESDetachedObjectsUriHashMechanismDigestViolation>(ruleFailure.Violations[0]);
     }
 
 
@@ -866,8 +888,8 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
-        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure!;
+        _ = Assert.IsInstanceOfType<CBAdESRuleViolationsFailure>(result.Failure);
+        var ruleFailure = (CBAdESRuleViolationsFailure)result.Failure;
         Assert.HasCount(1, ruleFailure.Violations);
         var md5Violation = (CBAdESMd5DigestAlgorithmViolation)ruleFailure.Violations[0];
         Assert.AreEqual(CBAdESMd5DigestAlgorithmSurface.CertificateThumbprint, md5Violation.Surface);
@@ -898,7 +920,7 @@ internal sealed class CBAdESSignatureValidationTests
             wireBytes, publicKey, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESSignatureInvalidFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESSignatureInvalidFailure>(result.Failure);
     }
 
 
@@ -939,20 +961,20 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] wireBytes = BuildCoseSign1Bytes(protectedHeader, WriteEmptyUnprotectedMap, payload: null, signature);
 
         byte[] actualContent = "the actual dereferenced detached object bytes"u8.ToArray();
-        CBAdESDetachedObjectDereferenceDelegate dereference = (uriReference, context, pool, cancellationToken) =>
+        ValueTask<CBAdESDetachedObjectDereferenceResult> dereference(string uriReference, CBAdESDetachedObjectDereferenceContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult<CBAdESDetachedObjectDereferenceResult>(
                 new CBAdESDetachedObjectDereferenceSuccess(PooledMemory.FromBytes(actualContent, pool, Tag.Create(Purpose.Data))));
 
         using CBAdESValidationResult result = await ValidateExpectingNoThrowAsync(
             wireBytes,
             publicKey,
-            dereference,
+dereference,
             new CBAdESDetachedObjectDereferenceContext(null, null),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESDetachedObjectDigestMismatchFailure>(result.Failure);
-        Assert.AreEqual(reference, ((CBAdESDetachedObjectDigestMismatchFailure)result.Failure!).Reference);
+        _ = Assert.IsInstanceOfType<CBAdESDetachedObjectDigestMismatchFailure>(result.Failure);
+        Assert.AreEqual(reference, ((CBAdESDetachedObjectDigestMismatchFailure)result.Failure).Reference);
     }
 
 
@@ -984,20 +1006,20 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] signature = await SignSigStructureAsync(privateKey, sigStructure, TestContext.CancellationToken).ConfigureAwait(false);
         byte[] wireBytes = BuildCoseSign1Bytes(protectedHeader, WriteEmptyUnprotectedMap, payload: null, signature);
 
-        CBAdESDetachedObjectDereferenceDelegate alwaysFails = (uriReference, context, pool, cancellationToken) =>
+        static ValueTask<CBAdESDetachedObjectDereferenceResult> alwaysFails(string uriReference, CBAdESDetachedObjectDereferenceContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult<CBAdESDetachedObjectDereferenceResult>(
                 new CBAdESDetachedObjectDereferenceFailure("simulated network failure"));
 
         using CBAdESValidationResult result = await ValidateExpectingNoThrowAsync(
             wireBytes,
             publicKey,
-            alwaysFails,
+alwaysFails,
             new CBAdESDetachedObjectDereferenceContext(null, null),
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
-        Assert.IsInstanceOfType<CBAdESDetachedObjectUnresolvableFailure>(result.Failure);
-        Assert.AreEqual(reference, ((CBAdESDetachedObjectUnresolvableFailure)result.Failure!).Reference);
+        _ = Assert.IsInstanceOfType<CBAdESDetachedObjectUnresolvableFailure>(result.Failure);
+        Assert.AreEqual(reference, ((CBAdESDetachedObjectUnresolvableFailure)result.Failure).Reference);
     }
 
 
@@ -1025,7 +1047,7 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] wireBytes = await CreateThirdPartyMechanismDispatchMessageAsync(
             privateKey, reference, handlerPayload, TestContext.CancellationToken).ConfigureAwait(false);
 
-        CBAdESUnknownDetachedObjectMechanismDelegate handler = (mechanismIdentifier, references, hashAlgorithm, context, pool, cancellationToken) =>
+        ValueTask<PooledMemory> handler(string mechanismIdentifier, IReadOnlyList<CBAdESDetachedObjectReferenceInput> references, AdESDigestAlgorithmIdentifier? hashAlgorithm, CBAdESDetachedObjectDereferenceContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(handlerPayload, pool, Tag.Create(Purpose.Data)));
 
         using CBAdESValidationResult result = await ValidateExpectingNoThrowAsync(
@@ -1059,7 +1081,7 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] wireBytes = await CreateThirdPartyMechanismDispatchMessageAsync(
             privateKey, reference, [], TestContext.CancellationToken).ConfigureAwait(false);
 
-        CBAdESUnknownDetachedObjectMechanismDelegate handler = (mechanismIdentifier, references, hashAlgorithm, context, pool, cancellationToken) =>
+        static ValueTask<PooledMemory> handler(string mechanismIdentifier, IReadOnlyList<CBAdESDetachedObjectReferenceInput> references, AdESDigestAlgorithmIdentifier? hashAlgorithm, CBAdESDetachedObjectDereferenceContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             throw new CBAdESDetachedObjectDereferenceException(simulatedReason);
 
         using CBAdESValidationResult result = await ValidateExpectingNoThrowAsync(
@@ -1094,7 +1116,7 @@ internal sealed class CBAdESSignatureValidationTests
         byte[] wireBytes = await CreateThirdPartyMechanismDispatchMessageAsync(
             privateKey, reference, [], TestContext.CancellationToken).ConfigureAwait(false);
 
-        CBAdESUnknownDetachedObjectMechanismDelegate handler = (mechanismIdentifier, references, hashAlgorithm, context, pool, cancellationToken) =>
+        static ValueTask<PooledMemory> handler(string mechanismIdentifier, IReadOnlyList<CBAdESDetachedObjectReferenceInput> references, AdESDigestAlgorithmIdentifier? hashAlgorithm, CBAdESDetachedObjectDereferenceContext context, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             throw new InvalidOperationException(nonRoutineMessage);
 
         InvalidOperationException exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
@@ -1189,11 +1211,11 @@ internal sealed class CBAdESSignatureValidationTests
         using var cts = new CancellationTokenSource();
         var context = new CBAdESDetachedObjectDereferenceContext(null, cts);
 
-        CBAdESDetachedObjectDereferenceDelegate cancelThenSucceed = async (uriReference, dereferenceContext, rentPool, cancellationToken) =>
+        static async ValueTask<CBAdESDetachedObjectDereferenceResult> cancelThenSucceed(string uriReference, CBAdESDetachedObjectDereferenceContext dereferenceContext, BaseMemoryPool rentPool, CancellationToken cancellationToken)
         {
             await ((CancellationTokenSource)dereferenceContext.State!).CancelAsync().ConfigureAwait(false);
             return new CBAdESDetachedObjectDereferenceSuccess(PooledMemory.FromBytes("dereferenced-object"u8.ToArray(), rentPool, Tag.Create(Purpose.Data)));
-        };
+        }
 
         OperationCanceledException exception = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await CBAdESSignatureValidation.ValidateAsync(
@@ -1202,7 +1224,7 @@ internal sealed class CBAdESSignatureValidationTests
                 CoseSerialization.BuildSigStructure,
                 publicKey,
                 MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
-                cancelThenSucceed,
+cancelThenSucceed,
                 context,
                 externalDetachedPayload: null,
                 unknownMechanismHandler: null,
@@ -1222,7 +1244,7 @@ internal sealed class CBAdESSignatureValidationTests
         (byte[] wireBytes, PublicKeyMemory publicKey) = await CreateBaselineMessageAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using(publicKey)
         {
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await CBAdESSignatureValidation.ValidateAsync(
                     wireBytes,
                     parse: null!,
@@ -1246,7 +1268,7 @@ internal sealed class CBAdESSignatureValidationTests
         (byte[] wireBytes, PublicKeyMemory publicKey) = await CreateBaselineMessageAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using(publicKey)
         {
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await CBAdESSignatureValidation.ValidateAsync(
                     wireBytes,
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -1270,7 +1292,7 @@ internal sealed class CBAdESSignatureValidationTests
         (byte[] wireBytes, PublicKeyMemory publicKey) = await CreateBaselineMessageAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using(publicKey)
         {
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await CBAdESSignatureValidation.ValidateAsync(
                     wireBytes,
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -1294,7 +1316,7 @@ internal sealed class CBAdESSignatureValidationTests
         (byte[] wireBytes, PublicKeyMemory publicKey) = await CreateBaselineMessageAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using(publicKey)
         {
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await CBAdESSignatureValidation.ValidateAsync(
                     wireBytes,
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -1318,7 +1340,7 @@ internal sealed class CBAdESSignatureValidationTests
         (byte[] wireBytes, PublicKeyMemory publicKey) = await CreateBaselineMessageAsync(TestContext.CancellationToken).ConfigureAwait(false);
         using(publicKey)
         {
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await CBAdESSignatureValidation.ValidateAsync(
                     wireBytes,
                     CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -1386,7 +1408,7 @@ internal sealed class CBAdESSignatureValidationTests
         }
 
         Fail(unexpectedException);
-        return default!;
+        return default;
 
         /// <summary>Reports <paramref name="exception"/> as an unconditional test failure and never returns.</summary>
         /// <param name="exception">The exception <see cref="ValidateExpectingNoThrowAsync"/> caught.</param>
@@ -1730,7 +1752,7 @@ internal sealed class CBAdESSignatureValidationTests
     {
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
+        writer.WriteTag(new CborTag(18)); // COSE_Sign1_Tagged, RFC 9052 section 2 / clause 4.3.
         writer.WriteStartArray(4);
         writer.WriteByteString(protectedHeader);
         writeUnprotectedMap(writer);

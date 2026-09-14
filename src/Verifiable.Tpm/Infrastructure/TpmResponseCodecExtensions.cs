@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure;
 
@@ -72,7 +71,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec StartAuthSession => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 StartAuthSessionResponse.Parse(ref reader, TpmiShAuthSession.FromValue(handle), pool));
 
         /// <summary>
@@ -121,7 +120,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec ContextLoad => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) => ContextLoadResponse.Parse(handle));
+            static (ref reader, handle, pool) => ContextLoadResponse.Parse(handle));
 
         /// <summary>
         /// Codec for TPM2_PolicyCommandCode response.
@@ -409,7 +408,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec CreatePrimary => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 CreatePrimaryResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -443,7 +442,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec Load => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 LoadResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -463,7 +462,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec LoadExternal => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 LoadExternalResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool),
             responseFirstParameterIsEncryptable: true);
 
@@ -670,7 +669,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec SignSequenceStart => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 SignSequenceStartResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -717,7 +716,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec HashSequenceStart => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 HashSequenceStartResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -776,7 +775,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec HmacStart => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 HmacStartResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>
@@ -813,7 +812,7 @@ public static class TpmResponseCodecExtensions
         /// </para>
         /// </remarks>
         public static TpmResponseCodec VerifySequenceStart => TpmResponseCodec.CreateWithHandle(
-            static (ref TpmReader reader, uint handle, BaseMemoryPool pool) =>
+            static (ref reader, handle, pool) =>
                 VerifySequenceStartResponse.Parse(ref reader, TpmiDhObject.FromValue(handle), pool));
 
         /// <summary>

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
@@ -44,7 +43,7 @@ internal sealed class CommitmentReuseDetectionTests
         using Salt salt = TestSalts.Generate(TestSalts.TestSaltTag, Pool);
 
         using DigestValue firstSeen = Commit(salt);
-        await CommitmentReuseDetection.DetectAsync([firstSeen], store.IsSeen, store.Record, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await CommitmentReuseDetection.DetectAsync([firstSeen], store.IsSeen, store.Record, TestContext.CancellationToken).ConfigureAwait(false);
 
         //A later presentation of the same salt yields the same (deterministic) commitment bytes.
         using DigestValue presentedAgain = Commit(salt);
@@ -106,7 +105,7 @@ internal sealed class CommitmentReuseDetectionTests
 
         public ValueTask Record(DigestValue commitment, CancellationToken cancellationToken)
         {
-            Seen.Add(Key(commitment));
+            _ = Seen.Add(Key(commitment));
 
             return ValueTask.CompletedTask;
         }

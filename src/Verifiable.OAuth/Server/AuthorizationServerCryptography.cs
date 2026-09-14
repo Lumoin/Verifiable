@@ -89,8 +89,8 @@ public sealed class AuthorizationServerCryptography
         {
             var sb = new StringBuilder(
                 "AuthorizationServerCryptography is missing required delegates: ");
-            sb.AppendJoin(", ", missing);
-            sb.Append('.');
+            _ = sb.AppendJoin(", ", missing);
+            _ = sb.Append('.');
             throw new InvalidOperationException(sb.ToString());
         }
 

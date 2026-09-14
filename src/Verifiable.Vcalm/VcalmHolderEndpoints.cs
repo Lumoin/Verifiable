@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JCose;
 using Verifiable.Vcalm.Exchange;

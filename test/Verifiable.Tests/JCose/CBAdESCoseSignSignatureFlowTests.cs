@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -122,7 +117,7 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
 
         using CBAdESProtectedHeaders firstHeaders = await BuildConformantHeadersAsync("conformant signer", TestContext.CancellationToken).ConfigureAwait(false);
 
-        (AdESCertificateThumbprint thumbprint, byte[] _) = await CreateSigningCertificateThumbprintAsync("non-conformant signer", TestContext.CancellationToken).ConfigureAwait(false);
+        (AdESCertificateThumbprint thumbprint, _) = await CreateSigningCertificateThumbprintAsync("non-conformant signer", TestContext.CancellationToken).ConfigureAwait(false);
         using var secondHeaders = new CBAdESProtectedHeaders(WellKnownCoseAlgorithms.Es256, cwtClaims: null, x5t: thumbprint); //CB-6.3-10: CwtClaims omitted.
 
         EncodedCoseProtectedHeader bodyProtectedHeader = EncodedCoseProtectedHeader.FromBytes(ReadOnlySpan<byte>.Empty, BaseMemoryPool.Shared);
@@ -154,7 +149,7 @@ internal sealed class CBAdESCoseSignSignatureFlowTests
         Assert.IsTrue(validation.Signers[0].IsValid, "The FIRST, conformant signer must remain valid -- the rule body runs independently per signer.");
         Assert.IsFalse(validation.Signers[1].IsValid);
         Assert.HasCount(1, validation.Signers[1].Violations);
-        Assert.IsInstanceOfType<CBAdESCwtClaimsMissingViolation>(validation.Signers[1].Violations[0]);
+        _ = Assert.IsInstanceOfType<CBAdESCwtClaimsMissingViolation>(validation.Signers[1].Violations[0]);
     }
 
 

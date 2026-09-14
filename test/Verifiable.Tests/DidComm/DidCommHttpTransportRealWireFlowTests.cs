@@ -1,18 +1,12 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -66,7 +60,7 @@ internal sealed class DidCommHttpTransportRealWireFlowTests
     private const string BodyValue = "and its value";
 
     /// <summary>A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.</summary>
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     /// <summary>
     /// A non-nested anoncrypt message never triggers nested-signature resolution, so this resolver is

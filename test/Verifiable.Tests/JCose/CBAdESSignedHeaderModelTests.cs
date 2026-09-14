@@ -1,10 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -119,7 +114,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "only one"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
         using var singleEntry = new AdESCertificateThumbprint(new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest);
 
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([singleEntry]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESCertificateThumbprints([singleEntry]));
     }
 
 
@@ -270,7 +265,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     {
         var commitmentId = new AdESObjectIdentifier(CBAdESCommitmentTypes.ProofOfOriginUri);
 
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESCommitment(commitmentId, commitmentQualifiers: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESCommitment(commitmentId, commitmentQualifiers: []));
     }
 
 
@@ -504,7 +499,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     {
         var empty = new AdESSignatureProductionPlace();
 
-        Assert.ThrowsExactly<ArgumentException>(() => CBAdESSerialization.EncodeSignatureProductionPlace(empty, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CBAdESSerialization.EncodeSignatureProductionPlace(empty, BaseMemoryPool.Shared));
     }
 
 
@@ -723,7 +718,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     {
         var empty = new AdESSignerAttributes();
 
-        Assert.ThrowsExactly<ArgumentException>(() => CBAdESSerialization.EncodeSignerAttributes(empty, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CBAdESSerialization.EncodeSignerAttributes(empty, BaseMemoryPool.Shared));
     }
 
 
@@ -848,7 +843,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void ConstructingSignerAttributesWithEmptyCertifiedArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerAttributes(certified: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerAttributes(certified: []));
     }
 
 
@@ -859,7 +854,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void ConstructingSignerAttributesWithEmptySignedAssertionsArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerAttributes(signedAssertions: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerAttributes(signedAssertions: []));
     }
 
 
@@ -870,7 +865,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void ConstructingSignerAttributesWithEmptyClaimedArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerAttributes(claimed: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new AdESSignerAttributes(claimed: []));
     }
 
 
@@ -1076,7 +1071,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         var id = new AdESObjectIdentifier("https://policy.example.org/v1");
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignaturePolicyIdentifier(id, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest, digestIsPerSpecification: true));
     }
 
@@ -1091,7 +1086,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         var id = new AdESObjectIdentifier("https://policy.example.org/v1");
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignaturePolicyIdentifier(
                 id,
                 new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256),
@@ -1111,7 +1106,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         var id = new AdESObjectIdentifier("https://policy.example.org/v1");
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "policy document"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             new AdESSignaturePolicyIdentifier(
                 id, new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256), digest, qualifiers: []));
     }
@@ -1656,7 +1651,7 @@ internal sealed class CBAdESSignedHeaderModelTests
             new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256));
 #pragma warning restore CA2000 // Dispose objects before losing scope
 
-        Assert.ThrowsExactly<ArgumentException>(() => CBAdESSerialization.EncodeDetachedObjects(detachedObjects, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CBAdESSerialization.EncodeDetachedObjects(detachedObjects, BaseMemoryPool.Shared));
     }
 
 
@@ -1667,7 +1662,7 @@ internal sealed class CBAdESSignedHeaderModelTests
     [TestMethod]
     public void ConstructingDetachedObjectsWithAnEmptyListThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESDetachedObjects(CBAdESDetachedMechanisms.ObjectIdByURI, []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESDetachedObjects(CBAdESDetachedMechanisms.ObjectIdByURI, []));
     }
 
 
@@ -1807,7 +1802,7 @@ internal sealed class CBAdESSignedHeaderModelTests
         var oracle = new CborWriter(oracleBuffer, CborOptions.RfcCanonical);
         oracle.WriteStartMap(2);
         oracle.WriteInt32(1);
-        oracle.WriteTag(new CborTag((ulong)0));
+        oracle.WriteTag(new CborTag(0));
         oracle.WriteTextString(CBAdESDetachedMechanisms.ObjectIdByURI);
         oracle.WriteInt32(2);
         oracle.WriteStartArray(1);

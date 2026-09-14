@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Foundation.Automata;
 
@@ -360,7 +356,7 @@ public sealed class PushdownAutomaton<TState, TInput, TStackSymbol>: IObservable
     {
         public void Dispose()
         {
-            observers.Remove(observer);
+            _ = observers.Remove(observer);
         }
     }
 }

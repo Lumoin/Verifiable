@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Fido2;

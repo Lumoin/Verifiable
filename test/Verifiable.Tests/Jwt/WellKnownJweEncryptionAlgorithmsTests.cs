@@ -55,6 +55,6 @@ namespace Verifiable.Tests.Jwt
             //and a different reference.
             string incorrectAlgorithm = instanceAlgorithm.ToggleCaseForLetterAt(0);
             Assert.IsFalse(isCorrectAlgorithm(incorrectAlgorithm), "Comparison should fail when casing is changed.");
-        }       
+        }
     }
 }

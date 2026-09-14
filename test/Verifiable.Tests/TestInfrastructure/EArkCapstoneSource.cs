@@ -1,11 +1,6 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Assessment.EArchiving;
 using Verifiable.Cryptography;
@@ -279,7 +274,7 @@ internal static class EArkCapstoneSource
         placement.Object.Dispose();
 
         using MetsDocument manifest = await BuildManifestAsync(
-            placement.FileEntry, placement.FileGroupUse, provenanceOctets, containerOctets, context.MetadataInstant, cancellationToken).ConfigureAwait(false);
+            placement.FileEntry, placement.FileGroupUse, provenanceOctets, context.MetadataInstant, cancellationToken).ConfigureAwait(false);
 
         using MetsEncodeResult encodedManifest = await MetsXmlBinding.EncodeAsync(
             new MetsEncodeContext { Document = manifest }, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
@@ -589,7 +584,6 @@ internal static class EArkCapstoneSource
     /// <param name="evidenceFile">The file entry the placement convention states for the preservation container. Ownership transfers to the returned document.</param>
     /// <param name="evidenceFileGroupUse">The file group the container's entry belongs under.</param>
     /// <param name="provenanceOctets">The provenance document as the package carries it.</param>
-    /// <param name="containerOctets">The preservation container as the package carries it.</param>
     /// <param name="instant">The instant the manifest states of itself and of what it names.</param>
     /// <param name="cancellationToken">Token to observe for cancellation requests.</param>
     /// <returns>The manifest. The caller owns and disposes it.</returns>
@@ -604,7 +598,6 @@ internal static class EArkCapstoneSource
         MetsFile evidenceFile,
         string evidenceFileGroupUse,
         byte[] provenanceOctets,
-        byte[] containerOctets,
         DateTimeOffset instant,
         CancellationToken cancellationToken)
     {
@@ -1258,7 +1251,7 @@ internal sealed class ReconstructedEArkVerifyingParty: IDisposable
     /// <typeparam name="T">The carrier's type.</typeparam>
     /// <param name="carrier">The carrier.</param>
     /// <returns>The same carrier.</returns>
-    private T Own<T>(T carrier) where T: IDisposable
+    private T Own<T>(T carrier) where T : IDisposable
     {
         Owned.Add(carrier);
 

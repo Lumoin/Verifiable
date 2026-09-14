@@ -70,13 +70,13 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESUnsignedSignatureProperties.MaximumPropertyCount + 1;
         var builder = new StringBuilder(count * 24);
-        builder.Append($"""<UnsignedSignatureProperties xmlns="{V132}" xmlns:f="urn:filler">""");
+        _ = builder.Append($"""<UnsignedSignatureProperties xmlns="{V132}" xmlns:f="urn:filler">""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append("<f:Filler/>");
+            _ = builder.Append("<f:Filler/>");
         }
 
-        builder.Append("</UnsignedSignatureProperties>");
+        _ = builder.Append("</UnsignedSignatureProperties>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         bool isRead = XAdESUnsignedSignatureProperties.TryRead(table, table.DocumentElementIndex, out _, out XAdESReadError error);
@@ -101,15 +101,15 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESSigningCertificateV2.MaximumCertIdListEntryCount + 1;
         var builder = new StringBuilder(count * 160);
-        builder.Append($"""<Wrapper xmlns="{V132}" xmlns:ds="{DsNamespace}">""");
+        _ = builder.Append($"""<Wrapper xmlns="{V132}" xmlns:ds="{DsNamespace}">""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append($"""
+            _ = builder.Append($"""
                 <Cert><CertDigest><ds:DigestMethod Algorithm="{DigestMethodAlgorithm}"/><ds:DigestValue>AQ==</ds:DigestValue></CertDigest></Cert>
                 """);
         }
 
-        builder.Append("</Wrapper>");
+        _ = builder.Append("</Wrapper>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         using var metered = new MeteredHousePool();
@@ -137,15 +137,15 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESCompleteRevocationRefs.MaximumRevocationRefEntryCount + 1;
         var builder = new StringBuilder(count * 200);
-        builder.Append($"""<CompleteRevocationRefs xmlns="{V132}" xmlns:ds="{DsNamespace}"><CRLRefs>""");
+        _ = builder.Append($"""<CompleteRevocationRefs xmlns="{V132}" xmlns:ds="{DsNamespace}"><CRLRefs>""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append($"""
+            _ = builder.Append($"""
                 <CRLRef><DigestAlgAndValue><ds:DigestMethod Algorithm="{DigestMethodAlgorithm}"/><ds:DigestValue>AQ==</ds:DigestValue></DigestAlgAndValue></CRLRef>
                 """);
         }
 
-        builder.Append("</CRLRefs></CompleteRevocationRefs>");
+        _ = builder.Append("</CRLRefs></CompleteRevocationRefs>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         using var metered = new MeteredHousePool();
@@ -171,13 +171,13 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESCertificateValues.MaximumEntryCount + 1;
         var builder = new StringBuilder(count * 24);
-        builder.Append($"""<CertificateValues xmlns="{V132}">""");
+        _ = builder.Append($"""<CertificateValues xmlns="{V132}">""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append("<OtherCertificate/>");
+            _ = builder.Append("<OtherCertificate/>");
         }
 
-        builder.Append("</CertificateValues>");
+        _ = builder.Append("</CertificateValues>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         using var metered = new MeteredHousePool();
@@ -203,13 +203,13 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESRevocationValues.MaximumEncapsulatedEntryCount + 1;
         var builder = new StringBuilder(count * 40);
-        builder.Append($"""<RevocationValues xmlns="{V132}"><CRLValues>""");
+        _ = builder.Append($"""<RevocationValues xmlns="{V132}"><CRLValues>""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append("<EncapsulatedCRLValue>AQ==</EncapsulatedCRLValue>");
+            _ = builder.Append("<EncapsulatedCRLValue>AQ==</EncapsulatedCRLValue>");
         }
 
-        builder.Append("</CRLValues></RevocationValues>");
+        _ = builder.Append("</CRLValues></RevocationValues>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         using var metered = new MeteredHousePool();
@@ -235,13 +235,13 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESRevocationValues.MaximumUnmodeledEntryCount + 1;
         var builder = new StringBuilder(count * 24);
-        builder.Append($"""<RevocationValues xmlns="{V132}"><OtherValues>""");
+        _ = builder.Append($"""<RevocationValues xmlns="{V132}"><OtherValues>""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append("<OtherValue/>");
+            _ = builder.Append("<OtherValue/>");
         }
 
-        builder.Append("</OtherValues></RevocationValues>");
+        _ = builder.Append("</OtherValues></RevocationValues>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         using var metered = new MeteredHousePool();
@@ -266,13 +266,13 @@ internal sealed class XAdESGrowthBoundsCostTests
     {
         int count = XAdESTimeStamp.MaximumIncludeCount + 1;
         var builder = new StringBuilder(count * 24);
-        builder.Append($"""<Wrapper xmlns="{V132}">""");
+        _ = builder.Append($"""<Wrapper xmlns="{V132}">""");
         for(int i = 0; i < count; ++i)
         {
-            builder.Append("""<Include URI="#nonexistent"/>""");
+            _ = builder.Append("""<Include URI="#nonexistent"/>""");
         }
 
-        builder.Append("</Wrapper>");
+        _ = builder.Append("</Wrapper>");
 
         using XmlNodeTable table = Parse(builder.ToString(), BaseMemoryPool.Shared);
         using var metered = new MeteredHousePool();

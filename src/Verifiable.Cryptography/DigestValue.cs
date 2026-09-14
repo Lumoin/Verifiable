@@ -97,7 +97,7 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
     /// stopped on <see cref="SensitiveMemory.Dispose()"/>. Pass <see langword="null"/>
     /// when no OTel listener is active.
     /// </param>
-    public DigestValue(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null): base(sensitiveMemory, tag, lifetime)
+    public DigestValue(IMemoryOwner<byte> sensitiveMemory, Tag tag, Activity? lifetime = null) : base(sensitiveMemory, tag, lifetime)
     {
         DigestLifetime = lifetime;
     }
@@ -148,7 +148,7 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
         Debug.Assert(owner.Memory.Length == outputByteLength,
             "DigestValue.Compute requires the caller-supplied pool to make exact-length rentals; " +
             "the rented buffer length must equal the requested digest length.");
-        hashFunction(input, owner.Memory.Span);
+        _ = hashFunction(input, owner.Memory.Span);
 
         return new DigestValue(owner, tag, lifetime);
     }
@@ -165,8 +165,8 @@ public sealed class DigestValue: SensitiveMemory, IEquatable<DigestValue>
             && DigestLifetime is not null
             && Tag.TryGet(out System.Security.Cryptography.HashAlgorithmName algorithmName))
         {
-            DigestLifetime.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
-            DigestLifetime.SetTag(CryptoTelemetry.Digest.OutputLength, Length);
+            _ = DigestLifetime.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
+            _ = DigestLifetime.SetTag(CryptoTelemetry.Digest.OutputLength, Length);
         }
 
         base.Dispose(disposing);

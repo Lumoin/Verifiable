@@ -1,6 +1,5 @@
-using System.Buffers;
-using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
+using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Cbor.StatusList;
@@ -11,7 +10,6 @@ using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
-using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
@@ -101,7 +99,7 @@ internal static class SdCwtVpFixture
         Assert.IsTrue(verified.Credentials.TryGetValue(new CredentialQueryId(EmployeeCwtCredentialQueryId),
             out VpCredentialClaims? credential),
             "Verified credentials must be keyed by the DCQL credential query id.");
-        IReadOnlyDictionary<CredentialPath, string> claims = credential!.Extracted;
+        IReadOnlyDictionary<CredentialPath, string> claims = credential.Extracted;
         Assert.AreEqual("Erika", claims[CredentialPath.FromJsonPointer(GivenNamePath)],
             "The disclosed given_name must round-trip through the full flow.");
         Assert.AreEqual("Mustermann", claims[CredentialPath.FromJsonPointer(FamilyNamePath)],

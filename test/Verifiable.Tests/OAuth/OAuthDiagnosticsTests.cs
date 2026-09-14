@@ -50,11 +50,11 @@ internal sealed class OAuthDiagnosticsTests
         ClientRecord registration = app.RegisterSigningClient(
             "diag-client", keys, JwksCapabilities);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(registration.TenantId);
         context.SetIssuer(IssuerUri);
 
-        await app.DispatchAtEndpointAsync(
+        _ = await app.DispatchAtEndpointAsync(
             registration.TenantId,
             WellKnownEndpointNames.MetadataJwks,
             "GET",
@@ -113,17 +113,17 @@ internal sealed class OAuthDiagnosticsTests
         //by, so isolate by trace instead — start a per-test root so the library's
         //activities (if any) inherit its TraceId, and keep only those.
         using Activity testRoot = new(nameof(HandleAsyncEmitsActivityForUnknownSegmentWith404));
-        testRoot.Start();
+        _ = testRoot.Start();
         ActivityTraceId testTraceId = testRoot.TraceId;
 
         await using TestHostShell app = new(TimeProvider);
 
-        await app.DispatchAtEndpointAsync(
+        _ = await app.DispatchAtEndpointAsync(
             "nonexistent",
             WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Activity[] handleActivities = captured
@@ -275,7 +275,7 @@ internal sealed class OAuthDiagnosticsTests
         {
             ShouldListenTo = source =>
                 string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) =>
+            Sample = static (ref _) =>
                 ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => captured.Add(activity)
         };

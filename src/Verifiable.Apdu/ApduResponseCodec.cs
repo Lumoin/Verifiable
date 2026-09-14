@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 
 namespace Verifiable.Apdu;
@@ -13,7 +11,7 @@ namespace Verifiable.Apdu;
 /// <returns>The parsed response.</returns>
 public delegate TResponse ApduResponseParser<TResponse>(
     ref ApduReader reader,
-    BaseMemoryPool pool) where TResponse: IApduWireType;
+    BaseMemoryPool pool) where TResponse : IApduWireType;
 
 /// <summary>
 /// Internal delegate for type-erased response parsing.
@@ -67,11 +65,11 @@ public sealed class ApduResponseCodec
     /// <param name="parser">The parser delegate.</param>
     /// <returns>The codec.</returns>
     public static ApduResponseCodec Create<TResponse>(ApduResponseParser<TResponse> parser)
-        where TResponse: IApduWireType
+        where TResponse : IApduWireType
     {
         ArgumentNullException.ThrowIfNull(parser);
         return new ApduResponseCodec(
-            (ref ApduReader r, BaseMemoryPool p) => parser(ref r, p));
+            (ref r, p) => parser(ref r, p));
     }
 
     /// <summary>

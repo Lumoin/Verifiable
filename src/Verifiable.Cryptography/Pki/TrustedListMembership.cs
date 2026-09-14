@@ -1,7 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -256,7 +253,7 @@ public static class TrustedListMembership
         ReadCertificateSubjectKeyIdentifierDelegate readSubjectKeyIdentifier)
     {
         string base64 = entry.SubjectKeyIdentifierBase64;
-        int maxDecodedLength = ((base64.Length + 3) / 4) * 3;
+        int maxDecodedLength = (base64.Length + 3) / 4 * 3;
         byte[] rented = ArrayPool<byte>.Shared.Rent(maxDecodedLength);
         try
         {

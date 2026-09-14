@@ -1,13 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Server.Routing;
-using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -271,7 +268,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         Assert.AreEqual(204, response.StatusCode, response.Body);
         Assert.IsNotNull(seen);
-        Assert.AreEqual(Oid4VciNotificationEvents.CredentialFailure, seen!.Event);
+        Assert.AreEqual(Oid4VciNotificationEvents.CredentialFailure, seen.Event);
         Assert.AreEqual("Could not store the Credential. Out of storage.", seen.EventDescription);
     }
 
@@ -309,7 +306,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         Assert.AreEqual(204, response.StatusCode, response.Body);
         Assert.IsNotNull(seen);
-        Assert.AreEqual("out of storage", seen!.EventDescription,
+        Assert.AreEqual("out of storage", seen.EventDescription,
             "The out-of-charset double-quote characters are stripped from event_description.");
     }
 
@@ -389,7 +386,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
 
         //The fail-closed gates keep each endpoint off the chain until its seams are wired;
         //the metadata derives the advertised URLs from the chain.
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
@@ -404,7 +401,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             WellKnownEndpointNames.Oid4VciCredentialIssuerMetadata,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -446,7 +443,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
@@ -492,7 +489,7 @@ internal sealed class Oid4VciDeferredAndNotificationTests
             new RequestFields(),
             headers,
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

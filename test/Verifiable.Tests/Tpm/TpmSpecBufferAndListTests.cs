@@ -1,8 +1,6 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 
@@ -277,7 +275,7 @@ internal sealed class TpmSpecBufferAndListTests
         [
             0x00, 0x00, 0x00, 0x02,
             0x00, 0x0B, 0x03, 0x01, 0x00, 0x00,
-            0x00, 0x0C, (byte)(TpmlPcrSelection.PcrSelectMax + 1)
+            0x00, 0x0C, (TpmlPcrSelection.PcrSelectMax + 1)
         ];
         var reader = new TpmReader(wire);
 
@@ -815,7 +813,7 @@ internal sealed class TpmSpecBufferAndListTests
     [TestMethod]
     public void Tpm2bIdObjectParseOverMaxSizeThrows()
     {
-        byte[] wire = [0x00, (byte)(Tpm2bIdObject.MaxSize + 1)]; //Size = 133.
+        byte[] wire = [0x00, (Tpm2bIdObject.MaxSize + 1)]; //Size = 133.
         using var trackingPool = new MeteredHousePool();
         long baseline = trackingPool.OutstandingCount;
         var reader = new TpmReader(wire);
@@ -1488,13 +1486,13 @@ internal sealed class TpmSpecBufferAndListTests
         {
             AssertTicketRoundTrip(
                 creation.SerializedSize,
-                (ref TpmWriter w) => creation.WriteTo(ref w),
-                static (ref TpmReader r, BaseMemoryPool p) =>
+                (ref w) => creation.WriteTo(ref w),
+                static (ref r, p) =>
                 {
                     using TpmtTkCreation parsed = TpmtTkCreation.Parse(ref r, p);
 
                     return DescribeTicket(
-                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
                 },
                 (ushort)creation.Tag, TpmiRhHierarchy.Owner.Value, digest, "TPMT_TK_CREATION", pool);
         }
@@ -1503,13 +1501,13 @@ internal sealed class TpmSpecBufferAndListTests
         {
             AssertTicketRoundTrip(
                 verified.SerializedSize,
-                (ref TpmWriter w) => verified.WriteTo(ref w),
-                static (ref TpmReader r, BaseMemoryPool p) =>
+                (ref w) => verified.WriteTo(ref w),
+                static (ref r, p) =>
                 {
                     using TpmtTkVerified parsed = TpmtTkVerified.Parse(ref r, p);
 
                     return DescribeTicket(
-                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Hmac, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Hmac, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
                 },
                 (ushort)verified.Tag, TpmiRhHierarchy.Platform.Value, digest, "TPMT_TK_VERIFIED", pool);
         }
@@ -1518,13 +1516,13 @@ internal sealed class TpmSpecBufferAndListTests
         {
             AssertTicketRoundTrip(
                 auth.SerializedSize,
-                (ref TpmWriter w) => auth.WriteTo(ref w),
-                static (ref TpmReader r, BaseMemoryPool p) =>
+                (ref w) => auth.WriteTo(ref w),
+                static (ref r, p) =>
                 {
                     using TpmtTkAuth parsed = TpmtTkAuth.Parse(ref r, p);
 
                     return DescribeTicket(
-                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
                 },
                 (ushort)auth.Tag, TpmiRhHierarchy.Endorsement.Value, digest, "TPMT_TK_AUTH", pool);
         }
@@ -1533,13 +1531,13 @@ internal sealed class TpmSpecBufferAndListTests
         {
             AssertTicketRoundTrip(
                 hashcheck.SerializedSize,
-                (ref TpmWriter w) => hashcheck.WriteTo(ref w),
-                static (ref TpmReader r, BaseMemoryPool p) =>
+                (ref w) => hashcheck.WriteTo(ref w),
+                static (ref r, p) =>
                 {
                     using TpmtTkHashcheck parsed = TpmtTkHashcheck.Parse(ref r, p);
 
                     return DescribeTicket(
-                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                        (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
                 },
                 (ushort)hashcheck.Tag, TpmiRhHierarchy.Owner.Value, digest, "TPMT_TK_HASHCHECK", pool);
         }
@@ -1549,52 +1547,52 @@ internal sealed class TpmSpecBufferAndListTests
         TpmtTkCreation nullCreation = TpmtTkCreation.Null;
         AssertTicketRoundTrip(
             nullCreation.SerializedSize,
-            (ref TpmWriter w) => nullCreation.WriteTo(ref w),
-            static (ref TpmReader r, BaseMemoryPool p) =>
+            (ref w) => nullCreation.WriteTo(ref w),
+            static (ref r, p) =>
             {
                 TpmtTkCreation parsed = TpmtTkCreation.Parse(ref r, p);
 
                 return DescribeTicket(
-                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
             },
             (ushort)nullCreation.Tag, TpmiRhHierarchy.Null.Value, [], "TPMT_TK_CREATION (NULL)", pool);
 
         TpmtTkVerified nullVerified = TpmtTkVerified.Null;
         AssertTicketRoundTrip(
             nullVerified.SerializedSize,
-            (ref TpmWriter w) => nullVerified.WriteTo(ref w),
-            static (ref TpmReader r, BaseMemoryPool p) =>
+            (ref w) => nullVerified.WriteTo(ref w),
+            static (ref r, p) =>
             {
                 TpmtTkVerified parsed = TpmtTkVerified.Parse(ref r, p);
 
                 return DescribeTicket(
-                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Hmac, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Hmac, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
             },
             (ushort)nullVerified.Tag, TpmiRhHierarchy.Null.Value, [], "TPMT_TK_VERIFIED (NULL)", pool);
 
         TpmtTkAuth nullAuth = TpmtTkAuth.Null;
         AssertTicketRoundTrip(
             nullAuth.SerializedSize,
-            (ref TpmWriter w) => nullAuth.WriteTo(ref w),
-            static (ref TpmReader r, BaseMemoryPool p) =>
+            (ref w) => nullAuth.WriteTo(ref w),
+            static (ref r, p) =>
             {
                 TpmtTkAuth parsed = TpmtTkAuth.Parse(ref r, p);
 
                 return DescribeTicket(
-                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
             },
             (ushort)nullAuth.Tag, TpmiRhHierarchy.Null.Value, [], "TPMT_TK_AUTH (NULL)", pool);
 
         TpmtTkHashcheck nullHashcheck = TpmtTkHashcheck.Null;
         AssertTicketRoundTrip(
             nullHashcheck.SerializedSize,
-            (ref TpmWriter w) => nullHashcheck.WriteTo(ref w),
-            static (ref TpmReader r, BaseMemoryPool p) =>
+            (ref w) => nullHashcheck.WriteTo(ref w),
+            static (ref r, p) =>
             {
                 TpmtTkHashcheck parsed = TpmtTkHashcheck.Parse(ref r, p);
 
                 return DescribeTicket(
-                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref TpmWriter w) => parsed.WriteTo(ref w), p);
+                    (ushort)parsed.Tag, parsed.Hierarchy.Value, parsed.Digest, parsed.SerializedSize, (ref w) => parsed.WriteTo(ref w), p);
             },
             (ushort)nullHashcheck.Tag, TpmiRhHierarchy.Null.Value, [], "TPMT_TK_HASHCHECK (NULL)", pool);
     }
@@ -1614,19 +1612,19 @@ internal sealed class TpmSpecBufferAndListTests
         AssertNullTicket(
             TpmtTkCreation.Null.IsNull, TpmtTkCreation.Null.Hierarchy, TpmtTkCreation.Null.Digest.Length, TpmtTkCreation.Null.SerializedSize,
             (ushort)TpmStConstants.TPM_ST_CREATION, TpmtTkCreation.Null.Dispose, () => TpmtTkCreation.Null.Digest.Length, trackingPool.Pool,
-            (ref TpmWriter w) => TpmtTkCreation.Null.WriteTo(ref w));
+            (ref w) => TpmtTkCreation.Null.WriteTo(ref w));
         AssertNullTicket(
             TpmtTkVerified.Null.IsNull, TpmtTkVerified.Null.Hierarchy, TpmtTkVerified.Null.Hmac.Length, TpmtTkVerified.Null.SerializedSize,
             (ushort)TpmStConstants.TPM_ST_VERIFIED, TpmtTkVerified.Null.Dispose, () => TpmtTkVerified.Null.Hmac.Length, trackingPool.Pool,
-            (ref TpmWriter w) => TpmtTkVerified.Null.WriteTo(ref w));
+            (ref w) => TpmtTkVerified.Null.WriteTo(ref w));
         AssertNullTicket(
             TpmtTkAuth.Null.IsNull, TpmtTkAuth.Null.Hierarchy, TpmtTkAuth.Null.Digest.Length, TpmtTkAuth.Null.SerializedSize,
             (ushort)TpmStConstants.TPM_ST_AUTH_SIGNED, TpmtTkAuth.Null.Dispose, () => TpmtTkAuth.Null.Digest.Length, trackingPool.Pool,
-            (ref TpmWriter w) => TpmtTkAuth.Null.WriteTo(ref w));
+            (ref w) => TpmtTkAuth.Null.WriteTo(ref w));
         AssertNullTicket(
             TpmtTkHashcheck.Null.IsNull, TpmtTkHashcheck.Null.Hierarchy, TpmtTkHashcheck.Null.Digest.Length, TpmtTkHashcheck.Null.SerializedSize,
             (ushort)TpmStConstants.TPM_ST_HASHCHECK, TpmtTkHashcheck.Null.Dispose, () => TpmtTkHashcheck.Null.Digest.Length, trackingPool.Pool,
-            (ref TpmWriter w) => TpmtTkHashcheck.Null.WriteTo(ref w));
+            (ref w) => TpmtTkHashcheck.Null.WriteTo(ref w));
 
         Assert.AreEqual(baseline, trackingPool.OutstandingCount, "A NULL ticket owns no pooled storage, so framing four of them rents nothing beyond the framing buffers.");
     }
@@ -1644,10 +1642,10 @@ internal sealed class TpmSpecBufferAndListTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         const uint TransientHandle = 0x8000_0000;
 
-        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_CREATION, TransientHandle, (ref TpmReader r, BaseMemoryPool p) => TpmtTkCreation.Parse(ref r, p).Dispose(), pool);
-        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_VERIFIED, TransientHandle, (ref TpmReader r, BaseMemoryPool p) => TpmtTkVerified.Parse(ref r, p).Dispose(), pool);
-        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_AUTH_SECRET, TransientHandle, (ref TpmReader r, BaseMemoryPool p) => TpmtTkAuth.Parse(ref r, p).Dispose(), pool);
-        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_HASHCHECK, TransientHandle, (ref TpmReader r, BaseMemoryPool p) => TpmtTkHashcheck.Parse(ref r, p).Dispose(), pool);
+        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_CREATION, TransientHandle, (ref r, p) => TpmtTkCreation.Parse(ref r, p).Dispose(), pool);
+        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_VERIFIED, TransientHandle, (ref r, p) => TpmtTkVerified.Parse(ref r, p).Dispose(), pool);
+        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_AUTH_SECRET, TransientHandle, (ref r, p) => TpmtTkAuth.Parse(ref r, p).Dispose(), pool);
+        AssertHierarchyRefused((ushort)TpmStConstants.TPM_ST_HASHCHECK, TransientHandle, (ref r, p) => TpmtTkHashcheck.Parse(ref r, p).Dispose(), pool);
     }
 
     /// <summary>
@@ -1665,10 +1663,10 @@ internal sealed class TpmSpecBufferAndListTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         const uint OwnerHierarchy = (uint)TpmRh.TPM_RH_OWNER;
 
-        AssertTagRefused((ushort)TpmStConstants.TPM_ST_VERIFIED, OwnerHierarchy, (ref TpmReader r, BaseMemoryPool p) => TpmtTkCreation.Parse(ref r, p).Dispose(), pool);
-        AssertTagRefused((ushort)TpmStConstants.TPM_ST_CREATION, OwnerHierarchy, (ref TpmReader r, BaseMemoryPool p) => TpmtTkVerified.Parse(ref r, p).Dispose(), pool);
-        AssertTagRefused((ushort)TpmStConstants.TPM_ST_HASHCHECK, OwnerHierarchy, (ref TpmReader r, BaseMemoryPool p) => TpmtTkAuth.Parse(ref r, p).Dispose(), pool);
-        AssertTagRefused((ushort)TpmStConstants.TPM_ST_AUTH_SIGNED, OwnerHierarchy, (ref TpmReader r, BaseMemoryPool p) => TpmtTkHashcheck.Parse(ref r, p).Dispose(), pool);
+        AssertTagRefused((ushort)TpmStConstants.TPM_ST_VERIFIED, OwnerHierarchy, (ref r, p) => TpmtTkCreation.Parse(ref r, p).Dispose(), pool);
+        AssertTagRefused((ushort)TpmStConstants.TPM_ST_CREATION, OwnerHierarchy, (ref r, p) => TpmtTkVerified.Parse(ref r, p).Dispose(), pool);
+        AssertTagRefused((ushort)TpmStConstants.TPM_ST_HASHCHECK, OwnerHierarchy, (ref r, p) => TpmtTkAuth.Parse(ref r, p).Dispose(), pool);
+        AssertTagRefused((ushort)TpmStConstants.TPM_ST_AUTH_SIGNED, OwnerHierarchy, (ref r, p) => TpmtTkHashcheck.Parse(ref r, p).Dispose(), pool);
     }
 
     /// <summary>
@@ -1693,7 +1691,7 @@ internal sealed class TpmSpecBufferAndListTests
             Assert.IsNotNull(commands.CommandAttributes, "TPM_CAP_COMMANDS populates the TPML_CCA member.");
             Assert.IsNull(commands.PhysicalPresenceCommands, "TPM_CAP_COMMANDS is not the ppCommands member.");
             Assert.IsNull(commands.AuditCommands, "TPM_CAP_COMMANDS is not the auditCommands member.");
-            Assert.HasCount(1, commands.CommandAttributes!.CommandAttributes, "The list carries exactly the one attribute word framed.");
+            Assert.HasCount(1, commands.CommandAttributes.CommandAttributes, "The list carries exactly the one attribute word framed.");
             Assert.AreEqual((ushort)TpmCcConstants.TPM_CC_Startup, commands.CommandAttributes[0].COMMAND_INDEX, "The low 16 bits of a TPMA_CC are its commandIndex.");
             Assert.AreEqual((byte)1, commands.CommandAttributes[0].C_HANDLES, "The attribute bits ride alongside the index, which is what makes this a TPML_CCA rather than a TPML_CC.");
         }
@@ -1702,7 +1700,7 @@ internal sealed class TpmSpecBufferAndListTests
         {
             Assert.IsNotNull(ppCommands.PhysicalPresenceCommands, "TPM_CAP_PP_COMMANDS populates its own TPML_CC member.");
             Assert.IsNull(ppCommands.CommandAttributes, "A command-code list is not the TPML_CCA member.");
-            Assert.AreEqual(TpmCcConstants.TPM_CC_Clear, ppCommands.PhysicalPresenceCommands![0], "The list carries bare command codes.");
+            Assert.AreEqual(TpmCcConstants.TPM_CC_Clear, ppCommands.PhysicalPresenceCommands[0], "The list carries bare command codes.");
         }
 
         using(TpmsCapabilityData auditCommands = ParseCapability(TpmCapConstants.TPM_CAP_AUDIT_COMMANDS, (uint)TpmCcConstants.TPM_CC_Clear, pool))
@@ -1714,7 +1712,7 @@ internal sealed class TpmSpecBufferAndListTests
         using(TpmsCapabilityData handles = ParseCapability(TpmCapConstants.TPM_CAP_HANDLES, 0x8000_0000u, pool))
         {
             Assert.IsNotNull(handles.Handles, "TPM_CAP_HANDLES populates the TPML_HANDLE member.");
-            Assert.AreEqual(0x8000_0000u, handles.Handles![0].Value, "The handle list carries the handles framed.");
+            Assert.AreEqual(0x8000_0000u, handles.Handles[0].Value, "The handle list carries the handles framed.");
         }
     }
 

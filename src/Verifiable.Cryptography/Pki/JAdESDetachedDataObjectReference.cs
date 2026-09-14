@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -186,7 +183,7 @@ public abstract class JAdESDetachedDataObjectReference
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESHttpHeadersReference: {HeaderNames.Count} headers")]
-public sealed class JAdESHttpHeadersReference : JAdESDetachedDataObjectReference
+public sealed class JAdESHttpHeadersReference: JAdESDetachedDataObjectReference
 {
     /// <summary>The wire <c>mId</c> value identifying this mechanism (JA-5.2.8.2-01).</summary>
     public static string MechanismIdentifier => "http://uri.etsi.org/19182/HttpHeaders";
@@ -233,7 +230,7 @@ public sealed class JAdESHttpHeadersReference : JAdESDetachedDataObjectReference
 /// across <see cref="References"/> is <see langword="null"/> (constructor-enforced).
 /// </summary>
 [DebuggerDisplay("JAdESObjectIdByUriReference: {References.Count} references")]
-public sealed class JAdESObjectIdByUriReference : JAdESDetachedDataObjectReference, IDisposable
+public sealed class JAdESObjectIdByUriReference: JAdESDetachedDataObjectReference, IDisposable
 {
     /// <summary>The wire <c>mId</c> value identifying this mechanism (JA-5.2.8.3.2-01).</summary>
     public static string MechanismIdentifier => "http://uri.etsi.org/19182/ObjectIdByURI";
@@ -314,7 +311,7 @@ public sealed class JAdESObjectIdByUriReference : JAdESDetachedDataObjectReferen
 /// creation/validation orchestrator concern, not modelled here.
 /// </remarks>
 [DebuggerDisplay("JAdESObjectIdByUriHashReference: HashAlgorithm={HashAlgorithm}, {References.Count} references")]
-public sealed class JAdESObjectIdByUriHashReference : JAdESDetachedDataObjectReference, IDisposable
+public sealed class JAdESObjectIdByUriHashReference: JAdESDetachedDataObjectReference, IDisposable
 {
     /// <summary>The wire <c>mId</c> value identifying this mechanism (JA-5.2.8.3.3-01).</summary>
     public static string MechanismIdentifier => "http://uri.etsi.org/19182/ObjectIdByURIHash";
@@ -413,7 +410,7 @@ public sealed class JAdESObjectIdByUriHashReference : JAdESDetachedDataObjectRef
 /// </para>
 /// </remarks>
 [DebuggerDisplay("JAdESUnknownDetachedDataObjectReference: {MechanismIdentifier}, {References.Count} references")]
-public sealed class JAdESUnknownDetachedDataObjectReference : JAdESDetachedDataObjectReference, IDisposable
+public sealed class JAdESUnknownDetachedDataObjectReference: JAdESDetachedDataObjectReference, IDisposable
 {
     /// <summary>
     /// Initializes a new <see cref="JAdESUnknownDetachedDataObjectReference"/>. Ownership of every element of

@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 
 namespace Verifiable.Json;
@@ -44,7 +43,7 @@ public static class JAdESEtsiUJson
 {
     /// <summary>The <see cref="TryParseJAdESEtsiUDelegate"/> binding — see the type remarks.</summary>
     public static TryParseJAdESEtsiUDelegate TryParse { get; } = static (
-        ReadOnlySpan<byte> etsiUJsonBytes, DecodeDelegate base64UrlDecoder, BaseMemoryPool pool, out JAdESUnsignedHeaders? result) =>
+        etsiUJsonBytes, base64UrlDecoder, pool, out result) =>
     {
         ArgumentNullException.ThrowIfNull(base64UrlDecoder);
         ArgumentNullException.ThrowIfNull(pool);
@@ -430,7 +429,7 @@ public static class JAdESEtsiUJson
     }
 
 
-    private static bool IsWhitespace(byte b) => b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n';
+    private static bool IsWhitespace(byte b) => b is ((byte)' ') or ((byte)'\t') or ((byte)'\r') or ((byte)'\n');
 
 
     //Returns the index of the closing quote (not itself part of the content), given pos = the index of the

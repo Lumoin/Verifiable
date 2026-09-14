@@ -1,7 +1,5 @@
 using Verifiable.Cryptography;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Automata;
 

@@ -3,7 +3,6 @@ using System.Buffers;
 using System.Collections.Immutable;
 using System.Text;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -13,7 +12,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -67,7 +65,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -137,7 +135,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -207,7 +205,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -236,7 +234,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
             new RequestFields(),
             BearerHeaders(accessToken),
             DeferredRequestBodyWithEncryption("8xLOxBtZp8", walletPublic),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, substituted.StatusCode, substituted.Body);
@@ -260,7 +258,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().ResolveDeferredCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(DeferredCredentialDecision.Issue([IssuedCredential]));
 
@@ -315,7 +313,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -365,7 +363,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -414,7 +412,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, IssuanceCapabilities);
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync = static (_, _, _, _, _) =>
             ValueTask.FromResult(CredentialIssuanceDecision.Issue([IssuedCredential]));
         WireResponseEncryptionSeam(host);
@@ -526,7 +524,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
         using AeadMessage parsedJwe = JweParsing.ParseCompact(
             compactJwe,
             WellKnownJweAlgorithms.EcdhEs,
-            enc!,
+            enc,
             TestSetup.Base64UrlDecoder,
             Pool);
 
@@ -596,7 +594,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = "SplxlOBeZQQYbYS6WxSbIA"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
@@ -617,7 +615,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
             new RequestFields(),
             BearerHeaders(accessToken),
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -632,7 +630,7 @@ internal sealed class Oid4VciEncryptionConformanceTests
             new RequestFields(),
             BearerHeaders(accessToken),
             jsonBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

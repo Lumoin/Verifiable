@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -176,7 +175,7 @@ internal sealed class MetadataBlobReaderGuardTests
     {
         byte[] blobBytes = Encoding.UTF8.GetBytes("nodotsatall");
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => MetadataBlobReader.Read(blobBytes, BaseMemoryPool.Shared));
     }
 
 

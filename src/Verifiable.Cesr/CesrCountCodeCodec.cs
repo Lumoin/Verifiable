@@ -52,7 +52,7 @@ public static class CesrCountCodeCodec
 
         int totalBytes = CesrTextCodec.CodeBinaryLength(LookupSizing(code).FullSize);
         IMemoryOwner<byte> owner = pool.Rent(totalBytes);
-        EncodeBinary(code, count, owner.Memory.Span[..totalBytes]);
+        _ = EncodeBinary(code, count, owner.Memory.Span[..totalBytes]);
 
         return owner;
     }
@@ -105,7 +105,7 @@ public static class CesrCountCodeCodec
             throw new CesrFormatException("Truncated CESR count code.");
         }
 
-        string code = new string(qb64[..sizing.HardSize]);
+        string code = new(qb64[..sizing.HardSize]);
         ValidateHardCharacters(code);
         int count = (int)CesrTextCodec.Base64ToInt(qb64.Slice(sizing.HardSize, sizing.SoftSize));
 
@@ -168,7 +168,7 @@ public static class CesrCountCodeCodec
         //hard characters (the large-code type or the genus) must be valid Base64URL characters.
         for(int i = 2; i < code.Length; i++)
         {
-            Base64UrlAlphabet.SextetOf(code[i]);
+            _ = Base64UrlAlphabet.SextetOf(code[i]);
         }
     }
 

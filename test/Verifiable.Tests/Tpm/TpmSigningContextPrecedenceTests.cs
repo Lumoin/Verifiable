@@ -1,11 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -14,10 +10,6 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -104,7 +96,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         //Baseline: with no per-call override, the constructor default is genuinely used, and it names
         //the wrong device, so signing fails. This proves the default is wired through at all, so the
         //override proven below is a meaningful precedence check rather than a vacuous one.
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
         {
             _ = await privateKey.SignAsync(MessageBytes, pool).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -122,7 +114,7 @@ internal sealed class TpmSigningContextPrecedenceTests
         using(signature)
         {
             Assert.Contains(
-                (SignatureProducedEvent e) => e.Backend == "Tpm" && e.Algorithm == CryptoAlgorithm.P256,
+                e => e.Backend == "Tpm" && e.Algorithm == CryptoAlgorithm.P256,
                 observer.Received.OfType<SignatureProducedEvent>(),
                 "The per-call context override must reach the TPM signing function and emit its SignatureProducedEvent.");
 
@@ -130,7 +122,7 @@ internal sealed class TpmSigningContextPrecedenceTests
             byte[] compressedPublicKey = TpmEccWireFixtures.BuildCompressedPublicKey(primary.OutPublic.PublicArea.Unique.Ecc!, P256ComponentSize);
             VerificationDelegate verify = CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveVerification(
                 CryptoAlgorithm.P256, Purpose.Verification);
-            (bool verified, CryptoEvent? _) = await verify(
+            (bool verified, _) = await verify(
                 MessageBytes, signature.AsReadOnlyMemory(), compressedPublicKey, null, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(verified, "A signature produced via the per-call context override must verify against the key it actually named.");

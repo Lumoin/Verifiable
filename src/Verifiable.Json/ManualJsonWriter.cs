@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Verifiable.Json;
@@ -145,7 +143,7 @@ internal static class ManualJsonWriter
             if(!enumerator.MoveNext())
             {
                 enumerator.Dispose();
-                stack.Pop();
+                _ = stack.Pop();
 
                 if(containerIsObject)
                 {

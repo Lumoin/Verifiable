@@ -1,11 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
@@ -43,18 +39,6 @@ internal sealed class CtapAuthenticatorTransitionsTests
             timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
 
 
-    /// <summary>Builds a fixed-content <see cref="DigestValue"/> standing in for a stored PIN hash, without a full <c>setPIN</c> round trip.</summary>
-    private static DigestValue BuildFixedDigest(byte seed, int length, BaseMemoryPool pool)
-    {
-        IMemoryOwner<byte> owner = pool.Rent(length);
-        for(int i = 0; i < length; i++)
-        {
-            owner.Memory.Span[i] = (byte)(seed + i);
-        }
-
-        return new DigestValue(owner, CryptoTags.Sha256Digest);
-    }
-
 
     /// <summary>
     /// <see cref="GetInfoRequested"/> produces a <see cref="GetInfoResponseReady"/> intent carrying
@@ -70,14 +54,14 @@ internal sealed class CtapAuthenticatorTransitionsTests
         bool stepped = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         Assert.IsTrue(stepped);
-        Assert.IsInstanceOfType<GetInfoResponseReady>(automaton.CurrentState.ResponseIntent);
-        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
+        _ = Assert.IsInstanceOfType<GetInfoResponseReady>(automaton.CurrentState.ResponseIntent);
+        var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent;
         Assert.AreEqual(aaguid, intent.Response.Aaguid);
         Assert.HasCount(1, intent.Response.Versions);
         Assert.AreEqual(WellKnownCtapVersions.Fido23, intent.Response.Versions[0]);
         Assert.IsNotNull(intent.Response.Options);
-        Assert.IsTrue(intent.Response.Options!.ResidentKey);
-        Assert.IsNull(intent.Response.Options!.Platform);
+        Assert.IsTrue(intent.Response.Options.ResidentKey);
+        Assert.IsNull(intent.Response.Options.Platform);
         Assert.AreSame(NullAction.Instance, automaton.CurrentState.NextAction);
     }
 
@@ -89,7 +73,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         string[] extensions = ["hmac-secret", "credProtect"];
         var automaton = BuildAutomaton(Guid.NewGuid(), extensions);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.AreSequenceEqual(extensions, new List<string>(intent.Response.Extensions!));
@@ -106,7 +90,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.AreSequenceEqual(
@@ -134,7 +118,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNotNull(intent.Response.Options);
@@ -173,7 +157,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
         var automaton = BuildAutomaton(aaguid, initialState: initialState);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNotNull(intent.Response.Options);
@@ -204,7 +188,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         Guid aaguid = Guid.NewGuid();
         var automaton = BuildAutomaton(aaguid);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNotNull(intent.Response.Options);
@@ -236,7 +220,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
 
         var automaton = BuildAutomaton(aaguid, initialState: initialState);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNotNull(intent.Response.Options);
@@ -284,7 +268,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         initialState = initialState with { CredentialsByCredentialId = populated };
         var automaton = BuildAutomaton(aaguid, initialState: initialState);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.AreEqual(
@@ -310,7 +294,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.AreEqual(CtapAuthenticatorState.MaxCredentialCountInListCapacity, intent.Response.MaxCredentialCountInList);
@@ -330,7 +314,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(new GetInfoRequested(SupportedAlgorithms: [WellKnownCoseAlgorithms.Es256]), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(SupportedAlgorithms: [WellKnownCoseAlgorithms.Es256]), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNotNull(intent.Response.Algorithms);
@@ -351,7 +335,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(
+        _ = await automaton.StepAsync(
             new GetInfoRequested(SupportedAlgorithms: [WellKnownCoseAlgorithms.Es256, WellKnownCoseAlgorithms.Es384, WellKnownCoseAlgorithms.Es256]),
             TestContext.CancellationToken);
 
@@ -374,7 +358,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.IsNull(intent.Response.Algorithms);
@@ -391,7 +375,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
     {
         var automaton = BuildAutomaton(Guid.NewGuid());
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.AreEqual(1, intent.Response.FirmwareVersion);
@@ -410,7 +394,7 @@ internal sealed class CtapAuthenticatorTransitionsTests
         CtapAuthenticatorState initialState = CtapAuthenticatorState.Initial(aaguid, TestClock.CanonicalEpoch, BaseMemoryPool.Shared, firmwareVersion: 42);
         var automaton = BuildAutomaton(aaguid, initialState: initialState);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
         var intent = (GetInfoResponseReady)automaton.CurrentState.ResponseIntent!;
         Assert.AreEqual(42, intent.Response.FirmwareVersion);
@@ -456,8 +440,8 @@ internal sealed class CtapAuthenticatorTransitionsTests
         bool stepped = await automaton.StepAsync(new UnsupportedCtapCommandReceived(0xFF), TestContext.CancellationToken);
 
         Assert.IsTrue(stepped);
-        Assert.IsInstanceOfType<UnsupportedCommandResponse>(automaton.CurrentState.ResponseIntent);
-        var intent = (UnsupportedCommandResponse)automaton.CurrentState.ResponseIntent!;
+        _ = Assert.IsInstanceOfType<UnsupportedCommandResponse>(automaton.CurrentState.ResponseIntent);
+        var intent = (UnsupportedCommandResponse)automaton.CurrentState.ResponseIntent;
         Assert.AreEqual((byte)0xFF, intent.CommandByte);
         Assert.AreSame(NullAction.Instance, automaton.CurrentState.NextAction);
     }
@@ -470,12 +454,12 @@ internal sealed class CtapAuthenticatorTransitionsTests
         Guid aaguid = Guid.NewGuid();
         var automaton = BuildAutomaton(aaguid);
 
-        await automaton.StepAsync(new UnsupportedCtapCommandReceived(0x99), TestContext.CancellationToken);
-        Assert.IsInstanceOfType<UnsupportedCommandResponse>(automaton.CurrentState.ResponseIntent);
+        _ = await automaton.StepAsync(new UnsupportedCtapCommandReceived(0x99), TestContext.CancellationToken);
+        _ = Assert.IsInstanceOfType<UnsupportedCommandResponse>(automaton.CurrentState.ResponseIntent);
 
-        await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
+        _ = await automaton.StepAsync(new GetInfoRequested(), TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<GetInfoResponseReady>(automaton.CurrentState.ResponseIntent);
+        _ = Assert.IsInstanceOfType<GetInfoResponseReady>(automaton.CurrentState.ResponseIntent);
         Assert.AreEqual(aaguid, automaton.CurrentState.Aaguid);
     }
 }

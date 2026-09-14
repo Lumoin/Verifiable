@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
@@ -16,7 +11,6 @@ using Verifiable.DidComm.ProblemReports;
 using Verifiable.DidComm.ReturnRoute;
 using Verifiable.DidComm.Routing;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -66,7 +60,7 @@ internal sealed class DidCommCoordinateMediationTests
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
 
-    private static ExchangeContext UnpackContext { get; } = new();
+    private static ExchangeContext UnpackContext { get; } = [];
 
 
     //A fresh context whose policy permits loopback, mirroring DidCommMessagePickupTests.NewLoopbackExchangeContext.
@@ -225,7 +219,7 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage keylistUpdate = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-1", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd }]);
         Assert.IsTrue(keylistUpdate.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
-        Assert.AreEqual("did:example:alice-key-1", entries![0].RecipientDid, "The mediator learns which key should be routed via this relationship.");
+        Assert.AreEqual("did:example:alice-key-1", entries[0].RecipientDid, "The mediator learns which key should be routed via this relationship.");
     }
 
 
@@ -247,7 +241,7 @@ internal sealed class DidCommCoordinateMediationTests
         Assert.IsTrue(keylistUpdate.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
 
         using DidCommEncryptedMessage innerPlaceholder = DidCommEncryptedMessage.Create("{\"ciphertext\":\"x\"}"u8, BufferTags.Json, Pool);
-        DidCommMessage forward = RoutingForwardExtensions.CreateForward(entries![0].RecipientDid, "fwd-1", innerPlaceholder, TestSetup.Base64UrlEncoder);
+        DidCommMessage forward = RoutingForwardExtensions.CreateForward(entries[0].RecipientDid, "fwd-1", innerPlaceholder, TestSetup.Base64UrlEncoder);
 
         Assert.IsTrue(forward.IsForward(), "The mediator builds/receives exactly this forward — 'receiving forward messages on behalf of the recipient'.");
         Assert.AreEqual(RegisteredRecipientDid, forward.GetForwardNext(), "The forward's next IS the recipient the payload is intended for — the same DID the recipient registered via keylist-update.");
@@ -270,12 +264,12 @@ internal sealed class DidCommCoordinateMediationTests
         //first — an antecedent that failed it would never reach the mediator's reply channel.
         DidCommMessage requestWithoutReturnRoute = new() { Id = "mr-no-return-route", Type = WellKnownCoordinateMediationNames.MediateRequestType };
         using DidCommEncryptedMessage placeholder = DidCommEncryptedMessage.Create("{\"ciphertext\":\"x\"}"u8, BufferTags.Json, Pool);
-        DidCommExchangeDelegate neverInvoked = (_, _, _, _, _) =>
+        static ValueTask<DidCommExchangeResult> neverInvoked(ReadOnlyMemory<byte> _1, string _2, Uri _3, ExchangeContext _4, CancellationToken _5) =>
             throw new InvalidOperationException("The exchange delegate MUST NOT be invoked when the return_route guard rejects the request.");
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
             async () => await placeholder.ExchangeAsync(
-                requestWithoutReturnRoute, new Uri("https://mediator.example/didcomm"), new ExchangeContext(), neverInvoked, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
+                requestWithoutReturnRoute, new Uri("https://mediator.example/didcomm"), [], neverInvoked, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -452,7 +446,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         Assert.IsTrue(update.IsKeylistUpdate());
         Assert.IsTrue(update.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
-        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, entries![0].Action);
+        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, entries[0].Action);
     }
 
 
@@ -470,17 +464,17 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage add = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-add", [new KeylistUpdateEntry { RecipientDid = Key, Action = WellKnownCoordinateMediationNames.ActionAdd }]);
         Assert.IsTrue(add.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? added));
-        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, added![0].Action);
+        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, added[0].Action);
 
         DidCommMessage query = CoordinateMediationExtensions.CreateKeylistQuery("kq-1");
         DidCommMessage keylist = query.CreateKeylist("kl-1", [new KeylistKey { RecipientDid = Key }]);
         Assert.IsTrue(keylist.TryReadKeylistKeys(out IReadOnlyList<KeylistKey>? keys, out _));
-        Assert.AreEqual(Key, keys![0].RecipientDid, "The queried keylist confirms the key added earlier is registered.");
+        Assert.AreEqual(Key, keys[0].RecipientDid, "The queried keylist confirms the key added earlier is registered.");
 
         DidCommMessage remove = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-remove", [new KeylistUpdateEntry { RecipientDid = Key, Action = WellKnownCoordinateMediationNames.ActionRemove }]);
         Assert.IsTrue(remove.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? removed));
-        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionRemove, removed![0].Action, "The SAME key surface (keylist-update) identifies removal too — 'used over time to identify and remove'.");
+        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionRemove, removed[0].Action, "The SAME key surface (keylist-update) identifies removal too — 'used over time to identify and remove'.");
     }
 
 
@@ -613,7 +607,7 @@ internal sealed class DidCommCoordinateMediationTests
         //A mediate-deny answers THIS mediate-request specifically, so the antecedent type is validated exactly
         //as CreateMediateGrant does.
         DidCommMessage notARequest = CoordinateMediationExtensions.CreateMediateRequest("mr-2").CreateMediateGrant("g-2", "did:example:mediator-x");
-        Assert.ThrowsExactly<ArgumentException>(() => notARequest.CreateMediateDeny("d-2"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => notARequest.CreateMediateDeny("d-2"));
     }
 
 
@@ -671,7 +665,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         //A mediate-grant answers THIS mediate-request specifically, so the antecedent type is validated.
         DidCommMessage notARequest = CoordinateMediationExtensions.CreateMediateRequest("mr-2").CreateMediateDeny("d-2");
-        Assert.ThrowsExactly<ArgumentException>(() => notARequest.CreateMediateGrant("g-2", "did:example:mediator-x"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => notARequest.CreateMediateGrant("g-2", "did:example:mediator-x"));
     }
 
 
@@ -685,8 +679,8 @@ internal sealed class DidCommCoordinateMediationTests
     {
         DidCommMessage request = MediateRequest("mr-1");
 
-        Assert.ThrowsExactly<ArgumentException>(() => request.CreateMediateGrant("g-1", ""));
-        Assert.ThrowsExactly<ArgumentException>(() => request.CreateMediateGrant("g-1", "   "));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => request.CreateMediateGrant("g-1", ""));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => request.CreateMediateGrant("g-1", "   "));
 
         DidCommMessage grant = request.CreateMediateGrant("g-1", "did:example:mediator-routing");
         Assert.IsTrue(grant.Body!.ContainsKey(WellKnownCoordinateMediationNames.RoutingDid));
@@ -713,7 +707,7 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage grant = request.CreateMediateGrant("g-1", "did:peer:z6Mkfriq1MqLBoPWecGoDLjguo1sB9brj6wT3qZ5BxkKpuP6");
 
         Assert.IsTrue(grant.TryReadMediateGrantRoutingDid(out string? routingDid));
-        Assert.IsTrue(routingDid!.StartsWith("did:", StringComparison.Ordinal), "routing_did is recoverable as a plain DID string, usable as an endpoint per the linked core-spec section.");
+        Assert.IsTrue(routingDid.StartsWith("did:", StringComparison.Ordinal), "routing_did is recoverable as a plain DID string, usable as an endpoint per the linked core-spec section.");
     }
 
 
@@ -734,7 +728,7 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage keylistUpdate = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-1", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd }]);
         Assert.IsTrue(keylistUpdate.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
-        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, entries![0].Action, "The follow-up keylist-update ADDS the recipient's DIDs so the mediator starts accepting forward messages for them.");
+        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, entries[0].Action, "The follow-up keylist-update ADDS the recipient's DIDs so the mediator starts accepting forward messages for them.");
     }
 
 
@@ -765,7 +759,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         //The mediator is notified of exactly the key in use, read back through the SAME surface it would use.
         Assert.IsTrue(update.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? notified));
-        Assert.AreEqual("did:example:alice-key-1", notified![0].RecipientDid);
+        Assert.AreEqual("did:example:alice-key-1", notified[0].RecipientDid);
         Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, notified[0].Action);
     }
 
@@ -778,7 +772,7 @@ internal sealed class DidCommCoordinateMediationTests
     [TestMethod]
     public void KeylistUpdateBodyUpdatesIsAListOfEntries()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate("ku-1", []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate("ku-1", []));
 
         DidCommMessage update = CoordinateMediationExtensions.CreateKeylistUpdate("ku-2",
         [
@@ -786,7 +780,7 @@ internal sealed class DidCommCoordinateMediationTests
             new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-2", Action = WellKnownCoordinateMediationNames.ActionRemove }
         ]);
         Assert.IsTrue(update.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
-        Assert.HasCount(2, entries!);
+        Assert.HasCount(2, entries);
     }
 
 
@@ -800,9 +794,9 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage update = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-1", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd }]);
         Assert.IsTrue(update.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
-        Assert.AreEqual("did:example:alice-key-1", entries![0].RecipientDid);
+        Assert.AreEqual("did:example:alice-key-1", entries[0].RecipientDid);
 
-        Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-2", [new KeylistUpdateEntry { RecipientDid = "   ", Action = WellKnownCoordinateMediationNames.ActionAdd }]));
     }
 
@@ -816,14 +810,14 @@ internal sealed class DidCommCoordinateMediationTests
     [TestMethod]
     public void ActionIsClosedForProducersAndVerbatimForReaders()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-1", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = "not-add-or-remove" }]));
 
         //§Keylist Update (L138) spells the closed set lowercase and exact ("add" / "remove"); the comparison
         //is Ordinal, so a case or whitespace variant is refused exactly like any other non-member value.
         foreach(string variant in new[] { "Add", "REMOVE", " add", "add " })
         {
-            Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate(
+            _ = Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistUpdate(
                 "ku-variant", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = variant }]));
         }
 
@@ -845,7 +839,7 @@ internal sealed class DidCommCoordinateMediationTests
         };
 
         Assert.IsTrue(handCrafted.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries), "An unrecognized inbound action value MUST NOT fail the read — the reader is verbatim, not validating.");
-        Assert.AreEqual("an-unrecognized-value-from-a-future-version", entries![0].Action);
+        Assert.AreEqual("an-unrecognized-value-from-a-future-version", entries[0].Action);
     }
 
 
@@ -891,7 +885,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         Assert.IsTrue(parsed.IsKeylistUpdate());
         Assert.IsTrue(parsed.TryReadKeylistUpdates(out IReadOnlyList<KeylistUpdateEntry>? entries));
-        Assert.AreEqual("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH", entries![0].RecipientDid);
+        Assert.AreEqual("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH", entries[0].RecipientDid);
         Assert.IsTrue(parsed.IsReturnRouteAll());
     }
 
@@ -932,7 +926,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         //A keylist-update-response answers THIS keylist-update specifically, so the antecedent type is validated.
         DidCommMessage notAnUpdate = CoordinateMediationExtensions.CreateKeylistQuery("kq-1");
-        Assert.ThrowsExactly<ArgumentException>(() => notAnUpdate.CreateKeylistUpdateResponse(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => notAnUpdate.CreateKeylistUpdateResponse(
             "kur-2", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd, Result = WellKnownCoordinateMediationNames.ResultSuccess }]));
     }
 
@@ -966,7 +960,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         Assert.IsTrue(parsed.IsKeylistUpdateResponse());
         Assert.IsTrue(parsed.TryReadKeylistUpdateResults(out IReadOnlyList<KeylistUpdateResult>? results));
-        Assert.AreEqual("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH", results![0].RecipientDid);
+        Assert.AreEqual("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH", results[0].RecipientDid);
         Assert.AreEqual(WellKnownCoordinateMediationNames.ActionAdd, results[0].Action);
         Assert.AreEqual(WellKnownCoordinateMediationNames.ResultSuccess, results[0].Result);
     }
@@ -985,9 +979,9 @@ internal sealed class DidCommCoordinateMediationTests
             "kur-1", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionRemove, Result = WellKnownCoordinateMediationNames.ResultSuccess }]);
 
         Assert.IsTrue(response.TryReadKeylistUpdateResults(out IReadOnlyList<KeylistUpdateResult>? results));
-        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionRemove, results![0].Action);
+        Assert.AreEqual(WellKnownCoordinateMediationNames.ActionRemove, results[0].Action);
 
-        Assert.ThrowsExactly<ArgumentException>(() => update.CreateKeylistUpdateResponse(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => update.CreateKeylistUpdateResponse(
             "kur-2", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = "neither-add-nor-remove", Result = WellKnownCoordinateMediationNames.ResultSuccess }]));
     }
 
@@ -1004,13 +998,13 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage update = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-1", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd }]);
 
-        Assert.ThrowsExactly<ArgumentException>(() => update.CreateKeylistUpdateResponse(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => update.CreateKeylistUpdateResponse(
             "kur-1", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd, Result = "not-one-of-the-four" }]));
 
         //§Keylist Response (L164) spells the closed result set lowercase and exact; the comparison is Ordinal.
         foreach(string variant in new[] { "Success", "no_change " })
         {
-            Assert.ThrowsExactly<ArgumentException>(() => update.CreateKeylistUpdateResponse(
+            _ = Assert.ThrowsExactly<ArgumentException>(() => update.CreateKeylistUpdateResponse(
                 $"kur-variant-{variant}", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd, Result = variant }]));
         }
 
@@ -1025,7 +1019,7 @@ internal sealed class DidCommCoordinateMediationTests
             DidCommMessage response = update.CreateKeylistUpdateResponse(
                 $"kur-{result}", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd, Result = result }]);
             Assert.IsTrue(response.TryReadKeylistUpdateResults(out IReadOnlyList<KeylistUpdateResult>? results));
-            Assert.AreEqual(result, results![0].Result);
+            Assert.AreEqual(result, results[0].Result);
         }
 
         DidCommMessage handCrafted = new()
@@ -1046,7 +1040,7 @@ internal sealed class DidCommCoordinateMediationTests
             }
         };
         Assert.IsTrue(handCrafted.TryReadKeylistUpdateResults(out IReadOnlyList<KeylistUpdateResult>? verbatim), "An unrecognized inbound result value MUST NOT fail the read.");
-        Assert.AreEqual("an-unrecognized-future-result", verbatim![0].Result);
+        Assert.AreEqual("an-unrecognized-future-result", verbatim[0].Result);
     }
 
 
@@ -1096,7 +1090,7 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage keylist = query.CreateKeylist("kl-1", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }]);
         Assert.AreEqual(query.Id, keylist.ThreadId, "The keylist answers THIS connection's query — thread correlation IS the connection scope.");
         Assert.IsTrue(keylist.TryReadKeylistKeys(out IReadOnlyList<KeylistKey>? keys, out _));
-        Assert.AreEqual("did:example:alice-key-1", keys![0].RecipientDid);
+        Assert.AreEqual("did:example:alice-key-1", keys[0].RecipientDid);
     }
 
 
@@ -1116,7 +1110,7 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage withPaginate = CoordinateMediationExtensions.CreateKeylistQuery("kq-2", new KeylistPaginate { Limit = 30, Offset = 0 });
         Assert.IsTrue(withPaginate.TryReadKeylistQueryPaginate(out KeylistPaginate? present));
         Assert.IsNotNull(present);
-        Assert.AreEqual(30L, present!.Limit);
+        Assert.AreEqual(30L, present.Limit);
         Assert.AreEqual(0L, present.Offset);
     }
 
@@ -1130,8 +1124,8 @@ internal sealed class DidCommCoordinateMediationTests
     [TestMethod]
     public void PaginateIfPresentMustIncludeLimitAndOffset()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistQuery("kq-1", new KeylistPaginate { Limit = 0, Offset = 0 }));
-        Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistQuery("kq-2", new KeylistPaginate { Limit = 10, Offset = -1 }));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistQuery("kq-1", new KeylistPaginate { Limit = 0, Offset = 0 }));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoordinateMediationExtensions.CreateKeylistQuery("kq-2", new KeylistPaginate { Limit = 10, Offset = -1 }));
 
         DidCommMessage missingOffset = new()
         {
@@ -1266,7 +1260,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         DidCommMessage notAQuery = CoordinateMediationExtensions.CreateKeylistUpdate(
             "ku-1", [new KeylistUpdateEntry { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd }]);
-        Assert.ThrowsExactly<ArgumentException>(() => notAQuery.CreateKeylist("kl-2", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => notAQuery.CreateKeylist("kl-2", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }]));
     }
 
 
@@ -1283,7 +1277,7 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage query = CoordinateMediationExtensions.CreateKeylistQuery("kq-1");
         DidCommMessage emptyKeylist = query.CreateKeylist("kl-1", []);
         Assert.IsTrue(emptyKeylist.TryReadKeylistKeys(out IReadOnlyList<KeylistKey>? emptyKeys, out _));
-        Assert.IsEmpty(emptyKeys!, "No keys registered is a legitimate answer, both to produce and to read.");
+        Assert.IsEmpty(emptyKeys, "No keys registered is a legitimate answer, both to produce and to read.");
 
         const string CorrectedSample = """
             {
@@ -1307,9 +1301,9 @@ internal sealed class DidCommCoordinateMediationTests
         DidCommMessage parsed = ParseJson(CorrectedSample);
         Assert.IsTrue(parsed.IsKeylist());
         Assert.IsTrue(parsed.TryReadKeylistKeys(out IReadOnlyList<KeylistKey>? keys, out KeylistPagination? pagination));
-        Assert.AreEqual("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH", keys![0].RecipientDid);
+        Assert.AreEqual("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH", keys[0].RecipientDid);
         Assert.IsNotNull(pagination);
-        Assert.AreEqual(30L, pagination!.Count);
+        Assert.AreEqual(30L, pagination.Count);
     }
 
 
@@ -1340,11 +1334,11 @@ internal sealed class DidCommCoordinateMediationTests
     {
         DidCommMessage query = CoordinateMediationExtensions.CreateKeylistQuery("kq-1");
 
-        Assert.ThrowsExactly<ArgumentException>(() => query.CreateKeylist(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => query.CreateKeylist(
             "kl-1", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }], new KeylistPagination { Count = -1, Offset = 0, Remaining = 0 }));
-        Assert.ThrowsExactly<ArgumentException>(() => query.CreateKeylist(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => query.CreateKeylist(
             "kl-2", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }], new KeylistPagination { Count = 0, Offset = -1, Remaining = 0 }));
-        Assert.ThrowsExactly<ArgumentException>(() => query.CreateKeylist(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => query.CreateKeylist(
             "kl-3", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }], new KeylistPagination { Count = 0, Offset = 0, Remaining = -1 }));
 
         DidCommMessage keylist = query.CreateKeylist(
@@ -1443,15 +1437,15 @@ internal sealed class DidCommCoordinateMediationTests
     public void AntecedentWithNoUsableThreadFailsAllFourResponseBuilders(string? antecedentId)
     {
         DidCommMessage threadlessMediateRequest = new() { Id = antecedentId, Type = WellKnownCoordinateMediationNames.MediateRequestType };
-        Assert.ThrowsExactly<ArgumentException>(() => threadlessMediateRequest.CreateMediateGrant("g-1", "did:example:mediator-routing"));
-        Assert.ThrowsExactly<ArgumentException>(() => threadlessMediateRequest.CreateMediateDeny("d-1"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => threadlessMediateRequest.CreateMediateGrant("g-1", "did:example:mediator-routing"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => threadlessMediateRequest.CreateMediateDeny("d-1"));
 
         DidCommMessage threadlessKeylistUpdate = new() { Id = antecedentId, Type = WellKnownCoordinateMediationNames.KeylistUpdateType };
-        Assert.ThrowsExactly<ArgumentException>(() => threadlessKeylistUpdate.CreateKeylistUpdateResponse(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => threadlessKeylistUpdate.CreateKeylistUpdateResponse(
             "kur-1", [new KeylistUpdateResult { RecipientDid = "did:example:alice-key-1", Action = WellKnownCoordinateMediationNames.ActionAdd, Result = WellKnownCoordinateMediationNames.ResultSuccess }]));
 
         DidCommMessage threadlessKeylistQuery = new() { Id = antecedentId, Type = WellKnownCoordinateMediationNames.KeylistQueryType };
-        Assert.ThrowsExactly<ArgumentException>(() => threadlessKeylistQuery.CreateKeylist("kl-1", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }]));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => threadlessKeylistQuery.CreateKeylist("kl-1", [new KeylistKey { RecipientDid = "did:example:alice-key-1" }]));
     }
 
 
@@ -1766,7 +1760,7 @@ internal sealed class DidCommCoordinateMediationTests
 
         Assert.IsTrue(unpacked.IsUnpacked, $"The recipient MUST decrypt the mediate-grant that crossed the wire. Error: {unpacked.Error}.");
         Assert.IsNotNull(unpacked.Message);
-        Assert.IsTrue(unpacked.Message!.TryReadMediateGrantRoutingDid(out string? routingDid), "TryReadMediateGrantRoutingDid MUST succeed on the decrypted grant.");
+        Assert.IsTrue(unpacked.Message.TryReadMediateGrantRoutingDid(out string? routingDid), "TryReadMediateGrantRoutingDid MUST succeed on the decrypted grant.");
         Assert.AreEqual(ExpectedRoutingDid, routingDid);
     }
 }

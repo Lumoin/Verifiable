@@ -1,6 +1,7 @@
+using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cbor;
@@ -15,7 +16,6 @@ using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -81,7 +81,7 @@ internal sealed class MetadataDrivenRegistrationTests
             serialNumberPolicy: MetadataBlobSerialNumberPolicy.Required,
             resolvePreviousSerialNumber: serialNumberStore.ResolveAsync,
             persistVerifiedBlob: serialNumberStore.PersistAsync);
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
         using MetadataBlob blob = ((VerifiedMetadataBlobResult)blobResult).Blob;
 
         Assert.HasCount(1, serialNumberStore.Persisted);
@@ -102,7 +102,7 @@ internal sealed class MetadataDrivenRegistrationTests
 
             Fido2RegistrationOutcome outcome = await RunRegistrationAsync(fixture, trustAnchors);
 
-            Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
+            _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(outcome.AttestationResult);
             Assert.IsTrue(outcome.IsAcceptable);
             outcome.CredentialRecord?.Dispose();
         }
@@ -131,7 +131,7 @@ internal sealed class MetadataDrivenRegistrationTests
         using RegistrationFixture fixture = CreateRegistrationFixture(WellKnownAuthenticatorStatuses.Revoked);
 
         MetadataBlobResult blobResult = await VerifyBlobAsync(fixture.BlobBytes, fixture.MdsRootPki);
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(blobResult);
         using MetadataBlob blob = ((VerifiedMetadataBlobResult)blobResult).Blob;
 
         Assert.IsTrue(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, fixture.Aaguid, out MetadataBlobPayloadEntry? entry));
@@ -143,7 +143,7 @@ internal sealed class MetadataDrivenRegistrationTests
         //produces, and rejects for that reason specifically.
         Fido2RegistrationOutcome outcome = await RunRegistrationAsync(fixture, []);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(outcome.AttestationResult);
         Assert.AreEqual(Fido2AttestationErrors.NoTrustAnchors.Code, ((RejectedAttestationResult)outcome.AttestationResult).Error.Code);
         Assert.IsFalse(outcome.IsAcceptable);
     }
@@ -339,7 +339,7 @@ internal sealed class MetadataDrivenRegistrationTests
     {
         byte[] credentialPublicKeyCbor = MdocCborCoseKeyWriter.Write(credentialPublicKey).ToArray();
         byte[] attestedCredentialDataBytes = Fido2TestVectors.BuildAttestedCredentialData(aaguid, credentialId, credentialPublicKeyCbor);
-        byte flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        byte flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
 
         return Fido2TestVectors.BuildAuthenticatorData(rpIdHash, flags, signCount: 0, attestedCredentialDataBytes);
     }

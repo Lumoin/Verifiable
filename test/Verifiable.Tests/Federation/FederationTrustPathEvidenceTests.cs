@@ -1,11 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Collections.Generic;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Model.Dcql;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
@@ -98,7 +95,7 @@ internal sealed class FederationTrustPathEvidenceTests
             fetchConfiguration,
             fetchSubordinate,
             BuildValidator(),
-            new ExchangeContext(),
+            [],
             maxChainLength: 5,
             validationTime: now,
             clockSkew: TimeSpan.FromMinutes(5),
@@ -142,7 +139,7 @@ internal sealed class FederationTrustPathEvidenceTests
             fetchConfiguration,
             fetchSubordinate,
             BuildValidator(),
-            new ExchangeContext(),
+            [],
             maxChainLength: 5,
             validationTime: now,
             clockSkew: TimeSpan.FromMinutes(5),
@@ -182,7 +179,7 @@ internal sealed class FederationTrustPathEvidenceTests
             fetchConfiguration,
             fetchSubordinate,
             BuildValidator(),
-            new ExchangeContext(),
+            [],
             maxChainLength: 5,
             validationTime: now,
             clockSkew: TimeSpan.FromMinutes(5),
@@ -220,7 +217,7 @@ internal sealed class FederationTrustPathEvidenceTests
             fetchConfiguration,
             fetchSubordinate,
             BuildValidator(),
-            new ExchangeContext(),
+            [],
             maxChainLength: 5,
             validationTime: now,
             clockSkew: TimeSpan.FromMinutes(5),
@@ -258,7 +255,7 @@ internal sealed class FederationTrustPathEvidenceTests
             fetchConfiguration,
             fetchSubordinate,
             BuildValidator(),
-            new ExchangeContext(),
+            [],
             maxChainLength: 2,
             validationTime: now,
             clockSkew: TimeSpan.FromMinutes(5),
@@ -294,7 +291,7 @@ internal sealed class FederationTrustPathEvidenceTests
             fetchConfiguration,
             fetchSubordinate,
             BuildValidator(),
-            new ExchangeContext(),
+            [],
             maxChainLength: 5,
             validationTime: now,
             clockSkew: TimeSpan.FromMinutes(5),
@@ -351,7 +348,7 @@ internal sealed class FederationTrustPathEvidenceTests
                 fetchConfiguration,
                 fetchSubordinate,
                 BuildValidator(),
-                new ExchangeContext(),
+                [],
                 maxChainLength: 5,
                 validationTime: now,
                 clockSkew: TimeSpan.FromMinutes(5),
@@ -432,7 +429,7 @@ internal sealed class FederationTrustPathEvidenceTests
                     fetchConfiguration,
                     fetchSubordinate,
                     BuildValidator(),
-                    new ExchangeContext(),
+                    [],
                     maxChainLength: 5,
                     validationTime: now,
                     clockSkew: TimeSpan.FromMinutes(5),
@@ -561,16 +558,16 @@ internal sealed class FederationTrustPathEvidenceTests
         FederationGraph graph,
         FetchCounters counters)
     {
-        FetchEntityConfigurationDelegate fetchConfiguration = (entity, context, cancellationToken) =>
+        ValueTask<FetchedEntityStatement?> fetchConfiguration(EntityIdentifier entity, ExchangeContext context, CancellationToken cancellationToken)
         {
             counters.ConfigurationFetches++;
 
             return ValueTask.FromResult(graph.ConfigByEntity.TryGetValue(entity.Value, out string? jws)
                 ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
                 : null);
-        };
+        }
 
-        FetchEntityStatementDelegate fetchSubordinate = (subject, fetchEndpoint, context, cancellationToken) =>
+        ValueTask<FetchedEntityStatement?> fetchSubordinate(EntityIdentifier subject, Uri fetchEndpoint, ExchangeContext context, CancellationToken cancellationToken)
         {
             counters.SubordinateFetches++;
 
@@ -579,7 +576,7 @@ internal sealed class FederationTrustPathEvidenceTests
                 && graph.SubordinateByIssuerSubject.TryGetValue(SubordinateKey(issuer, subject.Value), out string? jws)
                     ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
                     : null);
-        };
+        }
 
         return (fetchConfiguration, fetchSubordinate);
     }
@@ -609,17 +606,17 @@ internal sealed class FederationTrustPathEvidenceTests
     private static (ExtractAuthorityKeyIdentifierDelegate ExtractAuthorityKeyIdentifier,
         ReadCertificateSubjectKeyIdentifierDelegate ReadSubjectKeyIdentifier,
         ReadCertificateSubjectNameDelegate ReadSubjectName) BackendReaders(string backend) => backend switch
-    {
-        MicrosoftBackend => (
-            MicrosoftX509Functions.GetAuthorityKeyIdentifier,
-            MicrosoftX509Functions.GetSubjectKeyIdentifier,
-            MicrosoftX509Functions.GetSubjectName),
-        BouncyCastleBackend => (
-            BouncyCastleX509Functions.GetAuthorityKeyIdentifier,
-            BouncyCastleX509Functions.GetSubjectKeyIdentifier,
-            BouncyCastleX509Functions.GetSubjectName),
-        _ => throw new ArgumentOutOfRangeException(nameof(backend), backend, "Unknown X.509 backend name.")
-    };
+        {
+            MicrosoftBackend => (
+                MicrosoftX509Functions.GetAuthorityKeyIdentifier,
+                MicrosoftX509Functions.GetSubjectKeyIdentifier,
+                MicrosoftX509Functions.GetSubjectName),
+            BouncyCastleBackend => (
+                BouncyCastleX509Functions.GetAuthorityKeyIdentifier,
+                BouncyCastleX509Functions.GetSubjectKeyIdentifier,
+                BouncyCastleX509Functions.GetSubjectName),
+            _ => throw new ArgumentOutOfRangeException(nameof(backend), backend, "Unknown X.509 backend name.")
+        };
 
 
     /// <summary>Builds an extra-claims bag carrying an <c>authority_hints</c> array.</summary>

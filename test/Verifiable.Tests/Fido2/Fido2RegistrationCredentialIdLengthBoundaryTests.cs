@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
@@ -5,7 +6,6 @@ using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -112,7 +112,7 @@ internal sealed class Fido2RegistrationCredentialIdLengthBoundaryTests
 
         var attestedCredentialData = new AttestedCredentialData(Guid.NewGuid(), credentialIdCarrier, credentialPublicKey);
 
-        const byte Flags = (byte)(AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit);
+        const byte Flags = AuthenticatorDataFlags.UserPresentBit | AuthenticatorDataFlags.UserVerifiedBit | AuthenticatorDataFlags.AttestedCredentialDataIncludedBit;
         var authenticatorData = new AuthenticatorData(
             Fido2TestVectors.WrapRpIdHash(Fido2TestVectors.CreateRpIdHash(), BaseMemoryPool.Shared),
             new AuthenticatorDataFlags(Flags),

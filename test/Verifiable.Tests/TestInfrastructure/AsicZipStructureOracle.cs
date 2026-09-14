@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
 using System.Text;
 
@@ -384,7 +381,7 @@ internal static class AsicZipStructureOracle
 
         if(spec.UnlistedFirstEntry is not null)
         {
-            WriteLocalHeaderAndData(archive, spec.UnlistedFirstEntry);
+            _ = WriteLocalHeaderAndData(archive, spec.UnlistedFirstEntry);
         }
 
         for(int i = 0; i < spec.Entries.Count; ++i)

@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Ctap;
@@ -263,16 +259,16 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-algorithms",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-algorithms", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateAsync(simulator, pool, cancellationToken);
 
         CtapGetInfoResponse response = await CtapAuthenticatorGetInfoClient.GetInfoAsync(
             harness.Transceive, CtapGetInfoResponseCborReader.Read, pool, cancellationToken);
 
         Assert.IsNotNull(response.Algorithms);
-        Assert.HasCount(1, response.Algorithms!);
-        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, response.Algorithms![0].Alg);
-        Assert.AreEqual(WellKnownPublicKeyCredentialTypes.PublicKey, response.Algorithms![0].Type);
+        Assert.HasCount(1, response.Algorithms);
+        Assert.AreEqual(WellKnownCoseAlgorithms.Es256, response.Algorithms[0].Alg);
+        Assert.AreEqual(WellKnownPublicKeyCredentialTypes.PublicKey, response.Algorithms[0].Type);
     }
 
 
@@ -293,7 +289,7 @@ internal sealed class CtapAuthenticatorDeferralCapstoneTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CancellationToken cancellationToken = TestContext.CancellationToken;
 
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-config-sync",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("capstone-config-sync", BaseMemoryPool.Shared);
         using CtapNfcTransportHarness harness = await CtapNfcTransportHarness.CreateWithDeferralAsync(simulator, pool, cancellationToken);
 
         TaggedMemory<byte> configParameters = CtapAuthenticatorConfigRequestCborWriter.Write(

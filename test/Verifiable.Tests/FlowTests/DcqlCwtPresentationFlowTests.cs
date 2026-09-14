@@ -1,12 +1,10 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
@@ -170,7 +168,7 @@ internal sealed class DcqlCwtPresentationFlowTests
         };
 
         Assert.IsTrue(vpToken.ContainsKey(CredentialQueryId));
-        Assert.IsInstanceOfType<SdToken<ReadOnlyMemory<byte>>>(vpToken[CredentialQueryId]);
+        _ = Assert.IsInstanceOfType<SdToken<ReadOnlyMemory<byte>>>(vpToken[CredentialQueryId]);
 
         //Verifier validates the COSE_Sign1 issuer signature on the presented token.
         //The signature covers protected header + payload, not the unprotected header

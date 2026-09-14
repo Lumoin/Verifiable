@@ -1,10 +1,6 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -12,10 +8,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -306,7 +298,7 @@ internal sealed class TpmInHouseSimulatorHmacSigningTests
             tpm, registry, pool, parent.ObjectHandle.Value, Rfc4231Case3Key, TpmAlgIdConstants.TPM_ALG_SHA256, userAuth: password, isNoDa: false, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmResult<SignResponse> chargedResult = await SignAsync(
-            tpm, registry, pool, daKey.Handle, Sha256WidthDigest, TpmAlgIdConstants.TPM_ALG_NULL, TpmAlgIdConstants.TPM_ALG_NULL, keyPassword: new byte[] { 0x6e, 0x6f }).ConfigureAwait(false);
+            tpm, registry, pool, daKey.Handle, Sha256WidthDigest, TpmAlgIdConstants.TPM_ALG_NULL, TpmAlgIdConstants.TPM_ALG_NULL, keyPassword: "no"u8.ToArray()).ConfigureAwait(false);
         Assert.AreEqual(
             HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_AUTH_FAIL, sessionIndex: 0), chargedResult.ResponseCode,
             "A wrong password against a DA-protected HMAC key must be refused with session-index-0-encoded TPM_RC_AUTH_FAIL.");
@@ -316,7 +308,7 @@ internal sealed class TpmInHouseSimulatorHmacSigningTests
             tpm, registry, pool, parent.ObjectHandle.Value, Rfc4231Case3Key, TpmAlgIdConstants.TPM_ALG_SHA256, userAuth: password, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         TpmResult<SignResponse> unchargedResult = await SignAsync(
-            tpm, registry, pool, noDaKey.Handle, Sha256WidthDigest, TpmAlgIdConstants.TPM_ALG_NULL, TpmAlgIdConstants.TPM_ALG_NULL, keyPassword: new byte[] { 0x6e, 0x6f }).ConfigureAwait(false);
+            tpm, registry, pool, noDaKey.Handle, Sha256WidthDigest, TpmAlgIdConstants.TPM_ALG_NULL, TpmAlgIdConstants.TPM_ALG_NULL, keyPassword: "no"u8.ToArray()).ConfigureAwait(false);
         Assert.AreEqual(
             HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, sessionIndex: 0), unchargedResult.ResponseCode,
             "A wrong password against a noDA HMAC key must be refused with session-index-0-encoded TPM_RC_BAD_AUTH.");

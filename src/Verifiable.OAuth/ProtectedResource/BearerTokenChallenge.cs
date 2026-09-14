@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 using Verifiable.Cryptography.Text;
 
@@ -133,7 +132,7 @@ public static class BearerTokenChallenge
         }
 
         StringBuilder builder = new();
-        builder.Append(WellKnownAuthenticationSchemes.Bearer);
+        _ = builder.Append(WellKnownAuthenticationSchemes.Bearer);
         bool isFirstParameter = true;
 
         if(hasRealm)
@@ -164,8 +163,8 @@ public static class BearerTokenChallenge
             //challenge's list instead of duplicating the quoting rules here.
             string composed = ProtectedResourceChallenge.BuildChallenge(
                 WellKnownAuthenticationSchemes.Bearer, resourceMetadata);
-            builder.Append(isFirstParameter ? " " : ", ");
-            builder.Append(composed.AsSpan(WellKnownAuthenticationSchemes.Bearer.Length + 1));
+            _ = builder.Append(isFirstParameter ? " " : ", ");
+            _ = builder.Append(composed.AsSpan(WellKnownAuthenticationSchemes.Bearer.Length + 1));
         }
 
         return builder.ToString();
@@ -315,8 +314,8 @@ public static class BearerTokenChallenge
         string escaped = value
             .Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
-        builder.Append(isFirstParameter ? " " : ", ");
-        builder.Append(name).Append("=\"").Append(escaped).Append('"');
+        _ = builder.Append(isFirstParameter ? " " : ", ");
+        _ = builder.Append(name).Append("=\"").Append(escaped).Append('"');
         isFirstParameter = false;
     }
 
@@ -463,7 +462,7 @@ public static class BearerTokenChallenge
             char c = value[i];
             if(c == '\\' && i + 1 < value.Length)
             {
-                builder.Append(value[i + 1]);
+                _ = builder.Append(value[i + 1]);
                 ++i;
                 continue;
             }
@@ -475,7 +474,7 @@ public static class BearerTokenChallenge
                 return builder.ToString();
             }
 
-            builder.Append(c);
+            _ = builder.Append(c);
         }
 
         position = value.Length;

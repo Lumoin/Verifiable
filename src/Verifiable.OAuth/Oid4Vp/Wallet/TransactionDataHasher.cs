@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Text;
 using Verifiable.Cryptography;
-using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 
@@ -75,7 +74,7 @@ public static class TransactionDataHasher
             int byteCount = Encoding.ASCII.GetByteCount(entry);
             using IMemoryOwner<byte> inputOwner = pool.Rent(byteCount);
             Span<byte> inputBytes = inputOwner.Memory.Span[..byteCount];
-            Encoding.ASCII.GetBytes(entry, inputBytes);
+            _ = Encoding.ASCII.GetBytes(entry, inputBytes);
 
             using DigestValue digest = await CryptographicKeyEvents.ComputeDigestAsync(
                 inputOwner.Memory[..byteCount],

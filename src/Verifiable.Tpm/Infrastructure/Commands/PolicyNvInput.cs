@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -46,7 +43,7 @@ public readonly record struct PolicyNvInput(
     /// </summary>
     public ReadOnlyMemory<byte> OperandB
     {
-        get => field;
+        get;
         init => field = EnsureWithinOperandBound(value);
     } = EnsureWithinOperandBound(OperandB);
 

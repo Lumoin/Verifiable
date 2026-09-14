@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -17,11 +14,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -190,7 +182,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
         Assert.AreEqual(
-            default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED,
+            default, attributes & TpmaNv.TPMA_NV_WRITELOCKED,
             "A refused command applies none of clause 31.12.1's effect.");
     }
 
@@ -266,7 +258,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
             "Clause 5.4's check 5 refuses a disabled hierarchy at authHandle, handle 1 of Table 263, ahead of clause 5.6's authorization.");
 
         TpmaNv afterRefusal = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), afterRefusal & TpmaNv.TPMA_NV_WRITELOCKED, "A hierarchy refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, afterRefusal & TpmaNv.TPMA_NV_WRITELOCKED, "A hierarchy refusal applies none of clause 31.12.1's effect.");
 
         TpmResult<NvGlobalWriteLockResponse> platformResult = await GlobalWriteLockOverHmacAsync(
             device, pool, registry, TpmRh.TPM_RH_PLATFORM, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -307,7 +299,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
             "Clause 5.4's check 5 refuses a disabled hierarchy at authHandle, handle 1 of Table 263, ahead of clause 5.6's authorization, and the enable gate precedes the HMAC verification the session form adds.");
 
         TpmaNv afterRefusal = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), afterRefusal & TpmaNv.TPMA_NV_WRITELOCKED, "A hierarchy refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, afterRefusal & TpmaNv.TPMA_NV_WRITELOCKED, "A hierarchy refusal applies none of clause 31.12.1's effect.");
 
         TpmResult<NvGlobalWriteLockResponse> ownerResult = await GlobalWriteLockOverHmacAsync(
             device, pool, registry, TpmRh.TPM_RH_OWNER, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -350,7 +342,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
             "No HMAC compare happens at all once the handle resolves to no usable entity.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A hierarchy refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A hierarchy refusal applies none of clause 31.12.1's effect.");
     }
 
     /// <summary>
@@ -378,7 +370,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
             "A handle outside TPMI_RH_PROVISION designates authHandle, handle 1 of Table 263, at unmarshalling.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A handle refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A handle refusal applies none of clause 31.12.1's effect.");
     }
 
     /// <summary>
@@ -422,7 +414,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
         }
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A slot refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A slot refusal applies none of clause 31.12.1's effect.");
     }
 
     /// <summary>
@@ -591,7 +583,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
         }
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A lockout refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A lockout refusal applies none of clause 31.12.1's effect.");
     }
 
     /// <summary>
@@ -827,7 +819,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
             "A non-session handle at the authorization slot is refused with the session-index-encoded TPM_RC_HANDLE, ahead of any credential evaluation.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A slot refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A slot refusal applies none of clause 31.12.1's effect.");
     }
 
     /// <summary>
@@ -889,7 +881,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockOverSessionTests
             "TPM_RH_OWNER's authValue is dictionary-attack exempt, so the mismatch never charges failedTries.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A command-HMAC refusal applies none of clause 31.12.1's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A command-HMAC refusal applies none of clause 31.12.1's effect.");
     }
 
     /// <summary>

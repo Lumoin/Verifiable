@@ -1,6 +1,5 @@
-using System.Buffers;
-using System.Collections.Generic;
 using MessagePack;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Keri;
 using Verifiable.Tests.TestInfrastructure;
@@ -75,8 +74,8 @@ internal sealed class KeriEventMgpkConformanceTests
         using MintedEvent minted = MintInceptionMgpk();
         MessageFieldMap fields = DecodeMgpkFieldMap(minted.Serialization);
 
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.SigningKeys]);
-        Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.Backers]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.SigningKeys]);
+        _ = Assert.IsInstanceOfType<IReadOnlyList<string>>(fields[KeriMessageFields.Backers]);
     }
 
 
@@ -120,10 +119,15 @@ internal sealed class KeriEventMgpkConformanceTests
             }
             case MessagePackType.Nil:
             {
-                reader.ReadNil();
+                _ = reader.ReadNil();
 
                 return null;
             }
+            case MessagePackType.Unknown:
+            case MessagePackType.Integer:
+            case MessagePackType.Float:
+            case MessagePackType.Binary:
+            case MessagePackType.Extension:
             default:
             {
                 throw new MessagePackSerializationException($"Unexpected MGPK type '{reader.NextMessagePackType}' in a KERI event.");

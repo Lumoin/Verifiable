@@ -1,31 +1,23 @@
-using System;
-using System.Buffers;
-using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Encodings;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Parameters;
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
-using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
+using Verifiable.Tpm.Spec.Algorithms;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1365,7 +1357,7 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
     public async Task RsaDecryptFailureModeIsRefusedWithFailure()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using var simulator = new TpmSimulator($"tpm-in-house-rsa-decrypt-{nameof(RsaDecryptFailureModeIsRefusedWithFailure)}",selfTest: TpmSelfTestBehavior.Fails, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
+        using var simulator = new TpmSimulator($"tpm-in-house-rsa-decrypt-{nameof(RsaDecryptFailureModeIsRefusedWithFailure)}", selfTest: TpmSelfTestBehavior.Fails, rsaSigningBackend: MicrosoftTpmRsaSigningBackend.Create(), rng: TestEntropy.NewCounterStream(), timeProvider: new FakeTimeProvider(TestClock.CanonicalEpoch));
         await simulator.PowerOnAsync(TestContext.CancellationToken).ConfigureAwait(false);
         await BringOperationalAsync(simulator, pool).ConfigureAwait(false);
         TpmRcConstants selfTestCode = await SubmitSelfTestAsync(simulator, pool).ConfigureAwait(false);
@@ -2346,7 +2338,7 @@ internal sealed class TpmInHouseSimulatorRsaDecryptTests
             var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)length, (uint)TpmCcConstants.TPM_CC_RSA_Decrypt);
             header.WriteTo(ref writer);
             writer.WriteUInt32(keyHandle);
-            writer.WriteUInt32((uint)PasswordSlotSize);
+            writer.WriteUInt32(PasswordSlotSize);
             writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
             writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
             writer.WriteByte((byte)TpmaSession.CONTINUE_SESSION);

@@ -1,9 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -193,8 +191,8 @@ internal sealed class SsfStreamManagementEndpointTests
     public async Task SecondCreateConflictsAndMalformedBodiesAreRejected()
     {
         await using TestHostShell app = new(TimeProvider);
-        RegisterTransmitter(app, out VerifierKeyMaterial material);
-        using VerifierKeyMaterial _ = material;
+        _ = RegisterTransmitter(app, out VerifierKeyMaterial material);
+        using VerifierKeyMaterial materialOwner = material;
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -486,7 +484,7 @@ internal sealed class SsfStreamManagementEndpointTests
 
         if(token is not null)
         {
-            request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, $"Bearer {token}");
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.Authorization, $"Bearer {token}");
         }
 
         return await http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
@@ -512,7 +510,7 @@ internal sealed class SsfStreamManagementEndpointTests
         Dictionary<string, SsfStreamStatus> statusByStream = new(StringComparer.Ordinal);
         HashSet<string> verificationRequested = new(StringComparer.Ordinal);
 
-        app.Server.OAuth().UseDefaultSsfJsonParsing();
+        _ = app.Server.OAuth().UseDefaultSsfJsonParsing();
 
         //A profile-conformant transmitter declares its delivery methods: CAEP
         //Interoperability Profile 1.0 §2.3.2 makes delivery_methods_supported a
@@ -622,7 +620,7 @@ internal sealed class SsfStreamManagementEndpointTests
 
         app.Server.OAuth().DeleteSsfStreamAsync = (streamId, registration, context, ct) =>
         {
-            statusByStream.Remove(streamId);
+            _ = statusByStream.Remove(streamId);
 
             return ValueTask.FromResult(store.Remove(streamId)
                 ? SsfStreamWriteOutcome.Success

@@ -1,10 +1,5 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -45,9 +40,9 @@ internal sealed class EcdhZGenInputFramingTests
         byte[] expectedHandles = [0x80, 0x00, 0x00, 0x01];
         byte[] expectedParameters =
         [
-            0x00, (byte)(sizeof(ushort) + P256CoordinateLength + sizeof(ushort) + P256CoordinateLength),
-            0x00, (byte)P256CoordinateLength, .. x.ToArray(),
-            0x00, (byte)P256CoordinateLength, .. y.ToArray()
+            0x00, (sizeof(ushort) + P256CoordinateLength + sizeof(ushort) + P256CoordinateLength),
+            0x00, P256CoordinateLength, .. x.ToArray(),
+            0x00, P256CoordinateLength, .. y.ToArray()
         ];
 
         Assert.AreEqual(expectedHandles.Length + expectedParameters.Length, input.GetSerializedSize(), "GetSerializedSize must account for the four-octet keyHandle plus the framed TPM2B_ECC_POINT inPoint.");
@@ -126,9 +121,9 @@ internal sealed class EcdhZGenInputFramingTests
         y.Fill(0xAA);
         byte[] wire =
         [
-            0x00, (byte)(sizeof(ushort) + P256CoordinateLength + sizeof(ushort) + P256CoordinateLength),
-            0x00, (byte)P256CoordinateLength, .. x.ToArray(),
-            0x00, (byte)P256CoordinateLength, .. y.ToArray()
+            0x00, (sizeof(ushort) + P256CoordinateLength + sizeof(ushort) + P256CoordinateLength),
+            0x00, P256CoordinateLength, .. x.ToArray(),
+            0x00, P256CoordinateLength, .. y.ToArray()
         ];
 
         using var trackingPool = new MeteredHousePool();

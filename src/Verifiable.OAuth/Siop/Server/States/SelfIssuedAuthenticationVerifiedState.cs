@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusList;
 using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
 

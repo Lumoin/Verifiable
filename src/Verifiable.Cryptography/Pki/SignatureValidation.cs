@@ -1,10 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -204,6 +199,10 @@ public static class SignatureValidation
                     await RunLongTermAsync(inputs, seams, currentTime, resources, pool, cancellationToken).ConfigureAwait(false),
                 SignatureValidationProcessSelection.SignaturesWithTime =>
                     await RunWithTimeAsync(inputs, seams, currentTime, resources, pool, cancellationToken).ConfigureAwait(false),
+                SignatureValidationProcessSelection.Automatic =>
+                    await RunBasicAsync(inputs, seams, currentTime, resources, pool, cancellationToken).ConfigureAwait(false),
+                SignatureValidationProcessSelection.BasicSignatures =>
+                    await RunBasicAsync(inputs, seams, currentTime, resources, pool, cancellationToken).ConfigureAwait(false),
                 _ => await RunBasicAsync(inputs, seams, currentTime, resources, pool, cancellationToken).ConfigureAwait(false)
             };
         }
@@ -236,6 +235,18 @@ public static class SignatureValidation
                 : SignatureValidationProcessSelection.BasicSignatures,
 
             //Steps 1)a) and 1)d) both go to step 2), which falls through to step 3) and then to step 4).
+            SignatureValidationProcessSelection.Automatic => capabilities.SupportsLongTermAvailability
+                ? SignatureValidationProcessSelection.LongTermAvailability
+                : capabilities.SupportsSignaturesWithTime
+                    ? SignatureValidationProcessSelection.SignaturesWithTime
+                    : SignatureValidationProcessSelection.BasicSignatures,
+            SignatureValidationProcessSelection.LongTermAvailability => capabilities.SupportsLongTermAvailability
+                ? SignatureValidationProcessSelection.LongTermAvailability
+                : capabilities.SupportsSignaturesWithTime
+                    ? SignatureValidationProcessSelection.SignaturesWithTime
+                    : SignatureValidationProcessSelection.BasicSignatures,
+
+            //Any undefined selection value falls through the same steps 2) to 4) as Automatic.
             _ => capabilities.SupportsLongTermAvailability
                 ? SignatureValidationProcessSelection.LongTermAvailability
                 : capabilities.SupportsSignaturesWithTime

@@ -177,7 +177,7 @@ public static class ConcatKdf
 
         BinaryPrimitives.WriteInt32BigEndian(hashInput[offset..], algIdByteCount);
         offset += 4;
-        Encoding.ASCII.GetBytes(algorithmId, hashInput[offset..]);
+        _ = Encoding.ASCII.GetBytes(algorithmId, hashInput[offset..]);
         offset += algIdByteCount;
 
         BinaryPrimitives.WriteInt32BigEndian(hashInput[offset..], partyUInfo.Length);

@@ -12,7 +12,6 @@
     <ProjectReference Include="..\Verifiable.DidComm\Verifiable.DidComm.csproj" />
     <ProjectReference Include="..\Verifiable.Fido2\Verifiable.Fido2.csproj" />
     <ProjectReference Include="..\Verifiable.JCose\Verifiable.JCose.csproj" />
-    <ProjectReference Include="..\Verifiable.JsonPointer\Verifiable.JsonPointer.csproj" />
     <ProjectReference Include="..\Verifiable.OAuth\Verifiable.OAuth.csproj" />
   </ItemGroup>
 

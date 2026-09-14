@@ -1,15 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml.Linq;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -246,13 +241,13 @@ internal sealed class AsicContainerValidationTests
             "The instant the record proves its objects existed at is its initial Archive Timestamp's genTime.");
         Assert.AreSequenceEqual(ExtendedDataObjectNames, record.ProtectedEntryNames.ToArray(),
             "The record proves the manifest's DataObjectReference targets.");
-        Assert.DoesNotContain(created.ManifestEntryName!, record.ProtectedEntryNames.ToList(),
+        Assert.DoesNotContain(created.ManifestEntryName, record.ProtectedEntryNames.ToList(),
             "Clause 4.4.4.2 NOTE 2: the ASiCManifest file referencing an ER is not itself covered by that ER.");
 
         List<AsicProtectedObject> byRecord = [.. result.ProtectedObjects.Where(o => o.ProtectedBy == AsicProtectionKind.EvidenceRecord)];
         Assert.AreSequenceEqual(ExtendedDataObjectNames, byRecord.Select(o => o.EntryName).ToArray(),
             "The protected-objects report names the targets and nothing else.");
-        Assert.DoesNotContain(created.ManifestEntryName!, result.ProtectedObjects.Select(o => o.EntryName).ToList(),
+        Assert.DoesNotContain(created.ManifestEntryName, result.ProtectedObjects.Select(o => o.EntryName).ToList(),
             "Clause 4.4.4.2 NOTE 2 again, at the report level: nothing states the manifest file is protected.");
         foreach(AsicProtectedObject entry in byRecord)
         {
@@ -334,12 +329,12 @@ internal sealed class AsicContainerValidationTests
         Assert.AreEqual(EvidenceRecordVerificationStatus.NotVerified, record.VerificationStatus,
             "The ASN.1 form's status stays unset for an XML-form record rather than being borrowed for it.");
         Assert.AreEqual(TimeAssertionInstant, record.InitialArchiveTime, "The instant proved is the initial Archive Time-Stamp's genTime.");
-        Assert.AreSequenceEqual(XmlEvidenceRecordTargetNames,record.ProtectedEntryNames.ToArray(), "The record proves the manifest's DataObjectReference targets.");
+        Assert.AreSequenceEqual(XmlEvidenceRecordTargetNames, record.ProtectedEntryNames.ToArray(), "The record proves the manifest's DataObjectReference targets.");
         Assert.DoesNotContain("META-INF/ASiCEvidenceRecordManifest1.xml", record.ProtectedEntryNames.ToList(),
             "Clause 4.4.4.2 NOTE 2: the manifest file referencing an Evidence Record is not itself covered by it.");
 
         List<AsicProtectedObject> byRecord = [.. result.ProtectedObjects.Where(o => o.ProtectedBy == AsicProtectionKind.EvidenceRecord)];
-        Assert.AreSequenceEqual(XmlEvidenceRecordTargetNames,byRecord.Select(o => o.EntryName).ToArray(),
+        Assert.AreSequenceEqual(XmlEvidenceRecordTargetNames, byRecord.Select(o => o.EntryName).ToArray(),
             "The protected-objects report names the targets and nothing else.");
     }
 
@@ -604,7 +599,7 @@ internal sealed class AsicContainerValidationTests
         //...and the library's own managed backend, which is what the seam falls back to when a host registers
         //nothing, does not implement the algorithm: its RSA profile is RSASSA-PKCS1-v1_5 alone (SHA-256, SHA-384
         //or SHA-512), never RSASSA-PSS — which is exactly what the registrable backend seam exists for.
-        await Assert.ThrowsExactlyAsync<CryptographicException>(
+        _ = await Assert.ThrowsExactlyAsync<CryptographicException>(
             async () => (await ManagedCmsVerification.VerifyDetachedCmsSignedDataAsync(
                 authored.Signature, authored.ManifestContent, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).Dispose(),
             "The managed backend states what it does not implement rather than reporting a valid signature as broken.");
@@ -984,7 +979,7 @@ internal sealed class AsicContainerValidationTests
         var entries = new List<AsicZipEntrySource>(payloads.Count);
         foreach((string name, byte[] payload) in payloads)
         {
-            if(AsicWellKnown.IsMimetypeEntryName(name) || name.EndsWith('/'))
+            if(AsicWellKnown.IsMimetypeEntryName(name) || name.EndsWith('/', StringComparison.Ordinal))
             {
                 continue;
             }
@@ -1366,7 +1361,7 @@ internal sealed class AsicContainerValidationTests
         /// <typeparam name="T">The carrier's type.</typeparam>
         /// <param name="carrier">The carrier.</param>
         /// <returns>The same carrier.</returns>
-        private T Own<T>(T carrier) where T: IDisposable
+        private T Own<T>(T carrier) where T : IDisposable
         {
             Owned.Add(carrier);
 

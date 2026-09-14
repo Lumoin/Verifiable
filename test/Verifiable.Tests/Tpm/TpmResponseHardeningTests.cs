@@ -1,15 +1,9 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -34,7 +28,7 @@ internal sealed class TpmResponseHardeningTests
     {
         //Eight bytes remaining; a declared count of ~one billion four-byte elements cannot fit and is rejected
         //before it can size any collection.
-        Assert.ThrowsExactly<InvalidOperationException>(static () => EnsureCount(new byte[8], 0x40000000u, sizeof(uint)));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(static () => EnsureCount(new byte[8], 0x40000000u, sizeof(uint)));
     }
 
     [TestMethod]
@@ -54,7 +48,7 @@ internal sealed class TpmResponseHardeningTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] data = [0x40, 0x00, 0x00, 0x00]; //count = 0x40000000.
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseTpmlDigest(data, pool));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseTpmlDigest(data, pool));
     }
 
     [TestMethod]
@@ -80,7 +74,7 @@ internal sealed class TpmResponseHardeningTests
             WriteUInt32BigEndian(data, 0, (uint)capability);
             WriteUInt32BigEndian(data, sizeof(uint), 0x40000000u); //count = ~1 billion.
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => ParseCapabilityData(data, pool),
+            _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseCapabilityData(data, pool),
                 $"Capability arm '{capability}' must reject an unbounded element count.");
         }
     }
@@ -94,7 +88,7 @@ internal sealed class TpmResponseHardeningTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] certifyAttest = BuildTpm2bAttestImage(TpmStConstants.TPM_ST_ATTEST_CERTIFY, pool);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseQuoteResponse(certifyAttest, pool));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseQuoteResponse(certifyAttest, pool));
     }
 
     [TestMethod]
@@ -105,7 +99,7 @@ internal sealed class TpmResponseHardeningTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         byte[] quoteAttest = BuildTpm2bAttestImage(TpmStConstants.TPM_ST_ATTEST_QUOTE, pool);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => ParseCertifyResponse(quoteAttest, pool));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => ParseCertifyResponse(quoteAttest, pool));
     }
 
     [TestMethod]
@@ -114,7 +108,7 @@ internal sealed class TpmResponseHardeningTests
         //A TPM_ST_SESSIONS response whose parameterSize field claims more bytes than the response contains must be
         //answered with TPM_RC_SIZE, not pre-allocate that many bytes nor, once cast to int, go negative and throw
         //past the fail-closed TpmResult contract (Part 1, clause 15.10 parameter/auth split).
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)
@@ -147,7 +141,7 @@ internal sealed class TpmResponseHardeningTests
         //A handle-returning command (StartAuthSession has one output handle) whose response is only a header must
         //be answered with TPM_RC_SIZE, not read an output handle out of the empty remainder and throw an
         //out-of-range exception past the fail-closed contract.
-        ValueTask<TpmResult<TpmResponse>> Handler(
+        static ValueTask<TpmResult<TpmResponse>> Handler(
             ReadOnlyMemory<byte> command,
             BaseMemoryPool pool,
             CancellationToken cancellationToken)

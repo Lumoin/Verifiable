@@ -1,9 +1,4 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
-using Verifiable.Foundation;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -98,7 +93,7 @@ internal sealed class DictionaryBackedCtapStateCustodyStore
     /// <summary>Deletes whatever snapshot is persisted for <paramref name="runId"/>. Has the <see cref="WipeSnapshotAsyncDelegate"/> shape.</summary>
     private ValueTask WipeSnapshotAsync(string runId, CancellationToken cancellationToken)
     {
-        SnapshotsByRunId.Remove(runId);
+        _ = SnapshotsByRunId.Remove(runId);
         OperationLog.Add($"Wipe:{runId}");
 
         return ValueTask.CompletedTask;

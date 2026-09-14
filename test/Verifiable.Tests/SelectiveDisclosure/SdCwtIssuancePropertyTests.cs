@@ -1,12 +1,11 @@
-using System.Buffers;
-using Lumoin.Veritas.Cbor;
-using System.Globalization;
 using CsCheck;
+using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Globalization;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
@@ -175,7 +174,7 @@ internal sealed class SdCwtIssuancePropertyTests
             {
                 if(mask[i])
                 {
-                    subset.Add(keys[i]);
+                    _ = subset.Add(keys[i]);
                 }
             }
 
@@ -186,7 +185,7 @@ internal sealed class SdCwtIssuancePropertyTests
 
     private static HashSet<CredentialPath> ToCwtCredentialPaths(IEnumerable<int> keys)
     {
-        return new HashSet<CredentialPath>(
+        return new(
             keys.Select(k => CredentialPath.FromJsonPointer(
                 $"/{k.ToString(CultureInfo.InvariantCulture)}")));
     }

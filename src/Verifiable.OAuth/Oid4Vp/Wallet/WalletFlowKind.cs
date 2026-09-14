@@ -1,5 +1,3 @@
-using Verifiable.OAuth.Server;
-
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 
 /// <summary>
@@ -61,7 +59,7 @@ public sealed class WalletFlowKind: StatefulFlowKind
 
         var pda = WalletFlowAutomaton.CreateFromSnapshot(state, stepCount, timeProvider);
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
         return (pda.CurrentState, pda.StepCount);
     }

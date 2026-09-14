@@ -1,9 +1,8 @@
-using System.Collections.Generic;
+using Lumoin.Veritas.JsonPointer;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Lumoin.Veritas.JsonPointer;
 using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Vcalm;
@@ -50,7 +49,7 @@ public static class VcalmDcqlAdapters
     /// <c>credentialSubject</c> path and reads the value, navigating nested objects.
     /// </summary>
     public static DcqlClaimExtractor<VerifiableCredential> ClaimExtractor { get; } =
-        (VerifiableCredential credential, DcqlClaimPattern pattern, out object? value) =>
+        (credential, pattern, out value) =>
         {
             value = null;
             if(!pattern.TryResolve(out CredentialPath path) || !path.IsJsonPath)
@@ -120,7 +119,7 @@ public static class VcalmDcqlAdapters
                 JsonPointerType pointer = JsonPointerType.Root
                     .Append(VcalmParameterNames.CredentialSubject)
                     .Append(field.Key);
-                paths.Add(new CredentialPath(pointer));
+                _ = paths.Add(new CredentialPath(pointer));
             }
         }
 

@@ -167,7 +167,7 @@ internal sealed class GeneralJweTests
             new("did:example:bob#key-1", bobPublic)
         };
 
-        await Assert.ThrowsAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
             await GeneralJweEncryptionExtensions.EncryptAuthcryptAsync(
                 Encoding.UTF8.GetBytes(AppendixBPlaintext),
                 recipients,
@@ -208,7 +208,7 @@ internal sealed class GeneralJweTests
         using PrivateKeyMemory bobPrivate = X25519PrivateKey(AppendixBBobD);
         using PublicKeyMemory aliceStaticPublic = X25519PublicKey(AppendixBAliceStaticX);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
             await message.DecryptAuthcryptAsync(
                 "bob-key-2",
                 bobPrivate,
@@ -359,7 +359,7 @@ internal sealed class GeneralJweTests
 
             //A non-recipient kid has no entry and must fail to select.
             using PrivateKeyMemory outsiderPrivate = createKeys(Pool).PrivateKey;
-            await Assert.ThrowsAsync<FormatException>(async () =>
+            _ = await Assert.ThrowsAsync<FormatException>(async () =>
                 await parsed.DecryptAuthcryptAsync(
                     "did:example:outsider#key-1",
                     outsiderPrivate,

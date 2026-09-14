@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.OAuth;
 using Verifiable.OAuth.AuthZen;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -84,7 +83,7 @@ internal sealed class AuthZenEvaluationMatrixTests
             new Uri(ClientId),
             ImmutableHashSet.Create(WellKnownCapabilityIdentifiers.AuthZenAuthorizationApi));
 
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         app.Server.OAuth().EvaluateAccessAsync = Policy;
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);

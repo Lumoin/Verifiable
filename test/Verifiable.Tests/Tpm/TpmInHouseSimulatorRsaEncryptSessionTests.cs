@@ -1,7 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -12,11 +11,6 @@ using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -237,7 +231,7 @@ internal sealed class TpmInHouseSimulatorRsaEncryptSessionTests
                 (TpmRcConstants code, byte[] response) = await SubmitOneHandleForAuditAsync(simulator, pool, mistypedHandle, authArea: [], parameters: []).ConfigureAwait(false);
 
                 //keyHandle is TPM2_RSA_Encrypt()'s sole handle, Table 44, index 0 (this test's own doc comment).
-                Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), code, $"A handle of type 0x{(mistypedHandle >> 24):X2} is TPM_RC_VALUE designated to handle 1, ahead of the authorization area.");
+                Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), code, $"A handle of type 0x{mistypedHandle >> 24:X2} is TPM_RC_VALUE designated to handle 1, ahead of the authorization area.");
 
                 var responseReader = new TpmReader(response);
                 TpmHeader responseHeader = TpmHeader.Parse(ref responseReader);

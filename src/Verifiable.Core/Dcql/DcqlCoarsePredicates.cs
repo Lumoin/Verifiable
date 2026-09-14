@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using Verifiable.Core.Model.Dcql;
 
@@ -132,7 +130,7 @@ public record DcqlCoarsePredicates
             return null;
         }
 
-        return new HashSet<string>(constraints);
+        return new(constraints);
     }
 
 
@@ -148,7 +146,7 @@ public record DcqlCoarsePredicates
         {
             if(claim.Required && claim.Path is not null)
             {
-                patterns.Add(claim.Path);
+                _ = patterns.Add(claim.Path);
             }
         }
 

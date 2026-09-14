@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
@@ -53,7 +52,7 @@ internal sealed class PackedSelfAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
     }
 
 
@@ -175,7 +174,7 @@ internal sealed class PackedSelfAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<RejectedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<RejectedAttestationResult>(result);
         Assert.AreEqual(Fido2AttestationErrors.MalformedStatement.Code, ((RejectedAttestationResult)result).Error.Code);
     }
 
@@ -204,7 +203,7 @@ internal sealed class PackedSelfAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
     }
 
 
@@ -232,7 +231,7 @@ internal sealed class PackedSelfAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
     }
 
 
@@ -260,7 +259,7 @@ internal sealed class PackedSelfAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
     }
 
 
@@ -291,7 +290,7 @@ internal sealed class PackedSelfAttestationTests
 
             AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-            Assert.IsInstanceOfType<SelfAttestationResult>(result);
+            _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
         }
     }
 
@@ -324,7 +323,7 @@ internal sealed class PackedSelfAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<SelfAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
     }
 
 
@@ -355,7 +354,7 @@ internal sealed class PackedSelfAttestationTests
 
             AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-            Assert.IsInstanceOfType<SelfAttestationResult>(result);
+            _ = Assert.IsInstanceOfType<SelfAttestationResult>(result);
         }
     }
 

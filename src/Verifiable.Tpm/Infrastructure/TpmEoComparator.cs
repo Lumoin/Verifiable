@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Tpm.Spec.Constants;
 using static Verifiable.Tpm.Spec.TpmRcExtensions;
 
 namespace Verifiable.Tpm.Infrastructure;

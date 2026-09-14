@@ -7,7 +7,7 @@ namespace Verifiable.Tests.test;
 
 internal static class FakeTpmClient
 {
-    public static ValueTask<bool> VerifyAsync(string keyHandle, ReadOnlySpan<byte> data, ReadOnlySpan<byte> signature)
+    public static ValueTask<bool> VerifyAsync(string keyHandle)
     {
         //Fake verification - just check if handle is valid.
         return ValueTask.FromResult(keyHandle == "Tpm-key-handle-123");
@@ -25,21 +25,23 @@ internal class FakeTpmHandleTests
     public async Task FakeTpmHandleTest()
     {
         //Create TPM verification delegate that matches the VerificationDelegate signature.
-        VerificationDelegate tpmVerificationDelegate =
-            async (dataToVerify, signature, verificationContext, context, cancellationToken) =>
-            {
-                //Decode handle from verificationContext bytes.
-                string handle = Encoding.UTF8.GetString(verificationContext.Span);
+        static async ValueTask<(bool IsVerified, CryptoEvent? Event)> tpmVerificationDelegate(
+            ReadOnlyMemory<byte> dataToVerify,
+            ReadOnlyMemory<byte> signature,
+            ReadOnlyMemory<byte> verificationContext,
+            FrozenDictionary<string, object>? context = null,
+            CancellationToken cancellationToken = default)
+        {
+            //The declared return type fixes the tuple shape, so the null literal below needs no cast.
+            //Decode handle from verificationContext bytes.
+            string handle = Encoding.UTF8.GetString(verificationContext.Span);
 
-                //Call fake TPM verification logic.
-                bool isVerified = await FakeTpmClient.VerifyAsync(handle, dataToVerify.Span, signature.Span)
-                    .ConfigureAwait(false);
+            //Call fake TPM verification logic.
+            bool isVerified = await FakeTpmClient.VerifyAsync(handle)
+                .ConfigureAwait(false);
 
-                //The (CryptoEvent?) cast is kept rather than relying on inference: a bare null literal
-                //here has no natural type of its own, and this async lambda's own inferred return type
-                //must exactly match VerificationDelegate's (bool, CryptoEvent?) tuple shape.
-                return (isVerified, (CryptoEvent?)null);
-            };
+            return (isVerified, null);
+        }
 
         //Create TPM tag.
         var tpmTag = Tag.Create(CryptoAlgorithm.Ed25519).With(Purpose.Verification);
@@ -47,7 +49,7 @@ internal class FakeTpmHandleTests
         //Encode handle as bytes for storage.
         string tpmHandle = "Tpm-key-handle-123";
         var handleBytes = BaseMemoryPool.Shared.Rent(Encoding.UTF8.GetByteCount(tpmHandle));
-        Encoding.UTF8.GetBytes(tpmHandle, handleBytes.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(tpmHandle, handleBytes.Memory.Span);
         using var handleMemory = new PublicKeyMemory(handleBytes, tpmTag);
 
         //Create TPM public key.

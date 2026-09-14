@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.SelectiveDisclosure;
 
@@ -104,7 +99,7 @@ public static class DataIntegritySelectiveDisclosure
                 continue;
             }
 
-            claimPaths.Add(path);
+            _ = claimPaths.Add(path);
         }
 
         return claimPaths;

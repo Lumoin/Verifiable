@@ -1,11 +1,7 @@
 using Lumoin.Base;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.EventLogs;
@@ -168,7 +164,7 @@ public static class KeriIssuerAnchors
     {
         int length = Encoding.UTF8.GetByteCount(text);
         IMemoryOwner<byte> owner = pool.Rent(length);
-        Encoding.UTF8.GetBytes(text, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(text, owner.Memory.Span);
         owned.Add(owner);
 
         return owner.Memory[..length];

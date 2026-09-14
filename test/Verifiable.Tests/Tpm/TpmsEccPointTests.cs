@@ -1,8 +1,5 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 

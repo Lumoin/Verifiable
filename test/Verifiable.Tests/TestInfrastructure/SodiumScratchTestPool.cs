@@ -1,13 +1,12 @@
-using System;
-using System.Buffers;
 using Lumoin.Base.Libsodium;
+using System.Buffers;
 
 namespace Verifiable.Tests.TestInfrastructure
 {
     /// <summary>
     /// A minimal <see cref="MemoryPool{T}"/> adapter over <see cref="SodiumBacking.Allocate(int)"/>, used as
     /// the <c>scratchPool</c> argument wherever a test drives libsodium's Ed25519-to-X25519 secret-key
-    /// expansion — mirroring the production <c>SodiumGuardedScratchPool</c> that
+    /// expansion — mirroring the production <c>SodiumScratchPool</c> that
     /// <c>Verifiable.Libsodium</c> keeps internal to its own assembly.
     /// </summary>
     /// <remarks>

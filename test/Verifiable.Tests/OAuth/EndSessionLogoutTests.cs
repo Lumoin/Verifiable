@@ -1,9 +1,7 @@
-using System.Collections.Immutable;
-using System.Linq;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
@@ -11,7 +9,6 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Metadata;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -62,7 +59,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionTerminatesAndRedirectsWithState()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -96,7 +93,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionWithoutRedirectUriReturns200AndTerminates()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -127,7 +124,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionRejectsUnregisteredPostLogoutRedirectUri()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -160,7 +157,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionRejectsTamperedHint()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -176,8 +173,8 @@ internal sealed class EndSessionLogoutTests
         //Flip a middle character of the signature segment — it stays base64url-valid, so the id_token
         //decodes cleanly and the signature simply fails to verify (a deterministic rejection, not an
         //incidental decode failure on a non-canonical final character).
-        int signatureStart = idToken.LastIndexOf('.') + 1;
-        int tamperIndex = signatureStart + (idToken.Length - signatureStart) / 2;
+        int signatureStart = idToken.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((idToken.Length - signatureStart) / 2);
         char flipped = idToken[tamperIndex] == 'A' ? 'B' : 'A';
         string tampered = string.Concat(idToken.AsSpan(0, tamperIndex), flipped.ToString(), idToken.AsSpan(tamperIndex + 1));
 
@@ -201,7 +198,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionAcceptsExpiredHint()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -241,12 +238,12 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionAcceptsDpopIssuedHint()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
 
         //No explicit profile → HAIP 1.0 default → DPoP enforced at the token endpoint.
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, capabilities: LogoutCapabilities);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         List<(string Subject, string? SessionId)> terminated = [];
         host.Server.OAuth().TerminateSessionAsync = (sub, sid, _, _, _) =>
@@ -273,7 +270,7 @@ internal sealed class EndSessionLogoutTests
         ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
 
         //Authorize (in-process), stamping subject + the per-session sid.
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetSessionId("session-D");
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -352,11 +349,11 @@ internal sealed class EndSessionLogoutTests
         ServerHttpResponse discovery = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.MetadataDiscovery, WellKnownHttpMethods.Get,
-            new RequestFields(), new ExchangeContext(),
+            new RequestFields(), [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, discovery.StatusCode, discovery.Body);
 
-        using JsonDocument doc = JsonDocument.Parse(discovery.Body!);
+        using JsonDocument doc = JsonDocument.Parse(discovery.Body);
         JsonElement uiLocales = doc.RootElement.GetProperty(
             AuthorizationServerMetadataParameterNames.UiLocalesSupported);
         Assert.AreEqual(JsonValueKind.Array, uiLocales.ValueKind);
@@ -380,7 +377,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionTerminatesByLogoutHintWhenSeamWired()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -443,7 +440,7 @@ internal sealed class EndSessionLogoutTests
     public async Task EndSessionFansOutBackChannelLogoutAfterTerminate()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce, capabilities: LogoutCapabilities);
 
@@ -486,7 +483,7 @@ internal sealed class EndSessionLogoutTests
             WellKnownEndpointNames.EndSession,
             "GET",
             fields,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
 
@@ -511,7 +508,7 @@ internal sealed class EndSessionLogoutTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         using JsonDocument parDoc = JsonDocument.Parse(parResponse.Body);
@@ -522,7 +519,7 @@ internal sealed class EndSessionLogoutTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetSessionId(sessionId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -544,7 +541,7 @@ internal sealed class EndSessionLogoutTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 

@@ -1968,8 +1968,8 @@ public static class CBAdESSignatureValidation
             violations.Add(new CBAdESTimestampTokenBindingViolation(
                 CBAdESTimestampTokenBindingKind.ArchiveTimestamp,
                 CBAdESTimestampTokenBindingFailureReason.ImprintInputUnresolvable,
-                payloadFailureReason ?? "The arcTst message-imprint input's payload contribution (clause " +
-                    "5.3.5.3 steps 6/7) could not be resolved.",
+                payloadFailureReason ?? ("The arcTst message-imprint input's payload contribution (clause " +
+                    "5.3.5.3 steps 6/7) could not be resolved."),
                 elementIndex,
                 TokenOrdinal: -1));
 

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Tpm.Spec.Attributes;
 
 namespace Verifiable.Tpm.Spec.Structures;

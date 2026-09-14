@@ -1,22 +1,16 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -313,7 +307,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                     //except NonceCaller (needed as the session-key KDFa's own context, unavailable from the wire
                     //alone since the wire only ever carries the SessionKey's downstream HMAC, never the key itself).
                     ParseGetRandomOverSessionCommand(
-                        capturedCommand!, out ReadOnlyMemory<byte> nonceCaller, out byte sessionAttributes,
+                        capturedCommand, out ReadOnlyMemory<byte> nonceCaller, out byte sessionAttributes,
                         out ReadOnlyMemory<byte> suppliedHmac, out ReadOnlyMemory<byte> rawBytesRequested);
 
                     BaseMemoryPool oraclePool = BaseMemoryPool.Shared;
@@ -473,13 +467,13 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                     unsealed.OutData.AsReadOnlySpan().SequenceEqual(SecretBytes),
                     "An audit-only second session must never cause the sim to apply response encryption on its behalf; the recovered secret must equal the sealed plaintext exactly.");
 
-                (TpmCcConstants Code, byte[] Command, byte[] Response) audited = wire[^1];
-                byte auditedAttributes = ReadResponseSessionAttributes(audited.Response, outHandleCount: 0, sessionIndex: 1);
+                (TpmCcConstants Code, byte[] Command, byte[] Response) = wire[^1];
+                byte auditedAttributes = ReadResponseSessionAttributes(Response, outHandleCount: 0, sessionIndex: 1);
                 Assert.AreEqual(
                     (byte)(TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT | TpmaSession.AUDIT_EXCLUSIVE), auditedAttributes,
                     "The companion's response entry echoes audit SET and auditExclusive SET (its first use as an audit session), with auditReset CLEAR (TPM 2.0 Library Part 2, clause 8.4, Table 38).");
 
-                byte[] responseParameters = ReadResponseParameters(audited.Response, outHandleCount: 0);
+                byte[] responseParameters = ReadResponseParameters(Response, outHandleCount: 0);
                 byte[] cpHash = await ComputeCpHashAsync(TpmCcConstants.TPM_CC_Unseal, handleNames, ReadOnlyMemory<byte>.Empty, pool).ConfigureAwait(false);
                 byte[] rpHash = await ComputeRpHashAsync(TpmCcConstants.TPM_CC_Unseal, responseParameters, pool).ConfigureAwait(false);
                 byte[] expectedDigest = await ExtendAuditDigestAsync(priorDigest: null, cpHash, rpHash, pool).ConfigureAwait(false);
@@ -792,7 +786,7 @@ internal sealed class TpmInHouseSimulatorSessionAuthTests
                 //since rolled (the first command's response verification adopted a new one host-side, and the
                 //simulator's own stored copy — the value the replay's HMAC was computed against — also rolled), so
                 //the replayed command's cpHash/HMAC composition no longer matches what the simulator now expects.
-                TpmResult<TpmResponse> replayResult = await simulator.SubmitAsync(firstCommand!, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                TpmResult<TpmResponse> replayResult = await simulator.SubmitAsync(firstCommand, pool, TestContext.CancellationToken).ConfigureAwait(false);
                 using(TpmResponse replayResponse = replayResult.Value)
                 {
                     var reader = new TpmReader(replayResponse.AsReadOnlySpan());

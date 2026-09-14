@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Verifiable.Core;
 
 namespace Verifiable.OAuth.Server;
 

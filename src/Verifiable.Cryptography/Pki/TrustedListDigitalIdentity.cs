@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -27,7 +25,7 @@ public abstract class ServiceDigitalIdentityEntry
 /// clause 5.5.3 recommends including the certificate whenever available).
 /// </summary>
 [DebuggerDisplay("X509CertificateIdentity: {Certificate.Length} octets")]
-public sealed class X509CertificateIdentity : ServiceDigitalIdentityEntry
+public sealed class X509CertificateIdentity: ServiceDigitalIdentityEntry
 {
     /// <summary>Initializes a new <see cref="X509CertificateIdentity"/>.</summary>
     /// <param name="certificate">The DER-encoded certificate. Ownership transfers to the containing <see cref="ServiceDigitalIdentity"/>, which disposes it.</param>
@@ -53,7 +51,7 @@ public sealed class X509CertificateIdentity : ServiceDigitalIdentityEntry
 /// entry however each was read.
 /// </remarks>
 [DebuggerDisplay("X509SubjectKeyIdentifierIdentity: {SubjectKeyIdentifierBase64}")]
-public sealed class X509SubjectKeyIdentifierIdentity : ServiceDigitalIdentityEntry, IEquatable<X509SubjectKeyIdentifierIdentity>
+public sealed class X509SubjectKeyIdentifierIdentity: ServiceDigitalIdentityEntry, IEquatable<X509SubjectKeyIdentifierIdentity>
 {
     /// <summary>Initializes a new <see cref="X509SubjectKeyIdentifierIdentity"/>.</summary>
     /// <param name="subjectKeyIdentifierBase64">The base64-encoded (schema <c>base64Binary</c>) key identifier, exactly as the document encodes it.</param>
@@ -107,7 +105,7 @@ public sealed class X509SubjectKeyIdentifierIdentity : ServiceDigitalIdentityEnt
 /// no grounds to treat two spellings as one.
 /// </remarks>
 [DebuggerDisplay("X509SubjectNameIdentity: {SubjectName}")]
-public sealed class X509SubjectNameIdentity : ServiceDigitalIdentityEntry, IEquatable<X509SubjectNameIdentity>
+public sealed class X509SubjectNameIdentity: ServiceDigitalIdentityEntry, IEquatable<X509SubjectNameIdentity>
 {
     /// <summary>Initializes a new <see cref="X509SubjectNameIdentity"/>.</summary>
     /// <param name="subjectName">The Subject distinguished name text exactly as the document encodes it.</param>
@@ -163,7 +161,7 @@ public sealed class X509SubjectNameIdentity : ServiceDigitalIdentityEntry, IEqua
 /// and the same observation.
 /// </remarks>
 [DebuggerDisplay("OtherDigitalIdentity: {LocalName}")]
-public sealed class OtherDigitalIdentity : ServiceDigitalIdentityEntry, IEquatable<OtherDigitalIdentity>
+public sealed class OtherDigitalIdentity: ServiceDigitalIdentityEntry, IEquatable<OtherDigitalIdentity>
 {
     /// <summary>Initializes a new <see cref="OtherDigitalIdentity"/>.</summary>
     /// <param name="localName">The local (unqualified) element name the test-side XML binding found inside <c>Other</c>.</param>
@@ -216,7 +214,7 @@ public sealed class OtherDigitalIdentity : ServiceDigitalIdentityEntry, IEquatab
 /// to recognise the service — not a chain.
 /// </summary>
 [DebuggerDisplay("ServiceDigitalIdentity: {Entries.Count} entries")]
-public sealed class ServiceDigitalIdentity : IDisposable
+public sealed class ServiceDigitalIdentity: IDisposable
 {
     /// <summary>The alternative identity entries. Empty when the document supplied none.</summary>
     public required IReadOnlyList<ServiceDigitalIdentityEntry> Entries { get; init; }

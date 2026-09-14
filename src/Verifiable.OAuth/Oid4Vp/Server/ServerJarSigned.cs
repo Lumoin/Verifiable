@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Verifiable.JCose;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;
 

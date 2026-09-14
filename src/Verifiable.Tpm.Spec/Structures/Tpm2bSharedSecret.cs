@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Spec.Structures;
 
@@ -61,7 +59,7 @@ public sealed class Tpm2bSharedSecret: SensitiveMemory, ITpmWireType
     /// Initializes a new shared secret with the specified storage.
     /// </summary>
     /// <param name="storage">The memory owner containing the shared-secret bytes.</param>
-    public Tpm2bSharedSecret(IMemoryOwner<byte> storage): base(storage, TpmTags.SharedSecret)
+    public Tpm2bSharedSecret(IMemoryOwner<byte> storage) : base(storage, TpmTags.SharedSecret)
     {
     }
 
@@ -126,7 +124,7 @@ public sealed class Tpm2bSharedSecret: SensitiveMemory, ITpmWireType
 
         //Copy shared-secret bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(size);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, size));
+        sourceBytes.CopyTo(storage.Memory.Span[..size]);
 
         return new Tpm2bSharedSecret(storage);
     }

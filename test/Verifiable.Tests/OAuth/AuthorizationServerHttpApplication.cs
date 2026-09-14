@@ -1,14 +1,12 @@
+using Microsoft.AspNetCore.Http;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Pipelines;
-using Microsoft.AspNetCore.Http;
-using StringValues = Microsoft.Extensions.Primitives.StringValues;
 using Verifiable.Core;
 using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Server;
+using StringValues = Microsoft.Extensions.Primitives.StringValues;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -87,7 +85,7 @@ internal sealed class AuthorizationServerHttpApplication
         IncomingRequest incomingRequest = await BuildIncomingRequestAsync(
             context.Request, context.RequestAborted).ConfigureAwait(false);
 
-        ExchangeContext ExchangeContext = new();
+        ExchangeContext ExchangeContext = [];
         string? tenantSegment = ExtractTenantSegmentFromPath(incomingRequest.Path);
         if(!string.IsNullOrEmpty(tenantSegment))
         {
@@ -145,7 +143,7 @@ internal sealed class AuthorizationServerHttpApplication
         if(path.StartsWith(insertedPrefix, StringComparison.Ordinal))
         {
             int insertedStart = insertedPrefix.Length;
-            int insertedEnd = path.IndexOf('/', insertedStart);
+            int insertedEnd = path.IndexOf('/', insertedStart, StringComparison.Ordinal);
 
             return insertedEnd < 0 ? path[insertedStart..] : path[insertedStart..insertedEnd];
         }
@@ -157,7 +155,7 @@ internal sealed class AuthorizationServerHttpApplication
         if(path.StartsWith(oauthMetadataPrefix, StringComparison.Ordinal))
         {
             int oauthMetadataStart = oauthMetadataPrefix.Length;
-            int oauthMetadataEnd = path.IndexOf('/', oauthMetadataStart);
+            int oauthMetadataEnd = path.IndexOf('/', oauthMetadataStart, StringComparison.Ordinal);
 
             return oauthMetadataEnd < 0 ? path[oauthMetadataStart..] : path[oauthMetadataStart..oauthMetadataEnd];
         }
@@ -168,7 +166,7 @@ internal sealed class AuthorizationServerHttpApplication
             return null;
         }
         int start = prefix.Length;
-        int end = path.IndexOf('/', start);
+        int end = path.IndexOf('/', start, StringComparison.Ordinal);
         return end < 0 ? path[start..] : path[start..end];
     }
 
@@ -189,7 +187,7 @@ internal sealed class AuthorizationServerHttpApplication
         }
 
         int segmentStart = prefix.Length;
-        int segmentEnd = path.IndexOf('/', segmentStart);
+        int segmentEnd = path.IndexOf('/', segmentStart, StringComparison.Ordinal);
         if(segmentEnd < 0)
         {
             return null;
@@ -219,7 +217,7 @@ internal sealed class AuthorizationServerHttpApplication
             return null;
         }
 
-        int handleEnd = path.IndexOf('/', handleStart);
+        int handleEnd = path.IndexOf('/', handleStart, StringComparison.Ordinal);
 
         return handleEnd < 0 ? path[handleStart..] : path[handleStart..handleEnd];
     }
@@ -278,7 +276,7 @@ internal sealed class AuthorizationServerHttpApplication
         RequestHeaders headers = MapHeaders(request.Headers);
 
         return new IncomingRequest(
-            Path: request.Path.HasValue ? request.Path.Value! : string.Empty,
+            Path: request.Path.HasValue ? request.Path.Value : string.Empty,
             Method: request.Method,
             Fields: fields,
             Headers: headers,
@@ -364,7 +362,7 @@ internal sealed class AuthorizationServerHttpApplication
             Memory<byte> destination = httpResponse.BodyWriter.GetMemory(maxByteCount);
             int written = System.Text.Encoding.UTF8.GetBytes(response.Body, destination.Span);
             httpResponse.BodyWriter.Advance(written);
-            await httpResponse.BodyWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+            _ = await httpResponse.BodyWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

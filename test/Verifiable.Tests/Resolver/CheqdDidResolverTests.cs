@@ -1,6 +1,6 @@
 using Verifiable.Core;
-using Verifiable.Core.Resolvers;
 using Verifiable.Core.Did.Methods.Cheqd;
+using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
 
@@ -13,7 +13,7 @@ internal sealed class CheqdDidResolverTests
 {
     //did:cheqd resolution only computes a URL — no network I/O — so a default context
     //suffices; it exists only to satisfy the SSRF-policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 
@@ -42,21 +42,21 @@ internal sealed class CheqdDidResolverTests
     [TestMethod]
     public void ResolveThrowsForNonCheqdIdentifier()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             CheqdDidResolver.Resolve("did:web:example.com"));
     }
 
     [TestMethod]
     public void ResolveThrowsForEmptyString()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             CheqdDidResolver.Resolve(""));
     }
 
     [TestMethod]
     public void ResolveThrowsForNull()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             CheqdDidResolver.Resolve(null!));
     }
 

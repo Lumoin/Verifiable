@@ -1,9 +1,6 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Text;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Verifiable.Cesr;
 using Verifiable.Cesr.Streaming;
 using Verifiable.Cryptography;
@@ -42,7 +39,7 @@ internal sealed class CesrHardeningTests
             header = owner.Memory.Span[..6].ToArray();
         }
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainBinaryAsync(header));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainBinaryAsync(header));
     }
 
 
@@ -56,7 +53,7 @@ internal sealed class CesrHardeningTests
     {
         byte[] header = Encoding.ASCII.GetBytes(CesrCountCodeCodec.EncodeText("--A", MaxLargeCount));
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainTextAsync(header));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainTextAsync(header));
     }
 
 
@@ -72,7 +69,7 @@ internal sealed class CesrHardeningTests
         //-IAD: outer map, 3 quadlets. 0J_a: label "a". --I_____: big map group declaring 64^5-1 quadlets.
         byte[] message = Encoding.ASCII.GetBytes("-IAD0J_a--I_____");
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(message, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(message, BaseMemoryPool.Shared));
     }
 
 
@@ -87,7 +84,7 @@ internal sealed class CesrHardeningTests
         //A 4H (decimal) primitive whose three raw bytes render to the Base64 text "q83v" — not a valid number.
         string decimalCodedNonNumber = CesrPrimitiveCodec.EncodeText("4H", [0xAB, 0xCD, 0xEF]);
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeValuePrimitive(decimalCodedNonNumber, BaseMemoryPool.Shared, out _));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeValuePrimitive(decimalCodedNonNumber, BaseMemoryPool.Shared, out _));
     }
 
 
@@ -102,7 +99,7 @@ internal sealed class CesrHardeningTests
     [DataRow("6AAA")]
     public void RejectsVariablePrimitiveTooShortForItsLeadBytes(string qb64)
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrPrimitiveCodec.DecodeText(qb64, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrPrimitiveCodec.DecodeText(qb64, BaseMemoryPool.Shared));
     }
 
 
@@ -136,7 +133,7 @@ internal sealed class CesrHardeningTests
         byte[] malleated = (byte[])canonical.Clone();
         malleated[1] |= 0x0F;
 
-        Assert.ThrowsExactly<CesrFormatException>(() =>
+        _ = Assert.ThrowsExactly<CesrFormatException>(() =>
         {
             using CesrParsedIndexedSignature _ = CesrIndexedSignatureCodec.DecodeBinary(malleated, BaseMemoryPool.Shared);
         });
@@ -172,7 +169,7 @@ internal sealed class CesrHardeningTests
         byte[] malleated = (byte[])canonical.Clone();
         malleated[1] |= 0x0F;
 
-        Assert.ThrowsExactly<CesrFormatException>(() =>
+        _ = Assert.ThrowsExactly<CesrFormatException>(() =>
         {
             using CesrParsedPrimitive _ = CesrPrimitiveCodec.DecodeBinary(malleated, BaseMemoryPool.Shared);
         });
@@ -189,7 +186,7 @@ internal sealed class CesrHardeningTests
     {
         byte[] message = "-IAB"u8.ToArray();
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(message, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrFieldMapCodec.DecodeFieldMap(message, BaseMemoryPool.Shared));
     }
 
 
@@ -203,7 +200,7 @@ internal sealed class CesrHardeningTests
     {
         byte[] raw = new byte[64];
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrIndexedSignatureCodec.EncodeText("A", raw, index: 64));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrIndexedSignatureCodec.EncodeText("A", raw, index: 64));
     }
 
 
@@ -219,7 +216,7 @@ internal sealed class CesrHardeningTests
         string dualIndex = CesrIndexedSignatureCodec.EncodeText("0A", raw, index: 1, ondex: 1);
         string forgedCurrentOnly = "0B" + dualIndex[2..];
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrIndexedSignatureCodec.DecodeText(forgedCurrentOnly, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrIndexedSignatureCodec.DecodeText(forgedCurrentOnly, BaseMemoryPool.Shared));
     }
 
 
@@ -231,8 +228,8 @@ internal sealed class CesrHardeningTests
     [TestMethod]
     public void RejectsEncodingIndexedSignatureOfWrongRawLength()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrIndexedSignatureCodec.EncodeText("A", new byte[10], index: 0));
-        Assert.ThrowsExactly<CesrFormatException>(() =>
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrIndexedSignatureCodec.EncodeText("A", new byte[10], index: 0));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() =>
         {
             using IMemoryOwner<byte> _ = CesrIndexedSignatureCodec.EncodeBinary("A", new byte[70], index: 0, BaseMemoryPool.Shared);
         });
@@ -247,12 +244,12 @@ internal sealed class CesrHardeningTests
     [TestMethod]
     public void RejectsEncodingFixedPrimitiveOfWrongRawLength()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() =>
+        _ = Assert.ThrowsExactly<CesrFormatException>(() =>
         {
             using IMemoryOwner<byte> _ = CesrPrimitiveCodec.EncodeBinary("D", new byte[31], BaseMemoryPool.Shared);
         });
 
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrPrimitiveCodec.EncodeText("D", new byte[31]));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrPrimitiveCodec.EncodeText("D", new byte[31]));
     }
 
 
@@ -268,7 +265,7 @@ internal sealed class CesrHardeningTests
         //Valid tiny JSON with no "v" field, but the "x" field's value matches the version-string shape.
         byte[] smuggled = Encoding.ASCII.GetBytes("{\"x\":\"AAAAaaaaaaJSONAAAU.\"}");
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainTextAsync(smuggled));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainTextAsync(smuggled));
     }
 
 
@@ -281,10 +278,10 @@ internal sealed class CesrHardeningTests
     public async Task RejectsUnsupportedTopLevelStreamItemInBothDomains()
     {
         //Binary: 0x00 0x00 — the leading selector sextet is 'A', an ordinary primitive selector, not '-'/'_'.
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainBinaryAsync([0x00, 0x00]));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainBinaryAsync([0x00, 0x00]));
 
         //Text: "AA" — the leading character 'A' is an ordinary primitive selector, not a count or op code.
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainTextAsync("AA"u8.ToArray()));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainTextAsync("AA"u8.ToArray()));
     }
 
 
@@ -299,7 +296,7 @@ internal sealed class CesrHardeningTests
         string keyText = CesrPrimitiveCodec.EncodeText("D", new byte[32]);
         byte[] stream = Encoding.ASCII.GetBytes(CesrCountCodeCodec.EncodeText("-V", keyText.Length / 4) + keyText);
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainMessagesTextAsync(stream));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await DrainMessagesTextAsync(stream));
     }
 
 
@@ -311,7 +308,7 @@ internal sealed class CesrHardeningTests
     [TestMethod]
     public void RejectsFieldMapNestedPastTheDepthBoundButAdmitsNestingWithinIt()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => DecodeNestedMapOfDepth(40));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => DecodeNestedMapOfDepth(40));
 
         //A modestly nested map round-trips: decoding its own encoding recovers the same nesting depth.
         MessageFieldMap decoded = DecodeNestedMapOfDepth(8);

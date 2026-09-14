@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
@@ -39,7 +35,7 @@ public abstract class JAdESArchiveTimestampPayloadSource
 /// (JA-5.3.6.2.3-02): "concatenate the JWS Payload value" — the raw payload bytes, unencoded.
 /// </summary>
 [DebuggerDisplay("JAdESRawPayloadImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class JAdESRawPayloadImprintSource : JAdESArchiveTimestampPayloadSource
+public sealed class JAdESRawPayloadImprintSource: JAdESArchiveTimestampPayloadSource
 {
     /// <summary>Initializes a new <see cref="JAdESRawPayloadImprintSource"/>.</summary>
     /// <param name="payloadBytes">The raw JWS Payload bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory.</param>
@@ -60,7 +56,7 @@ public sealed class JAdESRawPayloadImprintSource : JAdESArchiveTimestampPayloadS
 /// serialization, byte-exact.
 /// </summary>
 [DebuggerDisplay("JAdESBase64UrlPayloadImprintSource: {Base64UrlPayloadText.Length} bytes")]
-public sealed class JAdESBase64UrlPayloadImprintSource : JAdESArchiveTimestampPayloadSource
+public sealed class JAdESBase64UrlPayloadImprintSource: JAdESArchiveTimestampPayloadSource
 {
     /// <summary>Initializes a new <see cref="JAdESBase64UrlPayloadImprintSource"/>.</summary>
     /// <param name="base64UrlPayloadText">
@@ -93,7 +89,7 @@ public sealed class JAdESBase64UrlPayloadImprintSource : JAdESArchiveTimestampPa
 /// <see cref="ProcessedBytes"/> alongside every other <c>pars</c> element, not a separate parameter here.
 /// </remarks>
 [DebuggerDisplay("JAdESSigDProcessedPayloadImprintSource: {ProcessedBytes.Length} bytes")]
-public sealed class JAdESSigDProcessedPayloadImprintSource : JAdESArchiveTimestampPayloadSource
+public sealed class JAdESSigDProcessedPayloadImprintSource: JAdESArchiveTimestampPayloadSource
 {
     /// <summary>Initializes a new <see cref="JAdESSigDProcessedPayloadImprintSource"/>.</summary>
     /// <param name="processedBytes">
@@ -651,7 +647,7 @@ public static class JAdESMessageImprints
     /// compare).
     /// </summary>
     private static string? RequireOwnCanonAlg<TExpected>(JAdESUnsignedHeaderElement element, string expectedKind)
-        where TExpected: JAdESUnsignedHeaderElement
+        where TExpected : JAdESUnsignedHeaderElement
     {
         if(element is not TExpected)
         {

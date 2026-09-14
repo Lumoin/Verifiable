@@ -235,7 +235,7 @@ public abstract record JAdESRuleViolation
 /// <c>x5t</c> member — forbidden unconditionally (JA-5.1.6-01). See the <see cref="JAdESHeaderRules"/> remarks
 /// for why this can only ever fire via the caller-attested <c>x5tWasPresentOnWire</c> fact.
 /// </summary>
-public sealed record JAdESX5tForbiddenViolation : JAdESRuleViolation
+public sealed record JAdESX5tForbiddenViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.1.6-01";
@@ -252,7 +252,7 @@ public sealed record JAdESX5tForbiddenViolation : JAdESRuleViolation
 /// <see cref="JAdESProtectedHeaders.X5tHashO"/>, nor <see cref="JAdESProtectedHeaders.SigX5ts"/> is present
 /// (JA-5.1.7-04: the four-way signing-certificate-identification disjunction).
 /// </summary>
-public sealed record JAdESSigningCertificateIdentificationViolation : JAdESRuleViolation
+public sealed record JAdESSigningCertificateIdentificationViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.1.7-04";
@@ -268,7 +268,7 @@ public sealed record JAdESSigningCertificateIdentificationViolation : JAdESRuleV
 /// <see cref="JAdESProtectedHeaders.ContentType"/> is present while the JWS Payload this signature covers is
 /// caller-attested to itself be a (counter-signed) signature (JA-5.1.3-05).
 /// </summary>
-public sealed record JAdESContentTypeCountersignedPayloadViolation : JAdESRuleViolation
+public sealed record JAdESContentTypeCountersignedPayloadViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.1.3-05";
@@ -284,7 +284,7 @@ public sealed record JAdESContentTypeCountersignedPayloadViolation : JAdESRuleVi
 /// <see cref="JAdESProtectedHeaders.SigD"/> is present but the JWS Payload this signature covers is caller-
 /// attested to be attached (JA-5.2.8.1-02).
 /// </summary>
-public sealed record JAdESDetachedObjectReferenceAttachedPayloadViolation : JAdESRuleViolation
+public sealed record JAdESDetachedObjectReferenceAttachedPayloadViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.2.8.1-02";
@@ -300,7 +300,7 @@ public sealed record JAdESDetachedObjectReferenceAttachedPayloadViolation : JAdE
 /// <see cref="JAdESProtectedHeaders.SigD"/> is present but <see cref="JAdESProtectedHeaders.CriticalLabels"/>
 /// does not include <c>"sigD"</c> (JA-5.1.9-04/-05).
 /// </summary>
-public sealed record JAdESDetachedObjectReferenceCriticalLabelViolation : JAdESRuleViolation
+public sealed record JAdESDetachedObjectReferenceCriticalLabelViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.1.9-04";
@@ -317,7 +317,7 @@ public sealed record JAdESDetachedObjectReferenceCriticalLabelViolation : JAdESR
 /// (<see cref="JAdESHttpHeadersReference"/>) but <see cref="JAdESProtectedHeaders.B64"/> is not present-and-
 /// <see langword="false"/> (JA-5.1.10-04 / JA-5.2.8.2-02).
 /// </summary>
-public sealed record JAdESHttpHeadersMechanismB64Violation : JAdESRuleViolation
+public sealed record JAdESHttpHeadersMechanismB64Violation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.1.10-04";
@@ -334,7 +334,7 @@ public sealed record JAdESHttpHeadersMechanismB64Violation : JAdESRuleViolation
 /// (<see cref="JAdESHttpHeadersReference"/>) but at least one entry of
 /// <see cref="JAdESHttpHeadersReference.HeaderNames"/> is not already lowercase (JA-5.2.8.2-04).
 /// </summary>
-public sealed record JAdESHttpHeadersParsNotLowercaseViolation : JAdESRuleViolation
+public sealed record JAdESHttpHeadersParsNotLowercaseViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.2.8.2-04";
@@ -350,7 +350,7 @@ public sealed record JAdESHttpHeadersParsNotLowercaseViolation : JAdESRuleViolat
 /// <see cref="JAdESProtectedHeaders.PayloadTimestamps"/> is present and carries a non-null <c>canonAlg</c>
 /// member (JA-5.2.6-08).
 /// </summary>
-public sealed record JAdESPayloadTimestampCanonAlgViolation : JAdESRuleViolation
+public sealed record JAdESPayloadTimestampCanonAlgViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.2.6-08";
@@ -366,7 +366,7 @@ public sealed record JAdESPayloadTimestampCanonAlgViolation : JAdESRuleViolation
 /// <c>iat</c>/<c>sigT</c> mandatory-optional flip date (2025-07-15T00:00:00Z) has passed, so <c>iat</c> is
 /// mandatory from the outset for every conformance evaluation this rule surface performs (JA-5.1.11-08).
 /// </summary>
-public sealed record JAdESIssuedAtMissingViolation : JAdESRuleViolation
+public sealed record JAdESIssuedAtMissingViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.1.11-08";
@@ -381,7 +381,7 @@ public sealed record JAdESIssuedAtMissingViolation : JAdESRuleViolation
 /// <summary>
 /// No <c>sigTst</c> instance is present in <c>etsiU</c> at the declared level B-T or above (<see cref="JAdESLevelRules"/>).
 /// </summary>
-public sealed record JAdESSignatureTimestampMissingViolation : JAdESRuleViolation
+public sealed record JAdESSignatureTimestampMissingViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-26";
@@ -398,7 +398,7 @@ public sealed record JAdESSignatureTimestampMissingViolation : JAdESRuleViolatio
 /// other than exactly one (<see cref="JAdESLevelRules"/>, letter c).
 /// </summary>
 /// <param name="TokenCount">The number of tokens actually found.</param>
-public sealed record JAdESSignatureTimestampTokenCountViolation(int TokenCount) : JAdESRuleViolation
+public sealed record JAdESSignatureTimestampTokenCountViolation(int TokenCount): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-c";
@@ -439,7 +439,7 @@ public enum JAdESTimestampContainerKind
 /// encapsulate only that shape (<see cref="JAdESLevelRules"/>, JA-6.3-03).
 /// </summary>
 /// <param name="Kind">Which <c>tstContainer</c>-bearing element kind the non-baseline token was found on.</param>
-public sealed record JAdESTimestampTokenNotBaselineViolation(JAdESTimestampContainerKind Kind) : JAdESRuleViolation
+public sealed record JAdESTimestampTokenNotBaselineViolation(JAdESTimestampContainerKind Kind): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-03";
@@ -455,7 +455,7 @@ public sealed record JAdESTimestampTokenNotBaselineViolation(JAdESTimestampConta
 /// <summary>
 /// No <c>arcTst</c> instance is present in <c>etsiU</c> at the declared level B-LTA (<see cref="JAdESLevelRules"/>).
 /// </summary>
-public sealed record JAdESArchiveTimestampMissingViolation : JAdESRuleViolation
+public sealed record JAdESArchiveTimestampMissingViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-42";
@@ -499,7 +499,7 @@ public enum JAdESRefsFamilyKind
 /// family (<see cref="JAdESLevelRules"/>).
 /// </summary>
 /// <param name="Kind">Which of the six <c>refs</c>-family kinds was found.</param>
-public sealed record JAdESRefsFamilyForbiddenViolation(JAdESRefsFamilyKind Kind) : JAdESRuleViolation
+public sealed record JAdESRefsFamilyForbiddenViolation(JAdESRefsFamilyKind Kind): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -540,7 +540,7 @@ public enum JAdESReferencesTimestampGenerationKind
 /// kinds share (<see cref="JAdESLevelRules"/>, JA-A.1.5.1.1-04/JA-A.1.5.2.1-04).
 /// </summary>
 /// <param name="Kind">Which of the two time-stamp kinds failed the gate.</param>
-public sealed record JAdESReferencesTimestampGenerationGateViolation(JAdESReferencesTimestampGenerationKind Kind) : JAdESRuleViolation
+public sealed record JAdESReferencesTimestampGenerationGateViolation(JAdESReferencesTimestampGenerationKind Kind): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -563,7 +563,7 @@ public sealed record JAdESReferencesTimestampGenerationGateViolation(JAdESRefere
 /// <c>sigPId</c> is also incorporated and carries the signature policy document's digest (<see cref="JAdESLevelRules"/>,
 /// letter b).
 /// </summary>
-public sealed record JAdESSignaturePolicyStoreGateViolation : JAdESRuleViolation
+public sealed record JAdESSignaturePolicyStoreGateViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-b";
@@ -597,7 +597,7 @@ public enum JAdESAttributeReferencesKind
 /// Otherwise, axRefs and arRefs shall not be used").
 /// </summary>
 /// <param name="Kind">Which of the two kinds failed the gate.</param>
-public sealed record JAdESAttributeReferencesGateViolation(JAdESAttributeReferencesKind Kind) : JAdESRuleViolation
+public sealed record JAdESAttributeReferencesGateViolation(JAdESAttributeReferencesKind Kind): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-h";
@@ -615,7 +615,7 @@ public sealed record JAdESAttributeReferencesGateViolation(JAdESAttributeReferen
 /// satisfies the "Incorporation of validation data for electronic time-stamps" service (<see cref="JAdESLevelRules"/>,
 /// letter j).
 /// </summary>
-public sealed record JAdESTimestampValidationDataServiceViolation : JAdESRuleViolation
+public sealed record JAdESTimestampValidationDataServiceViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.3-j";
@@ -632,7 +632,7 @@ public sealed record JAdESTimestampValidationDataServiceViolation : JAdESRuleVio
 /// An <c>xRefs</c> element contains a certificate reference whose digest matches a caller-supplied digest of the
 /// JAdES signature's own signing certificate (<see cref="JAdESLevelRules"/>, JA-A.1.1-02).
 /// </summary>
-public sealed record JAdESReferencesSigningCertificateExclusionViolation : JAdESRuleViolation
+public sealed record JAdESReferencesSigningCertificateExclusionViolation: JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-A.1.1-02";
@@ -670,7 +670,7 @@ public enum JAdESRefsFamilyDigestSurface
 /// posture (<see cref="JAdESLevelRules"/>, JA-6.2.1-02).
 /// </summary>
 /// <param name="Surface">Which digest-algorithm-identifier surface named MD5.</param>
-public sealed record JAdESRefsFamilyMd5DigestAlgorithmViolation(JAdESRefsFamilyDigestSurface Surface) : JAdESRuleViolation
+public sealed record JAdESRefsFamilyMd5DigestAlgorithmViolation(JAdESRefsFamilyDigestSurface Surface): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-6.2.1-02";
@@ -761,7 +761,7 @@ public sealed record JAdESTimestampTokenBindingViolation(
     JAdESTimestampTokenBindingFailureReason Reason,
     string Detail,
     int InstanceOrdinal,
-    int TokenOrdinal) : JAdESRuleViolation
+    int TokenOrdinal): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Kind switch
@@ -826,7 +826,7 @@ public enum JAdESCounterSignatureVerificationFailureReason
 [DebuggerDisplay("JAdESCounterSignatureVerificationViolation: {Reason} (instance #{InstanceOrdinal})")]
 public sealed record JAdESCounterSignatureVerificationViolation(
     JAdESCounterSignatureVerificationFailureReason Reason,
-    int InstanceOrdinal) : JAdESRuleViolation
+    int InstanceOrdinal): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-5.3.2-03";
@@ -866,7 +866,7 @@ public enum JAdESReferenceMaterialKind
 [DebuggerDisplay("JAdESReferencesValidationDataConsistencyViolation: {Surface}/{MaterialKind}")]
 public sealed record JAdESReferencesValidationDataConsistencyViolation(
     JAdESRefsFamilyDigestSurface Surface,
-    JAdESReferenceMaterialKind MaterialKind) : JAdESRuleViolation
+    JAdESReferenceMaterialKind MaterialKind): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => Surface switch
@@ -895,7 +895,7 @@ public sealed record JAdESReferencesValidationDataConsistencyViolation(
 /// </summary>
 /// <param name="Kind">The undisclosed catch-all element's own <c>etsiU</c> JSON key.</param>
 [DebuggerDisplay("JAdESUndisclosedAlternativeMechanismViolation: {Kind}")]
-public sealed record JAdESUndisclosedAlternativeMechanismViolation(string Kind) : JAdESRuleViolation
+public sealed record JAdESUndisclosedAlternativeMechanismViolation(string Kind): JAdESRuleViolation
 {
     /// <inheritdoc/>
     public override string RequirementId => "JA-D-02";

@@ -1,6 +1,4 @@
 using System.Text;
-using Verifiable.OAuth;
-using Verifiable.Server;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -59,17 +57,17 @@ internal sealed class JsonAppenderTests
     {
         StringBuilder sb = new();
         JsonAppender.AppendValue(sb, null);
-        sb.Append('|');
+        _ = sb.Append('|');
         JsonAppender.AppendValue(sb, "text");
-        sb.Append('|');
+        _ = sb.Append('|');
         JsonAppender.AppendValue(sb, true);
-        sb.Append('|');
+        _ = sb.Append('|');
         JsonAppender.AppendValue(sb, false);
-        sb.Append('|');
+        _ = sb.Append('|');
         JsonAppender.AppendValue(sb, 42);
-        sb.Append('|');
+        _ = sb.Append('|');
         JsonAppender.AppendValue(sb, -7L);
-        sb.Append('|');
+        _ = sb.Append('|');
         JsonAppender.AppendValue(sb, 3.14);
 
         Assert.AreEqual("null|\"text\"|true|false|42|-7|3.14", sb.ToString());
@@ -164,7 +162,7 @@ internal sealed class JsonAppenderTests
     public void IncrementalFieldWritersTrackFirstFlag()
     {
         StringBuilder sb = new();
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
 
         JsonAppender.AppendStringField(sb, "name", "Veikko", ref first);
@@ -173,7 +171,7 @@ internal sealed class JsonAppenderTests
         JsonAppender.AppendUriField(sb, "home", new Uri("https://example.org/"), ref first);
         JsonAppender.AppendStringArrayField(sb, "tags", SampleTags, ref first);
 
-        sb.Append('}');
+        _ = sb.Append('}');
 
         Assert.AreEqual(
             "{\"name\":\"Veikko\",\"age\":42,\"active\":true,\"home\":\"https://example.org/\",\"tags\":[\"alpha\",\"beta\"]}",
@@ -187,11 +185,11 @@ internal sealed class JsonAppenderTests
     public void AppendRawFieldInlinesPreserializedValue()
     {
         StringBuilder sb = new();
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
         JsonAppender.AppendRawField(sb, "jwks",
             "{\"keys\":[{\"kty\":\"EC\"}]}", ref first);
-        sb.Append('}');
+        _ = sb.Append('}');
 
         Assert.AreEqual("{\"jwks\":{\"keys\":[{\"kty\":\"EC\"}]}}", sb.ToString());
     }
@@ -201,13 +199,13 @@ internal sealed class JsonAppenderTests
     public void AppendUriArrayFieldUsesOriginalString()
     {
         StringBuilder sb = new();
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
 
         JsonAppender.AppendUriArrayField(sb, "redirect_uris",
             SampleRedirectUris, ref first);
 
-        sb.Append('}');
+        _ = sb.Append('}');
 
         Assert.AreEqual(
             "{\"redirect_uris\":[\"https://example.org/cb\",\"https://wallet.example.com/cb2?state=abc\"]}",
@@ -219,7 +217,7 @@ internal sealed class JsonAppenderTests
     public void RentReturnsReusableBufferAfterReturn()
     {
         StringBuilder rented = JsonAppender.Rent();
-        rented.Append("first use");
+        _ = rented.Append("first use");
         Assert.AreEqual("first use", rented.ToString());
 
         JsonAppender.Return(rented);
@@ -235,7 +233,7 @@ internal sealed class JsonAppenderTests
     public void ReturnDropsOversizeBuffersToBoundThePool()
     {
         StringBuilder oversize = new(capacity: 256 * 1024);
-        oversize.Append('x');
+        _ = oversize.Append('x');
 
         //Must not throw; oversize buffer is dropped rather than retained.
         JsonAppender.Return(oversize);

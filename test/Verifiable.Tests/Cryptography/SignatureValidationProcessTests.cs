@@ -1,13 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -93,7 +88,7 @@ internal sealed class SignatureValidationProcessTests
             "Clause A.3.2: the Basic Signature validation algorithm does not process the signature time-stamp attribute, so the status is indeterminate.");
         Assert.Contains(SignatureValidationSubIndication.RevokedNoProofOfExistence, outcome.Conclusion.SubIndications,
             "Clause A.3.2 names INDETERMINATE/REVOKED_NO_POE.");
-        Assert.IsInstanceOfType<CertificateRevocationReportData>(outcome.Conclusion.ReportData[0],
+        _ = Assert.IsInstanceOfType<CertificateRevocationReportData>(outcome.Conclusion.ReportData[0],
             "Table 6 mandates the chain, the revocation time and, when available, the reason.");
         Assert.AreEqual(SignatureValidationProcessIdentifier.Basic, outcome.Conclusion.ProcessIdentifier,
             "Clause 5.1.3 requires the validation process that was used to be reported.");
@@ -219,7 +214,7 @@ internal sealed class SignatureValidationProcessTests
         Assert.AreEqual(SignatureValidationProcessIdentifier.LongTermAvailability, outcome.Conclusion.ProcessIdentifier,
             "The process reported has to be the one that ran.");
         Assert.IsNotNull(outcome.LongTermValidation, "The long-term process ran, so its own result must be surfaced.");
-        Assert.IsTrue(outcome.LongTermValidation!.HasLongTermAvailabilityAttributes,
+        Assert.IsTrue(outcome.LongTermValidation.HasLongTermAvailabilityAttributes,
             "The signature carries an archive time-stamp, which is what step 3) of clause 5.6.3.4 branches on.");
     }
 
@@ -305,7 +300,7 @@ internal sealed class SignatureValidationProcessTests
             "Step 2)a) requires a proof of existence for the certificate and its revocation data at or before control-time.");
         Assert.Contains(SignatureValidationSubIndication.NoProofOfExistence, withoutProofs.Conclusion.SubIndications,
             "Table 24 names INDETERMINATE/NO_POE as the block's only indeterminate outcome.");
-        Assert.IsInstanceOfType<MissingProofOfExistenceReportData>(withoutProofs.Conclusion.ReportData[0],
+        _ = Assert.IsInstanceOfType<MissingProofOfExistenceReportData>(withoutProofs.Conclusion.ReportData[0],
             "Table 6 mandates at least the objects for which the proofs of existence are missing.");
     }
 
@@ -1100,7 +1095,7 @@ internal sealed class SignatureValidationProcessTests
         /// <typeparam name="T">The artefact's type.</typeparam>
         /// <param name="artefact">The artefact.</param>
         /// <returns>The same artefact.</returns>
-        private T Own<T>(T artefact) where T: IDisposable
+        private T Own<T>(T artefact) where T : IDisposable
         {
             Owned.Add(artefact);
 

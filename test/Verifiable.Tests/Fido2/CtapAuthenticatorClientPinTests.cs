@@ -1,7 +1,4 @@
-using System.Buffers;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
-using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.JCose;
@@ -33,7 +30,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [TestMethod]
     public async Task GetPinRetriesReportsSeededCounter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-pin-retries",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-pin-retries", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetPinRetries);
@@ -51,7 +48,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [TestMethod]
     public async Task GetUvRetriesReportsSeededCounter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-uv-retries",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-uv-retries", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetUvRetries);
@@ -71,7 +68,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [TestMethod]
     public async Task GetKeyAgreementForProtocolOneReturnsValidCoseKey()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-one",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-one", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(
@@ -89,7 +86,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [TestMethod]
     public async Task GetKeyAgreementForProtocolTwoReturnsValidDistinctCoseKey()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-two",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-two", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapClientPinResponse protocolOneResponse = await SendClientPinAsync(
@@ -109,7 +106,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [TestMethod]
     public async Task GetKeyAgreementWithoutProtocolReturnsMissingParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-missing-protocol",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-missing-protocol", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement);
@@ -123,7 +120,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [TestMethod]
     public async Task GetKeyAgreementWithUnsupportedProtocolReturnsInvalidParameter()
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-bad-protocol",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator("clientpin-get-key-agreement-bad-protocol", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetKeyAgreement, PinUvAuthProtocol: 99);
@@ -151,7 +148,7 @@ internal sealed class CtapAuthenticatorClientPinTests
     [DataRow(0x63, DisplayName = "an arbitrary out-of-table value")]
     public async Task UnsupportedSubCommandReturnsInvalidSubcommand(int subCommand)
     {
-        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"clientpin-unsupported-subcommand-{subCommand:X2}",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapClientPinFixtures.CreateSimulator($"clientpin-unsupported-subcommand-{subCommand:X2}", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var request = new CtapClientPinRequest(SubCommand: subCommand);
@@ -165,13 +162,13 @@ internal sealed class CtapAuthenticatorClientPinTests
     private static void AssertValidKeyAgreementCoseKey(CoseKey? coseKey)
     {
         Assert.IsNotNull(coseKey);
-        Assert.AreEqual(CoseKeyTypes.Ec2, coseKey!.Kty, "kty must be EC2 (2).");
+        Assert.AreEqual(CoseKeyTypes.Ec2, coseKey.Kty, "kty must be EC2 (2).");
         Assert.AreEqual(-25, coseKey.Alg, "alg must be the literal -25 (CTAP 2.3 §6.5.6 line 6182).");
         Assert.AreEqual(CoseKeyCurves.P256, coseKey.Curve, "crv must be P-256 (1).");
         Assert.IsNotNull(coseKey.X);
-        Assert.HasCount(32, coseKey.X!.Value.ToArray());
+        Assert.HasCount(32, coseKey.X.Value.ToArray());
         Assert.IsNotNull(coseKey.Y);
-        Assert.HasCount(32, coseKey.Y!.Value.ToArray());
+        Assert.HasCount(32, coseKey.Y.Value.ToArray());
         Assert.IsNull(coseKey.EncodedYCompressionSign, "getKeyAgreement's COSE_Key carries no other optional member.");
         Assert.IsNull(coseKey.N, "getKeyAgreement's COSE_Key carries no RSA members.");
         Assert.IsNull(coseKey.E, "getKeyAgreement's COSE_Key carries no RSA members.");

@@ -1,5 +1,4 @@
 using System.Text;
-using Verifiable.Server;
 
 namespace Verifiable.Vcalm.Exchange;
 
@@ -27,16 +26,16 @@ public static class VcalmCallbackComposer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append("{\"");
+            _ = sb.Append("{\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Event);
-            sb.Append("\":{\"");
+            _ = sb.Append("\":{\"");
             JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Data);
-            sb.Append("\":{");
+            _ = sb.Append("\":{");
 
             bool first = true;
             JsonAppender.AppendStringField(sb, VcalmParameterNames.ExchangeId, exchangeId, ref first);
 
-            sb.Append("}}}");
+            _ = sb.Append("}}}");
 
             return sb.ToString();
         }

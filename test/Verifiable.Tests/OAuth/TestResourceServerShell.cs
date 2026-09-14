@@ -1,11 +1,9 @@
-using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -14,7 +12,6 @@ using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -163,7 +160,7 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
-        builder.WebHost.ConfigureKestrel(options =>
+        _ = builder.WebHost.ConfigureKestrel(options =>
             LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
@@ -249,6 +246,15 @@ internal sealed class TestResourceServerShell: IAsyncDisposable
             //(FlowState?, int) shape at all.
             LoadFlowStateAsync = (tenantId, flowId, ctx, ct) =>
                 ValueTask.FromResult(((FlowState?)null, 0)),
+            //Stateless metadata dispatch never claims a flow; wired only to satisfy Validate().
+            ClaimFlowStateAsync = (tenantId, flowId, expectedStepCount, ctx, ct) =>
+                ValueTask.FromResult(true),
+            //Stateless metadata dispatch never deletes a flow record either; wired only to satisfy
+            //AuthorizationServerIntegration.Validate(), which requires it unconditionally for the
+            //Authorization Code lifecycle's revocation paths even though this resource-server-only
+            //host never runs them.
+            DeleteFlowStateAsync = (tenantId, flowId, ctx, ct) =>
+                ValueTask.CompletedTask,
 
             ResolvePolicyAsync = (reg, ctx, ct) =>
                 PolicyProfiles.DefaultResolvePolicyAsync((ClientRecord)reg, ctx, ct),

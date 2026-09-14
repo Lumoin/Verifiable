@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Verifiable.Json;
@@ -145,7 +143,7 @@ internal static class ManualJsonReader
                 case JsonTokenType.PropertyName:
                 {
                     var (container, _) = stack.Pop();
-                    stack.Push((container, reader.GetString()!));
+                    stack.Push((container, reader.GetString()));
                     break;
                 }
                 case JsonTokenType.StartObject:

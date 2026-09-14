@@ -1,20 +1,14 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -252,7 +246,7 @@ internal sealed class StatusListIssuerKeysTests
         new()
         {
             StatusListUri = ListUrl,
-            Header = new UnverifiedJwtHeader(new Dictionary<string, object>(StringComparer.Ordinal)
+            Header = new(new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 [WellKnownJwkMemberNames.Alg] = WellKnownJwaValues.Es256,
                 [WellKnownJoseHeaderNames.Typ] = StatusListJwtType,

@@ -1,8 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -53,7 +52,7 @@ internal sealed class TokenExchangeRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        OutgoingFormFields form = result.Value!;
+        OutgoingFormFields form = result.Value;
         Assert.HasCount(3, form);
         Assert.AreEqual(WellKnownGrantTypes.TokenExchange, form[OAuthRequestParameterNames.GrantType]);
         Assert.AreEqual(SubjectTokenValue, form[OAuthRequestParameterNames.SubjectToken]);
@@ -84,7 +83,7 @@ internal sealed class TokenExchangeRequestBuilderTests
             });
 
             Assert.IsTrue(result.IsSuccess);
-            OutgoingFormFields form = result.Value!;
+            OutgoingFormFields form = result.Value;
             Assert.IsTrue(form.ContainsKey(OAuthRequestParameterNames.ActorToken), $"actor_token missing for {actorTokenType}.");
             Assert.IsTrue(form.ContainsKey(OAuthRequestParameterNames.ActorTokenType), $"actor_token_type missing for {actorTokenType}.");
             Assert.AreEqual(ActorTokenValue, form[OAuthRequestParameterNames.ActorToken]);
@@ -104,7 +103,7 @@ internal sealed class TokenExchangeRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        OutgoingFormFields form = result.Value!;
+        OutgoingFormFields form = result.Value;
         Assert.IsFalse(form.ContainsKey(OAuthRequestParameterNames.ActorToken));
         Assert.IsFalse(form.ContainsKey(OAuthRequestParameterNames.ActorTokenType));
     }
@@ -127,7 +126,7 @@ internal sealed class TokenExchangeRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        IReadOnlyList<string> resourceOccurrences = result.Value!.GetValues(OAuthRequestParameterNames.Resource);
+        IReadOnlyList<string> resourceOccurrences = result.Value.GetValues(OAuthRequestParameterNames.Resource);
         Assert.HasCount(3, resourceOccurrences);
         Assert.AreEqual("https://rs1.example.com/api", resourceOccurrences[0]);
         Assert.AreEqual("http://rs2.example.com/api", resourceOccurrences[1]);
@@ -177,7 +176,7 @@ internal sealed class TokenExchangeRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.AreEqual(resourceWithQuery, result.Value![OAuthRequestParameterNames.Resource]);
+        Assert.AreEqual(resourceWithQuery, result.Value[OAuthRequestParameterNames.Resource]);
     }
 
 
@@ -235,7 +234,7 @@ internal sealed class TokenExchangeRequestBuilderTests
         });
 
         Assert.IsTrue(result.IsSuccess);
-        OutgoingFormFields form = result.Value!;
+        OutgoingFormFields form = result.Value;
         Assert.AreEqual(TokenTypeNames.GetName(TokenType.AccessToken), form[OAuthRequestParameterNames.RequestedTokenType]);
         Assert.AreEqual("https://logical-service.example", form[OAuthRequestParameterNames.Audience]);
         Assert.AreEqual(GrantedScope, form[OAuthRequestParameterNames.Scope]);

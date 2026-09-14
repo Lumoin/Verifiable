@@ -1,35 +1,30 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Core;
-using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.OAuth;
-using Verifiable.OAuth.Server;
-using Verifiable.Vcalm;
-using Verifiable.Vcalm.Exchange;
 using Verifiable.Tests.DataIntegrity;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
-using Verifiable.Server;
+using Verifiable.Vcalm;
+using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -116,7 +111,7 @@ internal sealed class VcalmHolderEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
 
@@ -228,7 +223,7 @@ internal sealed class VcalmHolderEndpointTests
         DataIntegritySecuredCredential baseB = await CreateBaseProofedCredentialAsync(CreateSdIssuerKeys(), VmB).ConfigureAwait(false);
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
 
         //Per-tenant derive configuration resolved off the dispatcher-stamped tenant.
         Dictionary<string, VcalmCredentialDerivation> derivationBySegment = new(StringComparer.Ordinal)
@@ -259,9 +254,9 @@ internal sealed class VcalmHolderEndpointTests
     /// unhandled 500.
     /// </summary>
     [TestMethod]
-    [DataRow("/credentialSubject/doesNotExist", "non-resolving pointer")]
-    [DataRow("/credentialSubject/degree/0", "array-index pointer")]
-    public async Task DeriveNonResolvingPointerYields400(string pointer, string reason)
+    [DataRow("/credentialSubject/doesNotExist")]
+    [DataRow("/credentialSubject/degree/0")]
+    public async Task DeriveNonResolvingPointerYields400(string pointer)
     {
         await using TestHostShell app = new(TimeProvider);
         SdIssuerContext sd = CreateSdIssuerKeys();
@@ -271,7 +266,8 @@ internal sealed class VcalmHolderEndpointTests
         string deriveBody = "{\"verifiableCredential\":" + SerializeCredential(baseCredential)
             + ",\"options\":{\"selectivePointers\":[\"" + pointer + "\"]}}";
 
-        //The §3.8 process-safety boundary maps the selector's throw to a sanitized 400 ({reason}), not a 500.
+        //A non-resolving pointer (missing property or an out-of-range array index) makes the §3.5.1
+        //fragment selector throw; the §3.8 process-safety boundary maps that to a sanitized 400, never a 500.
         using JsonDocument _ = await PostDeriveAsync(app, segment, deriveBody, expectedStatus: 400).ConfigureAwait(false);
     }
 
@@ -332,7 +328,7 @@ internal sealed class VcalmHolderEndpointTests
             "POST",
             new RequestFields(),
             verifyBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, verifyResponse.StatusCode, verifyResponse.Body);
@@ -385,7 +381,7 @@ internal sealed class VcalmHolderEndpointTests
 
         //The channel the holder is actually answering over belongs to a DIFFERENT verifier than the
         //one the request's domain names — the §3.4.3.2 mismatch the holder must refuse fail-closed.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCurrentChannelDomain("attacker.example");
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -418,7 +414,7 @@ internal sealed class VcalmHolderEndpointTests
         string createBody = "{\"presentation\":" + presentationJson
             + ",\"options\":{\"challenge\":\"c-1\",\"domain\":\"" + Domain + "\"}}";
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetCurrentChannelDomain(Domain);
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
@@ -452,7 +448,7 @@ internal sealed class VcalmHolderEndpointTests
         //§3.5.3 list: the created presentation appears in the listing.
         ServerHttpResponse listResponse = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmGetPresentations, "GET",
-            new RequestFields(), new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, listResponse.StatusCode, listResponse.Body);
         using JsonDocument listDoc = JsonDocument.Parse(listResponse.Body);
         Assert.AreEqual(JsonValueKind.Array, listDoc.RootElement.ValueKind, "§3.5.3 returns an array.");
@@ -460,7 +456,7 @@ internal sealed class VcalmHolderEndpointTests
 
         //§3.5.4 get-by-id: 200 with the stored presentation.
         ServerHttpResponse getResponse = await app.DispatchVcalmPresentationByIdAsync(
-            segment, "GET", PresentationId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", PresentationId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, getResponse.StatusCode, getResponse.Body);
         using JsonDocument getDoc = JsonDocument.Parse(getResponse.Body);
         Assert.IsTrue(getDoc.RootElement.TryGetProperty(VcalmParameterNames.VerifiablePresentation, out _),
@@ -468,12 +464,12 @@ internal sealed class VcalmHolderEndpointTests
 
         //§3.5.5 delete: 202 (the soft-delete default).
         ServerHttpResponse deleteResponse = await app.DispatchVcalmPresentationByIdAsync(
-            segment, "DELETE", PresentationId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "DELETE", PresentationId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(202, deleteResponse.StatusCode, deleteResponse.Body);
 
         //§3.5.4 after delete: 410 Gone.
         ServerHttpResponse gone = await app.DispatchVcalmPresentationByIdAsync(
-            segment, "GET", PresentationId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", PresentationId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(410, gone.StatusCode, "After a §3.5.5 delete the §3.5.4 GET is 410 Gone.");
     }
 
@@ -489,7 +485,7 @@ internal sealed class VcalmHolderEndpointTests
         string segment = RegisterHolder(app, holder);
 
         ServerHttpResponse notFound = await app.DispatchVcalmPresentationByIdAsync(
-            segment, "GET", "urn:uuid:never-created", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", "urn:uuid:never-created", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, notFound.StatusCode, "An unknown presentation id is 404.");
     }
@@ -532,7 +528,7 @@ internal sealed class VcalmHolderEndpointTests
         byte[] bytes = Encoding.UTF8.GetBytes("{\"presentation\":{}}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreatePresentation, "POST",
-            bytes, "text/plain", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            bytes, "text/plain", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "A non-application/json body is rejected before parsing (§2.4 content-serialization MUST).");
@@ -585,7 +581,7 @@ internal sealed class VcalmHolderEndpointTests
 
     private void WireHolderSeams(TestHostShell app, VcalmPresentationSigning? presentationSigning)
     {
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         //§3.5.1 derive: the ecdsa-sd-2023 selective-disclosure seams over the RDFC canonicalizer.
         app.Server.Vcalm().VcalmCredentialDerivation = new VcalmCredentialDerivation
@@ -852,7 +848,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCredentialsDerive, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);
 
@@ -865,7 +861,7 @@ internal sealed class VcalmHolderEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreatePresentation, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);
 

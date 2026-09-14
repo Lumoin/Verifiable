@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
@@ -76,7 +75,7 @@ internal sealed class JAdESEtsiUJsonTests
         var xVals = (JAdESUnsignedHeaderElementCertificateValues)result[1];
         var xValsValue = (JAdESClearUnsignedValue<JAdESCertificateValues>)xVals.Carriage;
         Assert.HasCount(1, xValsValue.Value.Items);
-        Assert.IsInstanceOfType<JAdESX509Certificate>(xValsValue.Value.Items[0]);
+        _ = Assert.IsInstanceOfType<JAdESX509Certificate>(xValsValue.Value.Items[0]);
     }
 
 

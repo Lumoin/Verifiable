@@ -77,6 +77,10 @@ public static class XAdESCanonicalizationManagement
         XmlCanonicalizationAlgorithm.CanonicalXml10WithComments => true,
         XmlCanonicalizationAlgorithm.CanonicalXml11WithComments => true,
         XmlCanonicalizationAlgorithm.ExclusiveCanonicalXml10WithComments => true,
+
+        //These variants omit comments.
+        XmlCanonicalizationAlgorithm.CanonicalXml10 or XmlCanonicalizationAlgorithm.CanonicalXml11
+            or XmlCanonicalizationAlgorithm.ExclusiveCanonicalXml10 => false,
         _ => false
     };
 

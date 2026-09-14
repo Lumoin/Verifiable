@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -55,9 +54,9 @@ namespace Verifiable.Libsodium
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
                 CryptoAlgorithm keyAlgorithm = CryptoTags.Ed25519PrivateKey.Get<CryptoAlgorithm>();
-                activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-                activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-                activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+                _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+                _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+                _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
             }
 
             IMemoryOwner<byte> publicKeyOwner = memoryPool.Rent(LibsodiumCrypto.Ed25519PublicKeyLength);
@@ -70,10 +69,14 @@ namespace Verifiable.Libsodium
             Span<byte> seed = privateKeyOwner.Memory.Span[..LibsodiumCrypto.Ed25519SeedLength];
             LibsodiumCrypto.RandomBytes(seed);
 
+            //The secret-key scratch owner below gets the strongest posture the platform can offer:
+            //sodium-guarded native memory off browser-wasm, and a pinned, zero-on-return managed
+            //buffer on browser-wasm, where WebAssembly's linear memory has no guard-page primitive.
+            //See SodiumScratchPool.
             try
             {
                 using IMemoryOwner<byte> secretKeyScratchOwner = LibsodiumCrypto.AllocateSecretKeyScratch(
-                    SodiumGuardedScratchPool.Instance, "libsodium failed to allocate secure scratch memory for Ed25519 key generation.");
+                    SodiumScratchPool.Instance, "libsodium failed to allocate secure scratch memory for Ed25519 key generation.");
                 using MemoryHandle secretKeyScratchHandle = secretKeyScratchOwner.Memory.Pin();
 
                 nint secretKeyScratch;
@@ -119,9 +122,9 @@ namespace Verifiable.Libsodium
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
                 CryptoAlgorithm keyAlgorithm = CryptoTags.X25519PrivateKey.Get<CryptoAlgorithm>();
-                activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
-                activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
-                activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
+                _ = activity.SetTag(CryptoTelemetry.Key.AlgorithmCode, keyAlgorithm.Algorithm.ToString(CultureInfo.InvariantCulture));
+                _ = activity.SetTag(CryptoTelemetry.Key.Algorithm, keyAlgorithm.ToString());
+                _ = activity.SetTag(CryptoTelemetry.Key.Type, "private-key");
             }
 
             IMemoryOwner<byte> privateKeyOwner = memoryPool.Rent(LibsodiumCrypto.X25519ScalarLength, AllocationKind.Pinned);

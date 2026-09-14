@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -109,6 +107,10 @@ public static class ValidationObjectKindMapping
         ValidationObjectKind.TimestampToken => SignatureValidationReportWellKnown.ValidationObjectTimestamp,
         ValidationObjectKind.EvidenceRecord => SignatureValidationReportWellKnown.ValidationObjectEvidenceRecord,
         ValidationObjectKind.SignedDataObject => SignatureValidationReportWellKnown.ValidationObjectSignedData,
+        ValidationObjectKind.Unknown => SignatureValidationReportWellKnown.ValidationObjectOther,
+        ValidationObjectKind.SignatureValue => SignatureValidationReportWellKnown.ValidationObjectOther,
+        ValidationObjectKind.Signature => SignatureValidationReportWellKnown.ValidationObjectOther,
+        ValidationObjectKind.SignatureAttribute => SignatureValidationReportWellKnown.ValidationObjectOther,
         _ => SignatureValidationReportWellKnown.ValidationObjectOther
     };
 
@@ -126,6 +128,12 @@ public static class ValidationObjectKindMapping
         PkiObjectKind.X509Crl => ValidationObjectKind.RevocationData,
         PkiObjectKind.OcspResponse => ValidationObjectKind.RevocationData,
         PkiObjectKind.TimestampToken => ValidationObjectKind.TimestampToken,
+        PkiObjectKind.None => ValidationObjectKind.Unknown,
+        PkiObjectKind.OcspRequest => ValidationObjectKind.Unknown,
+        PkiObjectKind.TimestampRequest => ValidationObjectKind.Unknown,
+        PkiObjectKind.TimestampResponse => ValidationObjectKind.Unknown,
+        PkiObjectKind.IssuerSerial => ValidationObjectKind.Unknown,
+        PkiObjectKind.OcspResponderKeyHash => ValidationObjectKind.Unknown,
         _ => ValidationObjectKind.Unknown
     };
 }
@@ -154,6 +162,7 @@ public static class ProofOfExistenceOriginMapping
         ProofOfExistenceOrigin.EvidenceRecord => SignatureValidationReportWellKnown.ProofOfExistenceTypeValidation,
         ProofOfExistenceOrigin.IndirectDerivation => SignatureValidationReportWellKnown.ProofOfExistenceTypeValidation,
         ProofOfExistenceOrigin.DrivingApplicationAssertion => SignatureValidationReportWellKnown.ProofOfExistenceTypeProvided,
+        ProofOfExistenceOrigin.Unknown => SignatureValidationReportWellKnown.ProofOfExistenceTypeValidation,
         _ => SignatureValidationReportWellKnown.ProofOfExistenceTypeValidation
     };
 }
@@ -199,6 +208,7 @@ public static class ConstraintApplicationStatusMapping
     {
         ConstraintApplicationStatus.Disabled => SignatureValidationReportWellKnown.ConstraintStatusDisabled,
         ConstraintApplicationStatus.Overridden => SignatureValidationReportWellKnown.ConstraintStatusOverridden,
+        ConstraintApplicationStatus.Applied => SignatureValidationReportWellKnown.ConstraintStatusApplied,
         _ => SignatureValidationReportWellKnown.ConstraintStatusApplied
     };
 }

@@ -48,7 +48,7 @@ public sealed class RequestFields: IEquatable<RequestFields>
     /// <summary>Creates an empty <see cref="RequestFields"/> instance.</summary>
     public RequestFields()
     {
-        Values = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        Values = new(StringComparer.Ordinal);
     }
 
 

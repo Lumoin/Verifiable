@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -96,7 +93,7 @@ internal sealed class XAdESBaselineLevelTableTests
             Assert.AreSequenceEqual([expectedCardinality], row.Cardinality!.ValuesAt(level).ToArray(), $"{requirementId} ({row.Name}) cardinality at {level}.");
         }
 
-        Assert.IsInstanceOfType<AdESInternalClauseReference>(row.Reference);
+        _ = Assert.IsInstanceOfType<AdESInternalClauseReference>(row.Reference);
         Assert.AreEqual(expectedReferenceClause, ((AdESInternalClauseReference)row.Reference!).Clause, $"{requirementId} ({row.Name}) References clause.");
     }
 
@@ -141,8 +138,8 @@ internal sealed class XAdESBaselineLevelTableTests
 
             if(expectXmlDsig)
             {
-                Assert.IsInstanceOfType<AdESExternalReference>(row.Reference);
-                Assert.AreEqual("XMLDSIG", ((AdESExternalReference)row.Reference!).Document, $"{row.RequirementId} cites the XMLDSIG core specification.");
+                _ = Assert.IsInstanceOfType<AdESExternalReference>(row.Reference);
+                Assert.AreEqual("XMLDSIG", ((AdESExternalReference)row.Reference).Document, $"{row.RequirementId} cites the XMLDSIG core specification.");
             }
         }
     }
@@ -165,8 +162,8 @@ internal sealed class XAdESBaselineLevelTableTests
     {
         AdESTableRow row = XAdESBaselineLevelTable.DsCanonicalizationMethod;
 
-        Assert.IsInstanceOfType<AdESExternalReference>(row.Reference);
-        var reference = (AdESExternalReference)row.Reference!;
+        _ = Assert.IsInstanceOfType<AdESExternalReference>(row.Reference);
+        var reference = (AdESExternalReference)row.Reference;
         Assert.AreEqual("XMLDSIG", reference.Document, "The row cites the XMLDSIG core specification.");
         Assert.AreEqual("4.4.1", reference.Clause, "Table 2's own printed cell reads '4.4.1', a misprint — transcribed verbatim, not corrected to the true clause 4.3.1.");
 
@@ -578,7 +575,7 @@ internal sealed class XAdESBaselineLevelTableTests
         {
             foreach(string letter in row.Annotations.RequirementLetters)
             {
-                seenLetters.Add(letter);
+                _ = seenLetters.Add(letter);
             }
         }
 
@@ -646,7 +643,7 @@ internal sealed class XAdESBaselineLevelTableTests
     {
         Assert.AreEqual(4, XAdESBaselineLevelTable.Rows.Count(row => row.Kind == AdESTableRowKind.XmlDsigElement));
         Assert.AreEqual(38, XAdESBaselineLevelTable.Rows.Count(row => row.Kind == AdESTableRowKind.QualifyingProperty));
-        Assert.ContainsSingle(row => row.Kind == AdESTableRowKind.Service, XAdESBaselineLevelTable.Rows);
+        _ = Assert.ContainsSingle(row => row.Kind == AdESTableRowKind.Service, XAdESBaselineLevelTable.Rows);
         Assert.AreEqual(3, XAdESBaselineLevelTable.Rows.Count(row => row.Kind == AdESTableRowKind.ServiceProvisionOption));
     }
 

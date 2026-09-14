@@ -61,7 +61,7 @@ internal sealed class PresentationSecuringConverterTests
             """;
 
         var secured = JsonSerializerExtensions.Deserialize<VerifiablePresentation>(securedJson, Options)!;
-        Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(secured,
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(secured,
             "A present proof member upcasts to the embedded-secured presentation.");
 
         var proof = ((DataIntegritySecuredPresentation)secured).Proof![0];
@@ -159,7 +159,7 @@ internal sealed class PresentationSecuringConverterTests
 
         Assert.IsTrue(document.RootElement.TryGetProperty("@context", out _),
             "@context MUST be present on the enveloped presentation object.");
-        Assert.StartsWith("data:", document.RootElement.GetProperty("id").GetString()!);
+        Assert.StartsWith("data:", document.RootElement.GetProperty("id").GetString());
         Assert.AreEqual(CredentialConstants.EnvelopedVerifiablePresentationType,
             document.RootElement.GetProperty("type")[0].GetString());
     }

@@ -1,24 +1,15 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
 using Verifiable.Tpm.Spec.Algorithms;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 using static Verifiable.Tpm.Spec.TpmRcExtensions;
 
 namespace Verifiable.Tpm.Automata;
@@ -1714,7 +1705,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     proof.Memory, action.TotalResetCount, clearCount, action.Sequence, action.SavedHandle,
                     blobRental.Memory[ContextIntegrityFieldSize..total], pool, cancellationToken).ConfigureAwait(false);
 
-                BinaryPrimitives.WriteUInt16BigEndian(blobRental.Memory.Span[..total], (ushort)TpmSimulatorState.ContextIntegrityDigestSize);
+                BinaryPrimitives.WriteUInt16BigEndian(blobRental.Memory.Span[..total], TpmSimulatorState.ContextIntegrityDigestSize);
                 integrity.Memory.Span[..TpmSimulatorState.ContextIntegrityDigestSize].CopyTo(blobRental.Memory.Span[sizeof(ushort)..ContextIntegrityFieldSize]);
             }
             catch
@@ -1800,7 +1791,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 return new TpmContextLoaded(TpmRcConstants.TPM_RC_SIZE, null, savedHandle, hierarchy, sequence, IsInternalFailure: false, action.Request);
             }
 
-            if(BinaryPrimitives.ReadUInt16BigEndian(blob.Span) != (ushort)TpmSimulatorState.ContextIntegrityDigestSize)
+            if(BinaryPrimitives.ReadUInt16BigEndian(blob.Span) != TpmSimulatorState.ContextIntegrityDigestSize)
             {
                 return new TpmContextLoaded(TpmRcConstants.TPM_RC_SIZE, null, savedHandle, hierarchy, sequence, IsInternalFailure: false, action.Request);
             }
@@ -3887,9 +3878,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             BinaryPrimitives.WriteUInt32BigEndian(region, hierarchy);
             BinaryPrimitives.WriteUInt16BigEndian(region[sizeof(uint)..], type);
             BinaryPrimitives.WriteUInt16BigEndian(region[(sizeof(uint) + sizeof(ushort))..], (ushort)nameAlg.Value);
-            BinaryPrimitives.WriteUInt32BigEndian(region[(sizeof(uint) + 2 * sizeof(ushort))..], (uint)attributes);
-            BinaryPrimitives.WriteUInt16BigEndian(region[(2 * sizeof(uint) + 2 * sizeof(ushort))..], typeParameter);
-            authPolicy.AsReadOnlySpan().CopyTo(region[(2 * sizeof(uint) + 3 * sizeof(ushort))..]);
+            BinaryPrimitives.WriteUInt32BigEndian(region[(sizeof(uint) + (2 * sizeof(ushort)))..], (uint)attributes);
+            BinaryPrimitives.WriteUInt16BigEndian(region[((2 * sizeof(uint)) + (2 * sizeof(ushort)))..], typeParameter);
+            authPolicy.AsReadOnlySpan().CopyTo(region[((2 * sizeof(uint)) + (3 * sizeof(ushort)))..]);
         }
 
         IMemoryOwner<byte> derived = await Kdfa.DeriveAsync(
@@ -3991,7 +3982,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //19.1). A cipher refusal releases the request's parse-rented carriers through the helper.
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
-                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), dataPortion, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
+                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), dataPortion, context.Pool, action.Request, cancellationToken).ConfigureAwait(false);
         }
 
         //TPMS_SENSITIVE_CREATE: userAuth (TPM2B_AUTH) then data (TPM2B_SENSITIVE_DATA), both bounds-checked reads
@@ -4277,7 +4268,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //encryption ignores the binding even where the command HMAC key omits the term.
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
-                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), authData, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
+                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), authData, context.Pool, action.Request, cancellationToken).ConfigureAwait(false);
         }
 
         return new TpmNvDefineAuthDecrypted(TpmRcConstants.TPM_RC_SUCCESS, action.Request, Tpm2bAuth.Create(authData.Span, context.Pool));
@@ -4336,7 +4327,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //(Part 1, clause 18.1).
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
-                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), newAuthData, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
+                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), newAuthData, context.Pool, action.Request, cancellationToken).ConfigureAwait(false);
         }
 
         return new TpmNvChangeAuthDecrypted(TpmRcConstants.TPM_RC_SUCCESS, action.Request, Tpm2bAuth.Create(newAuthData.Span, context.Pool));
@@ -5063,7 +5054,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //(Part 1, clause 18.1).
             await ApplyRequestDecryptionAsync(
                 action.Symmetric, action.SessionAlg, action.SessionKey, action.EntityAuthValue,
-                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), newAuthData, context.Pool, action.Request as IDisposable, cancellationToken).ConfigureAwait(false);
+                action.NonceCaller.AsReadOnlyMemory(), action.NonceTpm.AsReadOnlyMemory(), newAuthData, context.Pool, action.Request, cancellationToken).ConfigureAwait(false);
         }
 
         return new TpmHierarchyChangeAuthDecrypted(TpmRcConstants.TPM_RC_SUCCESS, action.Request, Tpm2bAuth.Create(newAuthData.Span, context.Pool));
@@ -5323,9 +5314,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                     }
                     finally
                     {
-                        foreach(var cached in rpHashOwners)
+                        foreach(var (Alg, Owner) in rpHashOwners)
                         {
-                            cached.Owner.Dispose();
+                            Owner.Dispose();
                         }
                     }
                 }
@@ -5578,7 +5569,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //seedValue and bits arrive pre-drawn from the caller — the octets the public unique was computed over,
         //so the wrapped area binds to the public area it was exported with.
         int paddedAuthSize = Tpm2bAuth.MaxSize;
-        int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + seedValue.Length) + (sizeof(ushort) + bits.Length);
+        int sensitiveInteriorLength = sizeof(ushort) + sizeof(ushort) + paddedAuthSize + sizeof(ushort) + seedValue.Length + sizeof(ushort) + bits.Length;
         int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
 
         //The marshaled TPM2B_SENSITIVE is laid out in one pinned rental, then handed to the shared wrap core.
@@ -5660,7 +5651,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //24.7.3; trailing-zero stripping makes the padding transparent to every authorization use, clause
             //16.6.4.3), laid out in one pinned rental and handed to the shared wrap core.
             int paddedAuthSize = Tpm2bAuth.MaxSize;
-            int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + sealedObject.SeedValue.Size) + (sizeof(ushort) + sealedObject.Data.Length);
+            int sensitiveInteriorLength = sizeof(ushort) + sizeof(ushort) + paddedAuthSize + sizeof(ushort) + sealedObject.SeedValue.Size + sizeof(ushort) + sealedObject.Data.Length;
             int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
 
             IMemoryOwner<byte> blob;
@@ -7016,12 +7007,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + sizeof(ushort) + signerQualifiedName.Length          //qualifiedSigner (TPM2B_NAME).
+            + sizeof(ushort) + nonce.Length                        //extraData (TPM2B_DATA).
             + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
             + sizeof(ulong)                                          //firmwareVersion.
-            + (sizeof(ushort) + subjectName.Length)                  //attested.name (TPM2B_NAME).
-            + (sizeof(ushort) + subjectQualifiedName.Length);        //attested.qualifiedName (TPM2B_NAME).
+            + sizeof(ushort) + subjectName.Length                  //attested.name (TPM2B_NAME).
+            + sizeof(ushort) + subjectQualifiedName.Length;        //attested.qualifiedName (TPM2B_NAME).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -7306,12 +7297,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + sizeof(ushort) + signerQualifiedName.Length          //qualifiedSigner (TPM2B_NAME).
+            + sizeof(ushort) + nonce.Length                        //extraData (TPM2B_DATA).
             + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
             + sizeof(ulong)                                          //firmwareVersion.
             + pcrSelection.GetSerializedSize()                       //attested.pcrSelect (TPML_PCR_SELECTION).
-            + (sizeof(ushort) + pcrDigest.Length);                   //attested.pcrDigest (TPM2B_DIGEST).
+            + sizeof(ushort) + pcrDigest.Length;                   //attested.pcrDigest (TPM2B_DIGEST).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -7538,12 +7529,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + sizeof(ushort) + signerQualifiedName.Length          //qualifiedSigner (TPM2B_NAME).
+            + sizeof(ushort) + nonce.Length                        //extraData (TPM2B_DATA).
             + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
             + sizeof(ulong)                                          //firmwareVersion.
-            + (sizeof(ushort) + subjectName.Length)                  //attested.objectName (TPM2B_NAME).
-            + (sizeof(ushort) + creationHash.Length);                //attested.creationHash (TPM2B_DIGEST).
+            + sizeof(ushort) + subjectName.Length                  //attested.objectName (TPM2B_NAME).
+            + sizeof(ushort) + creationHash.Length;                //attested.creationHash (TPM2B_DIGEST).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -7708,8 +7699,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + sizeof(ushort) + signerQualifiedName.Length          //qualifiedSigner (TPM2B_NAME).
+            + sizeof(ushort) + nonce.Length                        //extraData (TPM2B_DATA).
             + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
             + sizeof(ulong)                                          //firmwareVersion.
             + TpmsTimeAttestInfo.SerializedSize;                     //attested (TPMS_TIME_ATTEST_INFO, fixed layout).
@@ -7921,12 +7912,12 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + sizeof(ushort) + signerQualifiedName.Length          //qualifiedSigner (TPM2B_NAME).
+            + sizeof(ushort) + nonce.Length                        //extraData (TPM2B_DATA).
             + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
             + sizeof(ulong)                                          //firmwareVersion.
             + sizeof(byte)                                           //attested.exclusiveSession (TPMI_YES_NO).
-            + (sizeof(ushort) + sessionDigest.Length);                //attested.sessionDigest (TPM2B_DIGEST).
+            + sizeof(ushort) + sessionDigest.Length;                //attested.sessionDigest (TPM2B_DIGEST).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -8489,9 +8480,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
         finally
         {
-            foreach(var cached in rpHashOwners)
+            foreach(var (_, Owner) in rpHashOwners)
             {
-                cached.Owner.Dispose();
+                Owner.Dispose();
             }
         }
     }
@@ -8589,13 +8580,13 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     {
         int total =
             sizeof(uint) + sizeof(ushort)                            //magic (TPM_GENERATED) + type (TPMI_ST_ATTEST).
-            + (sizeof(ushort) + signerQualifiedName.Length)          //qualifiedSigner (TPM2B_NAME).
-            + (sizeof(ushort) + nonce.Length)                        //extraData (TPM2B_DATA).
+            + sizeof(ushort) + signerQualifiedName.Length          //qualifiedSigner (TPM2B_NAME).
+            + sizeof(ushort) + nonce.Length                        //extraData (TPM2B_DATA).
             + TpmsClockInfo.SerializedSize                           //clockInfo (TPMS_CLOCK_INFO).
             + sizeof(ulong)                                          //firmwareVersion.
-            + (sizeof(ushort) + indexName.Length)                    //attested.indexName (TPM2B_NAME).
+            + sizeof(ushort) + indexName.Length                    //attested.indexName (TPM2B_NAME).
             + sizeof(ushort)                                         //attested.offset (UINT16).
-            + (sizeof(ushort) + nvContents.Length);                  //attested.nvContents (TPM2B_MAX_NV_BUFFER).
+            + sizeof(ushort) + nvContents.Length;                  //attested.nvContents (TPM2B_MAX_NV_BUFFER).
 
         IMemoryOwner<byte> owner = pool.Rent(total);
         try
@@ -9873,8 +9864,8 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
     private static async ValueTask<TpmSimulatorInput> FramePolicySecretSessionResponseCoreAsync(TpmFramePolicySecretSessionResponseAction action, TpmActionContext context, CancellationToken cancellationToken)
     {
         int parameterLength = action.TicketDigest is { } mintedTicket
-            ? action.Timeout.SerializedSize + (sizeof(ushort) + sizeof(uint) + mintedTicket.SerializedSize)
-            : sizeof(ushort) + (sizeof(ushort) + sizeof(uint) + sizeof(ushort));
+            ? action.Timeout.SerializedSize + sizeof(ushort) + sizeof(uint) + mintedTicket.SerializedSize
+            : sizeof(ushort) + sizeof(ushort) + sizeof(uint) + sizeof(ushort);
 
         IMemoryOwner<byte> parameterArea = context.Pool.Rent(parameterLength);
         Tpm2bNonce framedNonceTpm = Tpm2bNonce.Empty;
@@ -10653,9 +10644,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 }
                 finally
                 {
-                    foreach(var cached in rpHashOwners)
+                    foreach(var (Alg, Owner) in rpHashOwners)
                     {
-                        cached.Owner.Dispose();
+                        Owner.Dispose();
                     }
                 }
             }
@@ -11936,7 +11927,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         BaseMemoryPool pool = context.Pool;
         int paddedAuthSize = Tpm2bAuth.MaxSize;
         int obfuscationSize = action.SeedValue.Size;
-        int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + obfuscationSize) + (sizeof(ushort) + action.Data.Length);
+        int sensitiveInteriorLength = sizeof(ushort) + sizeof(ushort) + paddedAuthSize + sizeof(ushort) + obfuscationSize + sizeof(ushort) + action.Data.Length;
         int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
 
         using IMemoryOwner<byte> sensitive = pool.Rent(sensitiveLength, AllocationKind.Pinned);
@@ -12325,7 +12316,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //produces the outPrivate a TPM2_Load() under this parent unwraps.
             int paddedAuthSize = Tpm2bAuth.MaxSize;
             int obfuscationSize = sensitive.SeedValue.Size;
-            int sensitiveInteriorLength = sizeof(ushort) + (sizeof(ushort) + paddedAuthSize) + (sizeof(ushort) + obfuscationSize) + (sizeof(ushort) + sensitive.Sensitive.Bits.Length);
+            int sensitiveInteriorLength = sizeof(ushort) + sizeof(ushort) + paddedAuthSize + sizeof(ushort) + obfuscationSize + sizeof(ushort) + sensitive.Sensitive.Bits.Length;
             int sensitiveLength = sizeof(ushort) + sensitiveInteriorLength;
             using IMemoryOwner<byte> marshaled = pool.Rent(sensitiveLength, AllocationKind.Pinned);
             try
@@ -12642,7 +12633,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
             catch(ArgumentOutOfRangeException)
             {
-                ephemeralXOwner!.Dispose();
+                ephemeralXOwner.Dispose();
 
                 return new TpmCredentialActivated(ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0), CertInfo: null);
             }
@@ -12655,7 +12646,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             action.CredentialBlob.Dispose();
         }
 
-        using IMemoryOwner<byte> ephemeralXOwnerScope = ephemeralXOwner!;
+        using IMemoryOwner<byte> ephemeralXOwnerScope = ephemeralXOwner;
         ReadOnlySpan<byte> credentialKeyXSpan = EllipticCurveUtilities.SliceXCoordinate(action.CredentialKeyPublicPoint.Span);
         ReadOnlyMemory<byte> credentialKeyX = action.CredentialKeyPublicPoint.Slice(1, credentialKeyXSpan.Length);
 
@@ -13387,9 +13378,9 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             }
             finally
             {
-                foreach(var cached in rpHashOwners)
+                foreach(var (Alg, Owner) in rpHashOwners)
                 {
-                    cached.Owner.Dispose();
+                    Owner.Dispose();
                 }
             }
         }
@@ -13718,7 +13709,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //own handler (the NV commands and the signing family), or, for a command with no authorized handle at
         //all, the shared no-authorization mechanism (TryParseNoAuthOverSessions) admitting a companion
         //audit/decrypt/encrypt session (Part 3, clause 4.3; Part 1, clause 15.6.1).
-        if(header.Tag != (ushort)TpmStConstants.TPM_ST_NO_SESSIONS && header.Tag != (ushort)TpmStConstants.TPM_ST_SESSIONS)
+        if(header.Tag is not ((ushort)TpmStConstants.TPM_ST_NO_SESSIONS) and not ((ushort)TpmStConstants.TPM_ST_SESSIONS))
         {
             //Bare: precedes the handle/parameter walk entirely, per this method's own doc remarks.
             malformedResponseCode = TpmRcConstants.TPM_RC_BAD_TAG;
@@ -14121,11 +14112,11 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 return TryParseClockSet(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
-            case(TpmCcConstants.TPM_CC_DictionaryAttackLockReset):
+            case TpmCcConstants.TPM_CC_DictionaryAttackLockReset:
             {
                 return TryParseDictionaryAttackLockReset(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
-            case(TpmCcConstants.TPM_CC_DictionaryAttackParameters):
+            case TpmCcConstants.TPM_CC_DictionaryAttackParameters:
             {
                 return TryParseDictionaryAttackParameters(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
@@ -14286,7 +14277,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 return TryParsePolicySecret(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
-            case(TpmCcConstants.TPM_CC_PolicySigned):
+            case TpmCcConstants.TPM_CC_PolicySigned:
             {
                 //TPM2_PolicySigned() validates a signature over aHash on the same ECC/RSA signing-backend
                 //seam-bundles as TPM2_VerifySignature(), so it is gated identically: without any asymmetric
@@ -14300,7 +14291,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
                 return TryParsePolicySigned(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
-            case(TpmCcConstants.TPM_CC_PolicyAuthorize):
+            case TpmCcConstants.TPM_CC_PolicyAuthorize:
             {
                 return TryParsePolicyAuthorize(ref reader, pool, out input, out malformedResponseCode);
             }
@@ -14312,7 +14303,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             {
                 return TryParsePolicyNv(ref reader, header.Tag, pool, out input, out malformedResponseCode);
             }
-            case(TpmCcConstants.TPM_CC_PolicyCounterTimer):
+            case TpmCcConstants.TPM_CC_PolicyCounterTimer:
             {
                 return TryParsePolicyCounterTimer(ref reader, pool, out input, out malformedResponseCode);
             }
@@ -25924,7 +25915,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         //would otherwise silently accept an empty or single-branch list and produce a nonstandard digest).
         const uint MinPolicyOrBranches = 2;
         const uint MaxPolicyOrBranches = 8;
-        if(count < MinPolicyOrBranches || count > MaxPolicyOrBranches)
+        if(count is < MinPolicyOrBranches or > MaxPolicyOrBranches)
         {
             malformedResponseCode = ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, 0);
 
@@ -26676,7 +26667,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         }
 
         ushort ticketTag = reader.ReadUInt16();
-        if(ticketTag != (ushort)TpmStConstants.TPM_ST_AUTH_SIGNED && ticketTag != (ushort)TpmStConstants.TPM_ST_AUTH_SECRET)
+        if(ticketTag is not ((ushort)TpmStConstants.TPM_ST_AUTH_SIGNED) and not ((ushort)TpmStConstants.TPM_ST_AUTH_SECRET))
         {
             malformedResponseCode = ParameterEncodedRc(TpmRcConstants.TPM_RC_TAG, 4);
 
@@ -27242,7 +27233,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
 
             _ = reader.ReadUInt16();
             byte sizeofSelect = reader.ReadByte();
-            if(sizeofSelect < TpmlPcrSelection.PcrSelectMin || sizeofSelect > TpmlPcrSelection.PcrSelectMax)
+            if(sizeofSelect is < TpmlPcrSelection.PcrSelectMin or > TpmlPcrSelection.PcrSelectMax)
             {
                 malformedResponseCode = TpmRcConstants.TPM_RC_VALUE;
 
@@ -28161,7 +28152,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 TpmNvReadDataResponse nvReadData => nvReadData.Data.SerializedSize,
 
                 //nvPublic (TPM2B_NV_PUBLIC, a UINT16 size prefix around the marshaled TPMS_NV_PUBLIC) + nvName (TPM2B_NAME).
-                TpmNvReadPublicResponse nvReadPublic => (sizeof(ushort) + nvReadPublic.NvPublic.SerializedSize) + nvReadPublic.NvName.SerializedSize,
+                TpmNvReadPublicResponse nvReadPublic => sizeof(ushort) + nvReadPublic.NvPublic.SerializedSize + nvReadPublic.NvName.SerializedSize,
 
                 //outPublic (TPM2B_PUBLIC) + name (TPM2B_NAME) + qualifiedName (TPM2B_NAME), each sized by its own
                 //structure (Part 3, clause 12.4, Table 25).
@@ -28235,14 +28226,14 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
                 //A NULL ticket: empty TPM2B_TIMEOUT + policyTicket (TPMT_TK_AUTH: tag + hierarchy + empty
                 //digest). A real ticket: the full 8-byte TPM2B_TIMEOUT + policyTicket with its real digest.
                 TpmPolicySecretResponse policySecret => policySecret.TicketDigest is { } secretTicket
-                    ? policySecret.Timeout.SerializedSize + (sizeof(ushort) + sizeof(uint) + secretTicket.SerializedSize)
-                    : sizeof(ushort) + (sizeof(ushort) + sizeof(uint) + sizeof(ushort)),
+                    ? policySecret.Timeout.SerializedSize + sizeof(ushort) + sizeof(uint) + secretTicket.SerializedSize
+                    : sizeof(ushort) + sizeof(ushort) + sizeof(uint) + sizeof(ushort),
 
                 //A NULL ticket: empty TPM2B_TIMEOUT + policyTicket (TPMT_TK_AUTH: tag + hierarchy + empty
                 //digest). A real ticket: the full 8-byte TPM2B_TIMEOUT + policyTicket with its real digest.
                 TpmPolicySignedResponse policySigned => policySigned.TicketDigest is { } signedTicket
-                    ? policySigned.Timeout.SerializedSize + (sizeof(ushort) + sizeof(uint) + signedTicket.SerializedSize)
-                    : sizeof(ushort) + (sizeof(ushort) + sizeof(uint) + sizeof(ushort)),
+                    ? policySigned.Timeout.SerializedSize + sizeof(ushort) + sizeof(uint) + signedTicket.SerializedSize
+                    : sizeof(ushort) + sizeof(ushort) + sizeof(uint) + sizeof(ushort),
 
                 //credentialBlob (TPM2B_ID_OBJECT) + secret (TPM2B_ENCRYPTED_SECRET).
                 TpmMakeCredentialResponse makeCredential =>
@@ -28760,7 +28751,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             int nonceLength = intent.NonceTpm.Size;
             int authAreaSize =
-                (sizeof(ushort) + nonceLength)          //nonceTPM (TPM2B_NONCE).
+                sizeof(ushort) + nonceLength          //nonceTPM (TPM2B_NONCE).
                 + sizeof(byte)                          //sessionAttributes.
                 + intent.Hmac.SerializedSize;           //hmac (TPM2B).
 
@@ -28827,7 +28818,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
         {
             int nonceLength = intent.NonceTpm.Size;
             int authAreaSize =
-                (sizeof(ushort) + nonceLength)          //nonceTPM (TPM2B_NONCE).
+                sizeof(ushort) + nonceLength          //nonceTPM (TPM2B_NONCE).
                 + sizeof(byte)                          //sessionAttributes.
                 + intent.Hmac.SerializedSize;           //hmac (TPM2B).
 
@@ -29047,7 +29038,7 @@ public sealed class TpmSimulator: IObservable<TraceEntry<TpmSimulatorState, TpmS
             //Policy placeholder entry (present only when HasPolicyPlaceholder is set): a zero nonceTPM of the
             //policy hash width, the echoed attributes, and an empty hmac.
             int policyAuthSize = intent.HasPolicyPlaceholder
-                ? (sizeof(ushort) + intent.PolicyNonceLength) + sizeof(byte) + sizeof(ushort)
+                ? sizeof(ushort) + intent.PolicyNonceLength + sizeof(byte) + sizeof(ushort)
                 : 0;
 
             //One entry per real session: its rolled nonceTPM, the echoed attributes, and its own response HMAC.

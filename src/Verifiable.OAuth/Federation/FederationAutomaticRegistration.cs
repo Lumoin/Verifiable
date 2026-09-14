@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.OAuth.Trust;
 
 namespace Verifiable.OAuth.Federation;

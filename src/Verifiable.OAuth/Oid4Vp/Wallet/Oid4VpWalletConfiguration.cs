@@ -1,11 +1,8 @@
-using System.Buffers;
-using Verifiable.Core;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.JCose;
 using Verifiable.OAuth.AuthCode;
-using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 

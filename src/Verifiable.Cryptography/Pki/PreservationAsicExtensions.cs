@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -260,6 +258,8 @@ public static class PreservationAsicExtensionWellKnown
         PreservationAsicExtensionKind.IsUpdatedVersionOf => true,
         PreservationAsicExtensionKind.CanonicalizationMethod => true,
         PreservationAsicExtensionKind.ValidationReport => true,
+        PreservationAsicExtensionKind.None => false,
+        PreservationAsicExtensionKind.IsMetaDataOf => false,
         _ => false
     };
 
@@ -291,6 +291,7 @@ public static class PreservationAsicExtensionWellKnown
         PreservationAsicExtensionKind.IsUpdatedVersionOf => false,
         PreservationAsicExtensionKind.ValidationReport => false,
         PreservationAsicExtensionKind.IsMetaDataOf => false,
+        PreservationAsicExtensionKind.None => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Clause 5.5 states a criticality recommendation for its seven extensions and for nothing else."),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Clause 5.5 states a criticality recommendation for its seven extensions and for nothing else.")
     };
 

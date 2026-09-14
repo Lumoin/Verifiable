@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using Verifiable.Fido2;
 
 namespace Verifiable.Fido2.Ctap;
 

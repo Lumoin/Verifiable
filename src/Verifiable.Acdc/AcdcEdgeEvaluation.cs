@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Verifiable.Acdc;
 
 /// <summary>
@@ -130,7 +128,7 @@ public static class AcdcEdgeEvaluation
                 continue;
             }
 
-            stack.Pop();
+            _ = stack.Pop();
             bool groupResult = Aggregate(frame.Operator, frame.Results);
             if(stack.Count == 0)
             {
@@ -293,7 +291,7 @@ public static class AcdcEdgeEvaluation
         {
             Operator = group.Operator;
             Members = group.Members;
-            Results = new List<bool>(group.Members.Count);
+            Results = new(group.Members.Count);
         }
 
         /// <summary>The edge-group's m-ary operator, or <see langword="null"/> for the <c>AND</c> default.</summary>

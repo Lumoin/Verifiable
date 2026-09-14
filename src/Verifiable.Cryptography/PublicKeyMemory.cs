@@ -19,7 +19,7 @@ namespace Verifiable.Cryptography
         /// </summary>
         /// <param name="sensitiveMemory">The piece of sensitive data.</param>
         /// <param name="tag">Tags the memory with out-of-band information such as key material information.</param>
-        public PublicKeyMemory(IMemoryOwner<byte> sensitiveMemory, Tag tag): base(sensitiveMemory, tag)
+        public PublicKeyMemory(IMemoryOwner<byte> sensitiveMemory, Tag tag) : base(sensitiveMemory, tag)
         {
             ArgumentNullException.ThrowIfNull(sensitiveMemory);
         }

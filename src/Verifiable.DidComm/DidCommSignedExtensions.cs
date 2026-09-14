@@ -6,7 +6,6 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 
 namespace Verifiable.DidComm;
@@ -554,7 +553,7 @@ public static class DidCommSignedExtensions
             return true;
         }
 
-        if(candidateId.StartsWith('#') && documentDid is not null)
+        if(candidateId.StartsWith('#', StringComparison.Ordinal) && documentDid is not null)
         {
             return string.Equals($"{documentDid}{candidateId}", kid, StringComparison.Ordinal);
         }
@@ -573,7 +572,7 @@ public static class DidCommSignedExtensions
             return string.Empty;
         }
 
-        return methodId.StartsWith('#') && documentDid is not null
+        return methodId.StartsWith('#', StringComparison.Ordinal) && documentDid is not null
             ? $"{documentDid}{methodId}"
             : methodId;
     }

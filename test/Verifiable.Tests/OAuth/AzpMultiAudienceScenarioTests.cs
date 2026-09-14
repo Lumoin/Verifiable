@@ -4,11 +4,9 @@ using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -62,7 +60,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     public async Task MultiAudienceIdTokenWithAzpValidatesEndToEnd()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -98,7 +96,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     public async Task MultiAudienceIdTokenWithoutAzpIsRejectedWhenEnforced()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -130,7 +128,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     public async Task SingleAudienceIdTokenNeedsNoAzpEvenWhenEnforced()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -237,7 +235,7 @@ internal sealed class AzpMultiAudienceScenarioTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, WellKnownHttpMethods.Post,
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body!, "request_uri");
@@ -247,7 +245,7 @@ internal sealed class AzpMultiAudienceScenarioTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -268,7 +266,7 @@ internal sealed class AzpMultiAudienceScenarioTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken, WellKnownHttpMethods.Post,
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
@@ -285,7 +283,7 @@ internal sealed class AzpMultiAudienceScenarioTests
     private async Task<Oidc10IdTokenValidationResult> ValidateAsRelyingPartyAsync(
         string idToken, VerifierKeyMaterial material, string? expectedAuthorizedParty)
     {
-        ServerVerificationKeyResolverDelegate resolveKey = (kid, tenant, ctx, ct) =>
+        ValueTask<PublicKeyMemory?> resolveKey(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, material.SigningKeyId.Value, StringComparison.Ordinal)
                     ? material.SigningPublicKey : null);
@@ -294,7 +292,7 @@ internal sealed class AzpMultiAudienceScenarioTests
             idToken,
             material.Registration.IssuerUri!.OriginalString,
             ClientId,
-            resolveKey,
+resolveKey,
             MicrosoftCryptographicFunctionsAdapter.VerifyP256Async,
             JwsAccessTokenTestSupport.Parser,
             TestSetup.Base64UrlDecoder,
@@ -302,7 +300,7 @@ internal sealed class AzpMultiAudienceScenarioTests
             BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty,
             expectedNonce: null,
             trustedAudiences: null,

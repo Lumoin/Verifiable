@@ -212,7 +212,7 @@ namespace Verifiable.Tests.Cryptography
         {
             byte[] compressedPoint = new byte[EllipticCurveConstants.P256.CompressedPointByteCount];
             compressedPoint[0] = EllipticCurveUtilities.EvenYCoordinate;
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceXCoordinate(compressedPoint));
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceXCoordinate(compressedPoint));
         }
 
         [TestMethod]
@@ -220,7 +220,7 @@ namespace Verifiable.Tests.Cryptography
         {
             byte[] compressedPoint = new byte[EllipticCurveConstants.P256.CompressedPointByteCount];
             compressedPoint[0] = EllipticCurveUtilities.EvenYCoordinate;
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceYCoordinate(compressedPoint));
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceYCoordinate(compressedPoint));
         }
 
         [TestMethod]
@@ -228,7 +228,7 @@ namespace Verifiable.Tests.Cryptography
         {
             byte[] point = new byte[10];
             point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceXCoordinate(point));
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceXCoordinate(point));
         }
 
         [TestMethod]
@@ -236,7 +236,7 @@ namespace Verifiable.Tests.Cryptography
         {
             byte[] point = new byte[10];
             point[0] = EllipticCurveUtilities.UncompressedCoordinateFormat;
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceYCoordinate(point));
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EllipticCurveUtilities.SliceYCoordinate(point));
         }
 
         [TestMethod]
@@ -300,7 +300,7 @@ namespace Verifiable.Tests.Cryptography
         {
             byte[] x = new byte[EllipticCurveConstants.P256.PointArrayLength];
             byte[] y = new byte[EllipticCurveConstants.P384.PointArrayLength];
-            Assert.ThrowsExactly<ArgumentException>(() =>
+            _ = Assert.ThrowsExactly<ArgumentException>(() =>
                 EllipticCurveUtilities.CombineToUncompressedPoint(x, y));
         }
 
@@ -309,7 +309,7 @@ namespace Verifiable.Tests.Cryptography
         {
             byte[] x = new byte[10];
             byte[] y = new byte[10];
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
+            _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
                 EllipticCurveUtilities.CombineToUncompressedPoint(x, y));
         }
 

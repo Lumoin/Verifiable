@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Threading;
 using Verifiable.Core;
 using Verifiable.Server.Diagnostics;
 using Verifiable.Server.Pipeline;
@@ -79,6 +78,50 @@ public sealed class EndpointServer: IDisposable
     /// Whether <see cref="Validate"/> has been called successfully.
     /// </summary>
     public bool IsValidated { get; private set; }
+
+    /// <summary>
+    /// The race-free first-dispatch validation gate. <see cref="Integration"/> is mutable after
+    /// construction (a deployment finishes wiring delegates on the object <see cref="EndpointServer"/>
+    /// was built with before the first request), so validating at construction time would reject a
+    /// host whose wiring completes afterward; the earliest sound point to validate is the first
+    /// request this instance actually serves. <see cref="Lazy{T}"/> under
+    /// <see cref="LazyThreadSafetyMode.PublicationOnly"/> does NOT cache a thrown exception — a
+    /// request racing a still-completing deployment observes <see cref="Validate"/>'s fault for
+    /// itself, but the NEXT dispatch re-invokes the factory rather than replaying that fault forever,
+    /// so a host whose wiring finishes between two requests recovers on the very next one. Concurrent
+    /// callers under this mode may each run the factory, but only one outcome is published for all of
+    /// them to observe from then on; running <see cref="Validate"/> more than once is harmless since
+    /// it only reads <see cref="Integration"/> and sets <see cref="IsValidated"/>, which is idempotent.
+    /// The factory itself is a no-op when <see cref="IsValidated"/> is already <see langword="true"/>
+    /// — an explicit <see cref="Validate"/> call made earlier (a deployment or test host that fails
+    /// fast at construction, by choice, is not obligated to) is honoured rather than re-run, since
+    /// re-running it would re-inspect <see cref="Integration"/> as it stands at the FIRST dispatch,
+    /// which a caller may have legitimately mutated afterward for reasons unrelated to
+    /// seam-completeness.
+    /// </summary>
+    private Lazy<bool> ValidationGate { get; }
+
+
+    /// <summary>
+    /// Constructs the host. The required <see cref="Integration"/>, <see cref="TimeProvider"/>, and
+    /// <see cref="Configuration"/> members are supplied through object-initializer syntax at the call
+    /// site, as with any other <see langword="required"/> member; this constructor only wires the
+    /// deferred <see cref="ValidationGate"/> so it closes over the fully-initialized instance.
+    /// </summary>
+    public EndpointServer()
+    {
+        ValidationGate = new Lazy<bool>(
+            () =>
+            {
+                if(!IsValidated)
+                {
+                    Validate();
+                }
+
+                return true;
+            },
+            LazyThreadSafetyMode.PublicationOnly);
+    }
 
 
     /// <summary>
@@ -165,6 +208,12 @@ public sealed class EndpointServer: IDisposable
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
+        //Validate-at-first-use: a missing required seam surfaces here as the named-seam
+        //InvalidOperationException thrown by Validate(), never as a NullReferenceException deep in
+        //a handler that assumes the seam is present. See the ValidationGate remarks for why this
+        //is forced on every dispatch but is a no-op once Validate() has already run.
+        _ = ValidationGate.Value;
+
         cancellationToken.ThrowIfCancellationRequested();
 
         using Activity? activity = ServerActivitySource.Source.StartActivity(
@@ -213,8 +262,8 @@ public sealed class EndpointServer: IDisposable
             {
                 context.SetRegistration(registration);
 
-                activity?.SetTag(ServerTagNames.TenantId, registration.TenantId.Value);
-                activity?.SetTag(ServerTagNames.RegistrationId, registration.ClientId);
+                _ = (activity?.SetTag(ServerTagNames.TenantId, registration.TenantId.Value));
+                _ = (activity?.SetTag(ServerTagNames.RegistrationId, registration.ClientId));
 
                 //2.5 Resolve per-request policy and place it on the context.
                 await Integration.ResolvePolicyAsync!(
@@ -241,9 +290,9 @@ public sealed class EndpointServer: IDisposable
                     context.SetMatchPayload(matched.Payload);
                     context.SetCapability(matched.Endpoint.Capability);
 
-                    activity?.SetTag(ServerTagNames.FlowKind, matched.Endpoint.Kind.Name);
-                    activity?.SetTag(ServerTagNames.HttpMethod, matched.Endpoint.HttpMethod);
-                    activity?.SetTag(ServerTagNames.StartsNewFlow, matched.Endpoint.StartsNewFlow);
+                    _ = (activity?.SetTag(ServerTagNames.FlowKind, matched.Endpoint.Kind.Name));
+                    _ = (activity?.SetTag(ServerTagNames.HttpMethod, matched.Endpoint.HttpMethod));
+                    _ = (activity?.SetTag(ServerTagNames.StartsNewFlow, matched.Endpoint.StartsNewFlow));
                 }
 
                 //Inspection stage 2 of 4 — match decision.
@@ -272,7 +321,7 @@ public sealed class EndpointServer: IDisposable
                     }
 
                     response = materializationFailure ?? await HandleCoreAsync(
-                        matched.Endpoint, request.Fields, context, registration, activity, cancellationToken)
+                        matched.Endpoint, request.Fields, context, activity, cancellationToken)
                         .ConfigureAwait(false);
                 }
             }
@@ -283,9 +332,9 @@ public sealed class EndpointServer: IDisposable
             new OutgoingResponseStage(response), context, cancellationToken)
             .ConfigureAwait(false);
 
-        activity?.SetTag(
+        _ = (activity?.SetTag(
             ServerTagNames.StatusCode,
-            response.StatusCode.ToString(CultureInfo.InvariantCulture));
+            response.StatusCode.ToString(CultureInfo.InvariantCulture)));
 
         return response;
     }
@@ -295,7 +344,6 @@ public sealed class EndpointServer: IDisposable
         ServerEndpoint endpoint,
         RequestFields fields,
         ExchangeContext context,
-        IRegistrationRecord registration,
         Activity? activity,
         CancellationToken cancellationToken)
     {
@@ -305,7 +353,7 @@ public sealed class EndpointServer: IDisposable
             FlowState statelessSentinel = CreateStatelessSentinel(
                 endpoint.Kind, TimeProvider);
 
-            (FlowInput? _, ServerHttpResponse? statelessEarlyExit) =
+            (_, ServerHttpResponse? statelessEarlyExit) =
                 await endpoint.BuildInputAsync(
                     fields, context, statelessSentinel, cancellationToken)
                     .ConfigureAwait(false);
@@ -337,7 +385,7 @@ public sealed class EndpointServer: IDisposable
             (currentState, currentStepCount) = await statefulKind.CreateAsync(
                 flowId, TimeProvider).ConfigureAwait(false);
 
-            activity?.AddEvent(new ActivityEvent(ServerEventNames.FlowCreated));
+            _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.FlowCreated)));
         }
         else
         {
@@ -359,16 +407,17 @@ public sealed class EndpointServer: IDisposable
 
                 if(resolved is null)
                 {
-                    activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationNotFound));
-                    activity?.SetTag(ServerTagNames.CorrelationResolved, false);
+                    _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationNotFound)));
+                    _ = (activity?.SetTag(ServerTagNames.CorrelationResolved, false));
 
                     return ServerHttpResponse.BadRequest(
-                        ServerErrors.InvalidRequest, "Flow not found or expired.");
+                        endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
+                        endpoint.HandleNotFoundErrorDescription ?? "Flow not found or expired.");
                 }
 
                 flowId = resolved;
-                activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationResolved));
-                activity?.SetTag(ServerTagNames.CorrelationResolved, true);
+                _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.CorrelationResolved)));
+                _ = (activity?.SetTag(ServerTagNames.CorrelationResolved, true));
             }
             else
             {
@@ -384,22 +433,28 @@ public sealed class EndpointServer: IDisposable
             if(savedState is null)
             {
                 return ServerHttpResponse.BadRequest(
-                    ServerErrors.InvalidRequest, "Flow not found or expired.");
+                    endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
+                    endpoint.HandleNotFoundErrorDescription ?? "Flow not found or expired.");
             }
 
             DateTimeOffset now = TimeProvider.GetUtcNow();
             if(savedState.ExpiresAt <= now)
             {
                 return ServerHttpResponse.BadRequest(
-                    ServerErrors.InvalidRequest, "Flow not found or expired.");
+                    endpoint.HandleNotFoundError ?? ServerErrors.InvalidRequest,
+                    endpoint.HandleNotFoundErrorDescription ?? "Flow not found or expired.");
             }
 
             currentState = savedState;
             currentStepCount = savedStepCount;
         }
 
-        //4. Stamp the request time once.
+        //4. Stamp the request time and the loaded step count once, so a handler that must
+        //claim the flow before an irreversible effect (see ClaimServerFlowStateDelegate) can
+        //read the exact step this request observed without HandleCoreAsync's local
+        //currentStepCount being threaded through BuildInputDelegate's signature.
         context.SetVerifiedAt(TimeProvider.GetUtcNow());
+        context.SetFlowStepCount(currentStepCount);
 
         //5. Build the input — effectful work happens here, outside the PDA.
         (FlowInput? input, ServerHttpResponse? earlyExit) =
@@ -422,9 +477,9 @@ public sealed class EndpointServer: IDisposable
                 TimeProvider,
                 cancellationToken).ConfigureAwait(false);
 
-        activity?.SetTag(ServerTagNames.FlowState, newState.GetType().Name);
-        activity?.SetTag(ServerTagNames.FlowStepCount, newStepCount);
-        activity?.AddEvent(new ActivityEvent(ServerEventNames.StateTransition));
+        _ = (activity?.SetTag(ServerTagNames.FlowState, newState.GetType().Name));
+        _ = (activity?.SetTag(ServerTagNames.FlowStepCount, newStepCount));
+        _ = (activity?.AddEvent(new ActivityEvent(ServerEventNames.StateTransition)));
 
         //7. Build the response.
         ServerHttpResponse response = endpoint.BuildResponse(

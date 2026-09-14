@@ -336,7 +336,7 @@ internal sealed class XAdESQualifyingPropertiesDiscoveryTests
             Assert.IsFalse(isDiscovered, "An empty QualifyingProperties must be refused.");
             Assert.AreEqual(XAdESProcessingFailure.MalformedQualifyingProperties, error.Failure);
             Assert.IsNotNull(error.InnerQualifyingPropertiesReadError);
-            Assert.AreEqual(XAdESReadFailure.EmptyQualifyingPropertiesContainer, error.InnerQualifyingPropertiesReadError!.Value.Failure);
+            Assert.AreEqual(XAdESReadFailure.EmptyQualifyingPropertiesContainer, error.InnerQualifyingPropertiesReadError.Value.Failure);
         }
     }
 
@@ -374,7 +374,7 @@ internal sealed class XAdESQualifyingPropertiesDiscoveryTests
             Assert.IsFalse(isDiscovered, "A QualifyingPropertiesReference missing its mandatory URI must be refused.");
             Assert.AreEqual(XAdESProcessingFailure.MalformedQualifyingPropertiesReference, error.Failure);
             Assert.IsNotNull(error.InnerQualifyingPropertiesReadError);
-            Assert.AreEqual(XAdESReadFailure.MissingRequiredAttribute, error.InnerQualifyingPropertiesReadError!.Value.Failure);
+            Assert.AreEqual(XAdESReadFailure.MissingRequiredAttribute, error.InnerQualifyingPropertiesReadError.Value.Failure);
         }
     }
 
@@ -714,12 +714,12 @@ internal sealed class XAdESQualifyingPropertiesDiscoveryTests
                 bool isDiscovered = XAdESQualifyingPropertiesDiscovery.TryDiscover(table, signature, out XAdESQualifyingPropertiesDiscoveryResult result, out XAdESProcessingError discoveryError);
                 Assert.IsTrue(isDiscovered, $"Discovery must complete but was refused with {discoveryError.Failure}.");
 
-                XmlReferenceResolver resolver = (ReadOnlySpan<byte> uri, BaseMemoryPool pool, out PooledMemory? octets) =>
+                static bool resolver(ReadOnlySpan<byte> uri, BaseMemoryPool pool, out PooledMemory? octets)
                 {
                     octets = PooledMemory.FromBytes([1, 2, 3], pool, BufferTags.XmlDecodedContent);
 
                     return true;
-                };
+                }
 
                 bool isBound = XAdESQualifyingPropertiesDiscovery.TryVerifySignedPropertiesReferenceBinding(
                     table, signature, result.QualifyingProperties.SignedProperties, resolver, metered.Pool, out _, out XAdESProcessingError error);

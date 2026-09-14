@@ -1,7 +1,6 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Security;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -74,7 +73,7 @@ internal sealed class Oid4VpX509SanDnsResolverTests
         {
             //Tenant A's operation carries tenant A's anchors on the context — the
             //same stateless resolver resolves and the key verifies A's JAR.
-            ExchangeContext contextA = new();
+            ExchangeContext contextA = [];
             contextA.SetX509TrustAnchors(anchorsA);
             contextA.SetValidationTime(now);
 
@@ -92,11 +91,11 @@ internal sealed class Oid4VpX509SanDnsResolverTests
             //The very same resolver, handed tenant B's anchors on the context,
             //cannot validate tenant A's chain — proving the trust material is read
             //per-call from the context, never captured. No cross-tenant leakage.
-            ExchangeContext contextB = new();
+            ExchangeContext contextB = [];
             contextB.SetX509TrustAnchors(anchorsB);
             contextB.SetValidationTime(now);
 
-            await Assert.ThrowsExactlyAsync<SecurityException>(
+            _ = await Assert.ThrowsExactlyAsync<SecurityException>(
                 async () => await resolver(
                     contextB, clientIdA, jarHeaderA, TestContext.CancellationToken).ConfigureAwait(false));
         }
@@ -127,11 +126,11 @@ internal sealed class Oid4VpX509SanDnsResolverTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(chain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(now);
 
-            await Assert.ThrowsExactlyAsync<SecurityException>(
+            _ = await Assert.ThrowsExactlyAsync<SecurityException>(
                 async () => await resolver(
                     context, spoofedClientId, jarHeader, TestContext.CancellationToken).ConfigureAwait(false));
         }
@@ -158,10 +157,10 @@ internal sealed class Oid4VpX509SanDnsResolverTests
 
         //An application that forgot to place the tenant's trust anchors on the
         //context must NOT silently resolve — the handler fails closed.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetValidationTime(now);
 
-        await Assert.ThrowsExactlyAsync<SecurityException>(
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(
             async () => await resolver(
                 context, clientId, jarHeader, TestContext.CancellationToken).ConfigureAwait(false));
     }
@@ -249,6 +248,6 @@ internal sealed class Oid4VpX509SanDnsResolverTests
                 bytes, TestSetup.DefaultSerializationOptions)!,
             Pool);
 
-        return new UnverifiedJwtHeader(unverified.Signatures[0].ProtectedHeader);
+        return new(unverified.Signatures[0].ProtectedHeader);
     }
 }

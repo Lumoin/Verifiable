@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Foundation;
 
 namespace Verifiable.DidComm.Transport;

@@ -166,7 +166,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsTopLevelEdge()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"d":"ECpmTyIIc1duvCeIceK19Sbd0uymklmwNTtwtmfjQnX0","n":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi"}""")));
     }
 
@@ -177,7 +177,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsTopLevelWeight()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"d":"ECpmTyIIc1duvCeIceK19Sbd0uymklmwNTtwtmfjQnX0","w":"0.5","link":{"n":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi"}}""")));
     }
 
@@ -188,7 +188,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsEdgeGroupWithSchema()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"d":"ECpmTyIIc1duvCeIceK19Sbd0uymklmwNTtwtmfjQnX0","s":"EK_iGlfdc7Q-qIGL-kqbDSD2z4fesT4dAQLEHGgH4lLG","link":{"n":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi"}}""")));
     }
 
@@ -199,7 +199,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsReservedFieldsOutOfOrder()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"d":"ECpmTyIIc1duvCeIceK19Sbd0uymklmwNTtwtmfjQnX0","link":{"n":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi","d":"EAFj8JaNEC3mdFNJKrXW8E03_k9qqb_xM9NjAPVHw-xJ"}}""")));
     }
 
@@ -211,7 +211,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsUuidWithoutSaid()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"d":"ECpmTyIIc1duvCeIceK19Sbd0uymklmwNTtwtmfjQnX0","link":{"u":"0ABhY2Rjc3BlY3dvcmtyYXcz","n":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi"}}""")));
     }
 
@@ -222,7 +222,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsReservedFieldAfterMember()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"link":{"n":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi"},"u":"0ABhY2Rjc3BlY3dvcmtyYXcy"}""")));
     }
 
@@ -233,7 +233,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsNonBlockNonStringMember()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"link":[1,2,3]}""")));
     }
 
@@ -244,7 +244,7 @@ internal sealed class AcdcEdgeReaderTests
     [TestMethod]
     public void RejectsNonStringNode()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcEdgeReader.Read(Decode(
             """{"link":{"n":{"d":"EIF7egPvC8ITbGRdM9G0kd6aPELDg-azMkAqT-7cMuAi"}}}""")));
     }
 

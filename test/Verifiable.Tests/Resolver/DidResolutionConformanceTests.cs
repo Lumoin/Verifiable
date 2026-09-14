@@ -1,6 +1,6 @@
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
@@ -25,7 +25,7 @@ internal sealed class DidResolutionConformanceTests
     private const string ExampleDid = "did:example:123";
 
     /// <summary>A default context; this layer does no network I/O.</summary>
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     public TestContext TestContext { get; set; } = null!;
 

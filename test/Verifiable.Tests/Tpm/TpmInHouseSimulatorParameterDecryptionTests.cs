@@ -1,9 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -13,12 +11,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -871,7 +863,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
 
                     Assert.IsNotNull(captured, "The capturing wrapper must have observed the outgoing command.");
 
-                    byte[] stripped = RemoveSecondSession(captured!);
+                    byte[] stripped = RemoveSecondSession(captured);
 
                     TpmResult<TpmResponse> strippedResult = await simulator.SubmitAsync(stripped, pool, TestContext.CancellationToken).ConfigureAwait(false);
                     using(TpmResponse strippedResponse = strippedResult.Value)
@@ -917,7 +909,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
             Assert.IsNotNull(result.OutPrivate);
             Assert.IsNotNull(result.OutPublic);
 
-            using LoadResponse loaded = await LoadSealedObjectRawAsync(tpm, registry, pool, parentHandle, result.OutPrivate!, result.OutPublic!).ConfigureAwait(false);
+            using LoadResponse loaded = await LoadSealedObjectRawAsync(tpm, registry, pool, parentHandle, result.OutPrivate, result.OutPublic).ConfigureAwait(false);
             try
             {
                 (uint verifySessionHandle, TpmSession verifySession, _, _) =
@@ -1242,8 +1234,8 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                 decryptKey.AsReadOnlyMemory(), cpHash.AsReadOnlyMemory(), decryptNonceCaller, decryptNonceTpm, foldedNonces: ReadOnlyMemory<byte>.Empty, decryptAttributes, pool, cancellationToken).ConfigureAwait(false);
 
             int authBodySize =
-                (sizeof(uint) + (sizeof(ushort) + firstNonceCaller.Length) + sizeof(byte) + (sizeof(ushort) + firstHmac.Length)) +
-                (sizeof(uint) + (sizeof(ushort) + decryptNonceCaller.Length) + sizeof(byte) + (sizeof(ushort) + decryptHmac.Length));
+                sizeof(uint) + sizeof(ushort) + firstNonceCaller.Length + sizeof(byte) + sizeof(ushort) + firstHmac.Length +
+                sizeof(uint) + sizeof(ushort) + decryptNonceCaller.Length + sizeof(byte) + sizeof(ushort) + decryptHmac.Length;
 
             int totalSize = TpmConstants.HeaderSize + sizeof(uint) + sizeof(uint) + authBodySize + parametersSize;
             using IMemoryOwner<byte> commandOwner = pool.Rent(totalSize);
@@ -1676,7 +1668,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                 "A recovered userAuth declaring a size past sizeof(TPMU_HA) is not a well-formed TPM2B_AUTH whatever key produced it, so it is TPM_RC_SIZE, parameter-encoded to inSensitive (Table 18, index 0).");
 
             Assert.AreEqual(
-                baseline + RetainedNonceTpmPerSession * 2, trackingPool.OutstandingCount,
+                baseline + (RetainedNonceTpmPerSession * 2), trackingPool.OutstandingCount,
                 "Every carrier the refused command's parse rented — the parameter area, both slots' caller nonces and both slots' supplied hmacs — is released at the refusing arm itself, so the only carriers still outstanding before any flush are the two sessions' retained nonceTPMs.");
 
             await FlushIfPresentAsync(tpm, registry, result.DecryptSessionHandle).ConfigureAwait(false);
@@ -1823,7 +1815,7 @@ internal sealed class TpmInHouseSimulatorParameterDecryptionTests
                 "creationPCR is TPM2_Create()'s fourth parameter (Table 18, index 3); a count above MaxSelections (Table 128) is parameter-encoded TPM_RC_SIZE.");
 
             Assert.AreEqual(
-                baseline + RetainedNonceTpmPerSession * 2, trackingPool.OutstandingCount,
+                baseline + (RetainedNonceTpmPerSession * 2), trackingPool.OutstandingCount,
                 "The refusing arm must dispose the already-rented, non-empty outsideInfo along with everything else the parse rented for the refused command, so the only carriers still outstanding before any flush are the two sessions' retained nonceTPMs.");
 
             await FlushIfPresentAsync(tpm, registry, result.DecryptSessionHandle).ConfigureAwait(false);

@@ -1,8 +1,5 @@
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -52,7 +49,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "Empty input must classify as MalformedShape.");
         MalformedShape malformed = (MalformedShape)result;
         Assert.IsFalse(string.IsNullOrWhiteSpace(malformed.Reason),
@@ -72,7 +69,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<OpaqueShape>(result,
+        _ = Assert.IsInstanceOfType<OpaqueShape>(result,
             "A single-segment non-empty string must classify as OpaqueShape.");
         OpaqueShape opaque = (OpaqueShape)result;
         Assert.AreEqual(token, opaque.Value,
@@ -93,7 +90,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<OpaqueShape>(result,
+        _ = Assert.IsInstanceOfType<OpaqueShape>(result,
             "A two-segment string is neither JWS nor JWE shape; must classify as OpaqueShape.");
     }
 
@@ -111,7 +108,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<OpaqueShape>(result,
+        _ = Assert.IsInstanceOfType<OpaqueShape>(result,
             "A four-segment string must classify as OpaqueShape (not a recognized JOSE shape).");
     }
 
@@ -128,7 +125,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<OpaqueShape>(result,
+        _ = Assert.IsInstanceOfType<OpaqueShape>(result,
             "A six-segment string must classify as OpaqueShape (not a recognized JOSE shape).");
     }
 
@@ -153,7 +150,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JwsShape>(result,
+        _ = Assert.IsInstanceOfType<JwsShape>(result,
             "Valid 3-segment JWS-shaped input must classify as JwsShape.");
         JwsShape jws = (JwsShape)result;
 
@@ -186,7 +183,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JweShape>(result,
+        _ = Assert.IsInstanceOfType<JweShape>(result,
             "Valid 5-segment JWE-shaped input with enc claim must classify as JweShape.");
         JweShape jwe = (JweShape)result;
         Assert.AreEqual(WellKnownJweEncryptionAlgorithms.A128Gcm, jwe.Token.Header["enc"],
@@ -218,7 +215,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "Three-segment string with enc claim must classify as MalformedShape — segment-count and header are inconsistent.");
     }
 
@@ -240,7 +237,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "Five-segment string without enc claim must classify as MalformedShape.");
     }
 
@@ -258,7 +255,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "Three-segment string with non-Base64Url header must classify as MalformedShape, not throw.");
     }
 
@@ -275,7 +272,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "Five-segment string with non-Base64Url header must classify as MalformedShape, not throw.");
     }
 
@@ -295,7 +292,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<MalformedShape>(result,
+        _ = Assert.IsInstanceOfType<MalformedShape>(result,
             "Three-segment string with header that parses to a JSON array must classify as MalformedShape.");
     }
 
@@ -330,7 +327,7 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JwsShape>(result,
+        _ = Assert.IsInstanceOfType<JwsShape>(result,
             "alg=none must still classify structurally as JwsShape; alg policy is the verifier's concern, not the classifier's.");
 
         JwsShape jws = (JwsShape)result;
@@ -352,7 +349,7 @@ internal sealed class JoseTokenClassifierTests
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             async () => await JoseTokenClassifier.ClassifyAsync(
                 "any.token.string",
                 TestSetup.Base64UrlDecoder,
@@ -386,8 +383,8 @@ internal sealed class JoseTokenClassifierTests
             Pool,
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<JwsShape>(first, "First classification must produce JwsShape.");
-        Assert.IsInstanceOfType<JwsShape>(second, "Second classification must produce JwsShape.");
+        _ = Assert.IsInstanceOfType<JwsShape>(first, "First classification must produce JwsShape.");
+        _ = Assert.IsInstanceOfType<JwsShape>(second, "Second classification must produce JwsShape.");
 
         try
         {

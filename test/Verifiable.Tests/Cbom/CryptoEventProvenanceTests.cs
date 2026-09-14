@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Lumoin.Base;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -101,7 +96,7 @@ internal sealed class CryptoEventProvenanceTests
 
         Assert.AreEqual(42, workloadResult, "CaptureAsync must propagate the workload's own result.");
         Assert.Contains(
-            (EntropyConsumedEvent e) => e.Purpose == Purpose.Nonce,
+            e => e.Purpose == Purpose.Nonce,
             events.OfType<EntropyConsumedEvent>(),
             "CaptureAsync must observe the EntropyConsumedEvent the workload's GenerateNonce call emitted.");
     }
@@ -132,7 +127,7 @@ internal sealed class CryptoEventProvenanceTests
                 //Every fifth iteration throws — CaptureAsync's using block must unwind on an exception
                 //exactly as it does on a normal return, so a failing observed workload can never leak a
                 //subscription either.
-                await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+                _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
                     await CryptoEventProvenance.CaptureAsync<int>(
                         () => throw new InvalidOperationException("Synthetic workload failure.")).ConfigureAwait(false))
                     .ConfigureAwait(false);

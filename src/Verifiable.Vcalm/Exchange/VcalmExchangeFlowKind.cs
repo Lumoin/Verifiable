@@ -1,5 +1,3 @@
-using Verifiable.Server;
-
 namespace Verifiable.Vcalm.Exchange;
 
 /// <summary>
@@ -56,7 +54,7 @@ public sealed class VcalmExchangeFlowKind: StatefulFlowKind
 
         var pda = VcalmExchangeFlowAutomaton.CreateFromSnapshot(state, stepCount, timeProvider);
 
-        await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(input, cancellationToken).ConfigureAwait(false);
 
         return (pda.CurrentState, pda.StepCount);
     }

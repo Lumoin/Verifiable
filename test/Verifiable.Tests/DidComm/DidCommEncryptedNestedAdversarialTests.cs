@@ -1,16 +1,12 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -35,7 +31,7 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -426,7 +422,8 @@ internal sealed class DidCommEncryptedNestedAdversarialTests
                 return ValueTask.FromResult(document is null
                     ? DidResolutionResult.Failure(DidResolutionErrors.NotFound)
                     : DidResolutionResult.Success(document, new DidDocumentMetadata()));
-            })));
+            }
+        )));
     }
 
 

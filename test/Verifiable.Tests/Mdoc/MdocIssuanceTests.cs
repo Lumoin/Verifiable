@@ -111,7 +111,7 @@ internal sealed class MdocIssuanceTests
         //§9.1.2.5 security margin.
         //Deliberately undersized (8 bytes, below the ISO §9.1.2.5 16-byte minimum) to prove the
         //issuer rejects it. Routed through the provider like every other salt; the 8 is the point.
-        Salt UnderSizedRandom() =>
+        static Salt UnderSizedRandom() =>
             TestSalts.Generate(8, CryptoTags.MdocIssuerSignedItemRandom, BaseMemoryPool.Shared);
 
         InvalidOperationException ex = Assert.ThrowsExactly<InvalidOperationException>(() =>
@@ -245,7 +245,7 @@ internal sealed class MdocIssuanceTests
     [TestMethod]
     public void BuildDocumentRejectsNullDocType()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             MdocIssuance.BuildDocument(string.Empty, [Claim(MdlNamespace, "x", "y")], DefaultRandomGenerator));
     }
 
@@ -253,7 +253,7 @@ internal sealed class MdocIssuanceTests
     [TestMethod]
     public void BuildDocumentRejectsNullDelegate()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             MdocIssuance.BuildDocument(MdlDocType, [Claim(MdlNamespace, "x", "y")], generateRandom: null!));
     }
 
@@ -289,7 +289,7 @@ internal sealed class MdocIssuanceTests
         //salt.
         foreach(Salt salt in allSalts)
         {
-            Assert.ThrowsExactly<ObjectDisposedException>(() => _ = salt.AsReadOnlySpan().Length);
+            _ = Assert.ThrowsExactly<ObjectDisposedException>(() => _ = salt.AsReadOnlySpan().Length);
         }
     }
 

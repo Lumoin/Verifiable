@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Keri;
 
 namespace Verifiable.Acdc;

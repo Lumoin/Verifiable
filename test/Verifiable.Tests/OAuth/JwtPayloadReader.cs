@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Text.Json;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Dpop;
 using Verifiable.Tests.TestInfrastructure;
@@ -72,7 +71,7 @@ internal static class JwtPayloadReader
             3 => 2,
             _ => throw new FormatException($"Invalid base64url length: {n}.")
         };
-        return fullGroups * 3 + extra;
+        return (fullGroups * 3) + extra;
     }
 
 
@@ -104,6 +103,20 @@ internal static class JwtPayloadReader
         using JsonDocument doc = ParsePayloadJson(compactJws);
         return doc.RootElement.TryGetProperty(WellKnownJwtClaimNames.Iss, out JsonElement iss)
             ? iss.GetString() : null;
+    }
+
+
+    /// <summary>
+    /// Reads the <c>jti</c> claim value from a JWT, or <see langword="null"/> when absent. Lets a
+    /// test predict which persisted <c>jti</c> a wire-observed access token's audit record was
+    /// keyed by, without a back door into the host's internal audit set.
+    /// </summary>
+    public static string? ReadJti(string compactJws)
+    {
+        using JsonDocument doc = ParsePayloadJson(compactJws);
+
+        return doc.RootElement.TryGetProperty(WellKnownJwtClaimNames.Jti, out JsonElement jti)
+            ? jti.GetString() : null;
     }
 
 

@@ -1,13 +1,11 @@
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -142,7 +140,7 @@ internal sealed class RefreshedIdTokenAuthContextTests
         //2. Authorize — in-process on the SAME EndpointServer the Kestrel host serves; the wire skin
         //   (AuthorizationServerHttpApplication) carries only the test subject header, not
         //   SetAuthTime/SetAcr, over HTTP.
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetAuthTime(EstablishedAuthTime);
         authorizeContext.SetAcr(EstablishedAcr);

@@ -1,8 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Formats.Asn1;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -70,7 +68,7 @@ internal sealed class TimestampTokenEmbeddedMaterialTests
         using(DigestValue mintedDigest = await CryptographicKeyEvents.ComputeDigestAsync(
             authority.Certificate.RawData, 32, CryptoTags.Sha256Digest, metered.Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         using(DigestValue signerDigest = await CryptographicKeyEvents.ComputeDigestAsync(
-            info.SignerCertificate!.AsReadOnlyMemory(), 32, CryptoTags.Sha256Digest, metered.Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
+            info.SignerCertificate.AsReadOnlyMemory(), 32, CryptoTags.Sha256Digest, metered.Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
             Assert.IsTrue(mintedDigest.AsReadOnlySpan().SequenceEqual(signerDigest.AsReadOnlySpan()),
                 "The surfaced signer certificate is byte-identical to the certificate the fixture minted the authority with, proven through the registered digest delegates.");

@@ -1,9 +1,7 @@
-using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Did;
 using Verifiable.Json;
 using Verifiable.Json.Converters;
 
@@ -55,7 +53,7 @@ internal sealed class JsonConverterTests
         var service = GetConverted(OriginalInputJson, converter);
         Assert.IsNotNull(service);
 
-        var backConvertedJson = GetConverted(service, converter!);
+        var backConvertedJson = GetConverted(service, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -71,7 +69,7 @@ internal sealed class JsonConverterTests
         var context = GetConverted(OriginalInputJson, converter);
         Assert.IsNotNull(context);
 
-        var backConvertedJson = GetConverted(context, converter!);
+        var backConvertedJson = GetConverted(context, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -86,7 +84,7 @@ internal sealed class JsonConverterTests
         var service = GetConverted(OriginalInputJson, converter);
         Assert.IsNotNull(service);
 
-        var backConvertedJson = GetConverted(service, converter!);
+        var backConvertedJson = GetConverted(service, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -128,7 +126,7 @@ internal sealed class JsonConverterTests
         var service = GetConverted(OriginalInputJson, converter);
         Assert.IsNotNull(service);
 
-        var backConvertedJson = GetConverted(service, converter!);
+        var backConvertedJson = GetConverted(service, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -147,7 +145,7 @@ internal sealed class JsonConverterTests
         var service = GetConverted(OriginalInputJson, converter);
         Assert.IsNotNull(service);
 
-        var backConvertedJson = GetConverted(service, converter!);
+        var backConvertedJson = GetConverted(service, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -169,7 +167,7 @@ internal sealed class JsonConverterTests
         Assert.AreEqual(Verifiable.Core.Model.Common.ContextForm.Array, context.Form);
         Assert.HasCount(1, context.Entries);
 
-        var backConvertedJson = GetConverted(context, converter!);
+        var backConvertedJson = GetConverted(context, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -192,7 +190,7 @@ internal sealed class JsonConverterTests
         Assert.HasCount(1, context.Entries);
         Assert.IsTrue(context.Entries[0].IsDefinition);
 
-        var backConvertedJson = GetConverted(context, converter!);
+        var backConvertedJson = GetConverted(context, converter);
         Assert.AreEqual(OriginalInputJson, backConvertedJson);
     }
 
@@ -308,7 +306,7 @@ internal sealed class JsonConverterTests
         const string InvalidInputJson = @"42";
         var converter = new JsonLdContextConverter();
 
-        Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
+        _ = Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
     }
 
 
@@ -321,10 +319,10 @@ internal sealed class JsonConverterTests
     [TestMethod]
     public void WriteThrowsForADegenerateContextEntry()
     {
-        var degenerate = new Context([default(ContextEntry)], ContextForm.Array);
+        var degenerate = new Context([default], ContextForm.Array);
         var converter = new JsonLdContextConverter();
 
-        Assert.ThrowsExactly<System.InvalidOperationException>(() => GetConverted(degenerate, converter));
+        _ = Assert.ThrowsExactly<System.InvalidOperationException>(() => GetConverted(degenerate, converter));
     }
 
 
@@ -360,7 +358,7 @@ internal sealed class JsonConverterTests
         const string InvalidInputJson = @"[""https://www.w3.org/ns/did/v1"",42]";
         var converter = new JsonLdContextConverter();
 
-        Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
+        _ = Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
     }
 
 
@@ -372,7 +370,7 @@ internal sealed class JsonConverterTests
         const string InvalidInputJson = @"[""https://www.w3.org/ns/did/v1"",true]";
         var converter = new JsonLdContextConverter();
 
-        Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
+        _ = Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
     }
 
 
@@ -384,7 +382,7 @@ internal sealed class JsonConverterTests
         const string InvalidInputJson = @"[""https://www.w3.org/ns/did/v1"",null]";
         var converter = new JsonLdContextConverter();
 
-        Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
+        _ = Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
     }
 
 
@@ -396,7 +394,7 @@ internal sealed class JsonConverterTests
         const string InvalidInputJson = @"[""https://www.w3.org/ns/did/v1"",[""nested""]]";
         var converter = new JsonLdContextConverter();
 
-        Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
+        _ = Assert.Throws<JsonException>(() => GetConverted(InvalidInputJson, converter));
     }
 
 
@@ -530,7 +528,7 @@ internal sealed class JsonConverterTests
         }
 
         Assert.IsNotNull(bucket);
-        Assert.IsTrue(bucket!.ContainsKey("a"));
+        Assert.IsTrue(bucket.ContainsKey("a"));
         Assert.IsNull(bucket["a"]);
 
         using(var stream = new MemoryStream())
@@ -591,7 +589,7 @@ internal sealed class JsonConverterTests
         {
             using(var writer = new Utf8JsonWriter(stream))
             {
-                converter.Write(writer, input!, new JsonSerializerOptions());
+                converter.Write(writer, input, new JsonSerializerOptions());
             }
 
             return Encoding.UTF8.GetString(stream.ToArray());

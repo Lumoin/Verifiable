@@ -1,8 +1,6 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Linq;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Cbor;
@@ -10,7 +8,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -172,7 +169,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             eventSink: observed.Add,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
-            Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
+            _ = Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
         }
 
         //No explicit sink this time: the event must still reach the process-wide global stream by default.
@@ -190,7 +187,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false))
         {
             Assert.Contains(
-                (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.P256,
+                e => e.Algorithm == CryptoAlgorithm.P256,
                 globalObserver.Received.OfType<SignatureProducedEvent>(),
                 "The raw-payload SignAsync overload must publish to the global stream by default when no explicit sink is supplied.");
         }
@@ -227,7 +224,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid);
-        Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
     }
 
 
@@ -266,7 +263,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid);
-        Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
     }
 
 
@@ -302,7 +299,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(isValid);
-        Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
     }
 
 
@@ -339,7 +336,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid);
-        Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<VerificationCompletedEvent>());
     }
 
 
@@ -362,15 +359,15 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         var payload = new JwtPayload { [WellKnownJwtClaimNames.Iss] = "did:example:fixture-prior" };
         var unsigned = new UnsignedJwt(header, payload);
 
-        JwtHeaderSerializer headerSerializer = static h => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)h, TestSetup.DefaultSerializationOptions));
-        JwtPayloadSerializer payloadSerializer = static p => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)p, TestSetup.DefaultSerializationOptions));
+        static ReadOnlySpan<byte> headerSerializer(JwtHeader h) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)h, TestSetup.DefaultSerializationOptions));
+        static ReadOnlySpan<byte> payloadSerializer(JwtPayload p) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize((Dictionary<string, object>)p, TestSetup.DefaultSerializationOptions));
 
         var observed = new List<CryptoEvent>();
 
         using JwsMessage message = await unsigned.SignAsync(
             privateKey,
-            headerSerializer,
-            payloadSerializer,
+headerSerializer,
+payloadSerializer,
             TestSetup.Base64UrlEncoder,
             MicrosoftCryptographicFunctionsAdapter.SignP256Async,
             BaseMemoryPool.Shared,
@@ -378,7 +375,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsGreaterThan(0, message.Signatures[0].SignatureBytes.Length);
-        Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
     }
 
 
@@ -417,11 +414,11 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         }
 
         Assert.Contains(
-            (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.P256,
+            e => e.Algorithm == CryptoAlgorithm.P256,
             globalObserver.Received.OfType<SignatureProducedEvent>(),
             "The resolver/binder SignAsync overload must emit via the PrivateKey choke point to the global stream.");
         Assert.Contains(
-            (VerificationCompletedEvent e) => e.Outcome == VerificationOutcome.Valid,
+            e => e.Outcome == VerificationOutcome.Valid,
             globalObserver.Received.OfType<VerificationCompletedEvent>(),
             "The resolver/binder VerifyAsync overload must emit via the PublicKey choke point to the global stream.");
     }
@@ -467,7 +464,7 @@ internal sealed class JCoseCryptoEventSinkForwardingTests
         }
 
         Assert.Contains(
-            (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.P256,
+            e => e.Algorithm == CryptoAlgorithm.P256,
             globalObserver.Received.OfType<SignatureProducedEvent>(),
             "The resolver/binder SignAsync overload must emit via the PrivateKey choke point to the global stream.");
         Assert.IsGreaterThanOrEqualTo(

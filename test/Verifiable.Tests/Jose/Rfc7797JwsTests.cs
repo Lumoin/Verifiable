@@ -1,11 +1,6 @@
-using System;
 using System.Buffers;
 using System.Text;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 

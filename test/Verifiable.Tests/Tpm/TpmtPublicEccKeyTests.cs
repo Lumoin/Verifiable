@@ -1,11 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Cryptography;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -55,7 +49,7 @@ internal sealed class TpmtPublicEccKeyTests
 
         Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_ECC, parsed.PublicArea.Type, "The parsed public area must be an ECC key.");
         Assert.IsNotNull(parsed.PublicArea.Unique.Ecc, "An outPublic ECC key must carry a unique point, not an empty template.");
-        Assert.IsTrue(x.SequenceEqual(parsed.PublicArea.Unique.Ecc!.X.AsReadOnlySpan()), "The X coordinate must survive the wire round-trip.");
-        Assert.IsTrue(y.SequenceEqual(parsed.PublicArea.Unique.Ecc!.Y.AsReadOnlySpan()), "The Y coordinate must survive the wire round-trip.");
+        Assert.IsTrue(x.SequenceEqual(parsed.PublicArea.Unique.Ecc.X.AsReadOnlySpan()), "The X coordinate must survive the wire round-trip.");
+        Assert.IsTrue(y.SequenceEqual(parsed.PublicArea.Unique.Ecc.Y.AsReadOnlySpan()), "The Y coordinate must survive the wire round-trip.");
     }
 }

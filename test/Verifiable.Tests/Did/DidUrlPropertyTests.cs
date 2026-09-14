@@ -64,7 +64,7 @@ namespace Verifiable.Tests.Did
         /// Generates valid path components that start with "/" and contain valid path characters.
         /// </summary>
         private static Gen<string> GenPath { get; } =
-            Gen.Char.Where(c => c != '?' && c != '#' && c > 32 && c < 127)
+            Gen.Char.Where(c => c is not ('?' or '#') and > (char)32 and < (char)127)
                .Array[0, 30]
                .Select(chars => "/" + new string(chars));
 
@@ -80,7 +80,7 @@ namespace Verifiable.Tests.Did
         /// Generates valid query parameter values using URL-safe characters.
         /// </summary>
         private static Gen<string> GenParamValue { get; } =
-            Gen.Char.Where(c => c != '&' && c != '#' && c > 32 && c < 127)
+            Gen.Char.Where(c => c is not ('&' or '#') and > (char)32 and < (char)127)
             .Array[0, 20]
             .Select(chars => new string(chars));
 
@@ -101,14 +101,14 @@ namespace Verifiable.Tests.Did
         /// Generates valid fragment identifiers using URL-safe characters.
         /// </summary>
         private static Gen<string> GenFragment { get; } =
-            Gen.Char.Where(c => c > 32 && c < 127)
+            Gen.Char.Where(c => c is > (char)32 and < (char)127)
             .Array[1, 20]
             .Select(chars => new string(chars));
 
         /// <summary>
         /// Generates optional components (either null or a generated value).
         /// </summary>
-        private static Gen<T?> GenOption<T>(Gen<T> gen) where T: class => Gen.OneOf(Gen.Const(default(T)), gen.Select(x => x));
+        private static Gen<T?> GenOption<T>(Gen<T> gen) where T : class => Gen.OneOf(Gen.Const(default(T)), gen.Select(x => x));
 
 
         /// <summary>
@@ -170,26 +170,26 @@ namespace Verifiable.Tests.Did
         private static string BuildDidUrl(string method, string methodId, string? path, string? query, string? fragment)
         {
             var builder = new StringBuilder();
-            builder.Append("did:");
-            builder.Append(method);
-            builder.Append(':');
-            builder.Append(methodId);
+            _ = builder.Append("did:");
+            _ = builder.Append(method);
+            _ = builder.Append(':');
+            _ = builder.Append(methodId);
 
             if(path != null)
             {
-                builder.Append(path);
+                _ = builder.Append(path);
             }
 
             if(query != null)
             {
-                builder.Append('?');
-                builder.Append(query);
+                _ = builder.Append('?');
+                _ = builder.Append(query);
             }
 
             if(fragment != null)
             {
-                builder.Append('#');
-                builder.Append(fragment);
+                _ = builder.Append('#');
+                _ = builder.Append(fragment);
             }
 
             return builder.ToString();
@@ -423,7 +423,7 @@ namespace Verifiable.Tests.Did
                 var absoluteResult = DidUrl.TryParseAbsolute(invalidString, out _);
 
                 // Invalid strings should not parse successfully (unless they happen to be valid fragments).
-                if(invalidString.StartsWith('#') && invalidString.Length > 1)
+                if(invalidString.StartsWith('#', StringComparison.Ordinal) && invalidString.Length > 1)
                 {
                     // This might be a valid fragment, so we can't assert it fails.
                     return true;
@@ -460,7 +460,7 @@ namespace Verifiable.Tests.Did
                 var parseResult = DidUrl.TryParseAbsolute(didString, out _);
 
                 //Check if method contains only lowercase letters and digits.
-                bool isValidMethod = method.All(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'));
+                bool isValidMethod = method.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9'));
 
                 //Parser result should match method validity.
                 return parseResult == isValidMethod;

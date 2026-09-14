@@ -89,17 +89,17 @@ public static class CBAdESLevelMessageImprintAdapters
     /// </summary>
     public static TryBuildArchiveTimestampValidationMessageImprintInputDelegate TryBuildArchiveTimestampValidationMessageImprintInput { get; } =
         static (
-            CBAdESImprintStructureContext structureContext,
-            ReadOnlyMemory<byte> bodyProtectedHeader,
-            ReadOnlyMemory<byte>? signerProtectedHeader,
-            ReadOnlyMemory<byte> externallySuppliedData,
-            CBAdESPayloadTimestampImprintSource payloadSource,
-            ReadOnlyMemory<byte>? countersignatureOtherFields,
-            ReadOnlyMemory<byte> signatureValue,
-            ReadOnlyMemory<byte>? uHeadersEncodedArray,
-            int arcTstElementIndex,
-            BaseMemoryPool pool,
-            out PooledMemory? result) =>
+            structureContext,
+            bodyProtectedHeader,
+            signerProtectedHeader,
+            externallySuppliedData,
+            payloadSource,
+            countersignatureOtherFields,
+            signatureValue,
+            uHeadersEncodedArray,
+            arcTstElementIndex,
+            pool,
+            out result) =>
         {
             var context = new CBAdESArchiveTimestampImprintContext
             {
@@ -126,16 +126,16 @@ public static class CBAdESLevelMessageImprintAdapters
     /// </summary>
     public static TryBuildArchiveTimestampGenerationMessageImprintInputDelegate TryBuildArchiveTimestampGenerationMessageImprintInput { get; } =
         static (
-            CBAdESImprintStructureContext structureContext,
-            ReadOnlyMemory<byte> bodyProtectedHeader,
-            ReadOnlyMemory<byte>? signerProtectedHeader,
-            ReadOnlyMemory<byte> externallySuppliedData,
-            CBAdESPayloadTimestampImprintSource payloadSource,
-            ReadOnlyMemory<byte>? countersignatureOtherFields,
-            ReadOnlyMemory<byte> signatureValue,
-            ReadOnlyMemory<byte>? uHeadersEncodedArray,
-            BaseMemoryPool pool,
-            out PooledMemory? result) =>
+            structureContext,
+            bodyProtectedHeader,
+            signerProtectedHeader,
+            externallySuppliedData,
+            payloadSource,
+            countersignatureOtherFields,
+            signatureValue,
+            uHeadersEncodedArray,
+            pool,
+            out result) =>
         {
             var context = new CBAdESArchiveTimestampImprintContext
             {

@@ -1,6 +1,4 @@
-using System;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -89,7 +87,7 @@ internal sealed class CmsSignedDataVerificationTests
         //Adding any signed attribute makes the signature cover the authenticated set, so content-type,
         //message-digest, and the signing-time are all present and surfaced through the seam.
         Assert.IsTrue(verified.TryGetSignedAttribute("1.2.840.113549.1.9.5", out CmsSignedAttribute? signingTime), "The signing-time signed attribute must surface.");
-        Assert.IsGreaterThan(0, signingTime!.Length, "The surfaced signing-time value must carry its DER bytes.");
+        Assert.IsGreaterThan(0, signingTime.Length, "The surfaced signing-time value must carry its DER bytes.");
         Assert.IsTrue(verified.TryGetSignedAttribute("1.2.840.113549.1.9.4", out _), "The message-digest signed attribute must surface.");
         Assert.IsFalse(verified.TryGetSignedAttribute("1.2.840.113549.1.9.16.2.47", out _), "An attribute the signer did not add is absent.");
     }

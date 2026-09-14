@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 
@@ -109,7 +106,7 @@ internal static class CredentialEnvelopeIdentityBinding
             return null;
         }
 
-        return methodId.StartsWith('#') && document.Id is not null
+        return methodId.StartsWith('#', StringComparison.Ordinal) && document.Id is not null
             ? $"{document.Id}{methodId}"
             : methodId;
     }

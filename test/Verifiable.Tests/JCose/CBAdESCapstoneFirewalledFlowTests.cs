@@ -1,14 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
+using System.Security.Cryptography;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
@@ -190,7 +185,7 @@ internal sealed class CBAdESCapstoneFirewalledFlowTests
         PublicPrivateKeyMaterial<PublicKeyMemory, PrivateKeyMemory> placeholderKeyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PrivateKeyMemory placeholderPrivateKey = placeholderKeyMaterial.PrivateKey;
         placeholderKeyMaterial.PublicKey.Dispose();
-        SigningDelegate signingDelegate = (privateKeyBytes, dataToSign, signaturePool, context, ct) =>
+        ValueTask<(Signature Signature, CryptoEvent? Event)> signingDelegate(ReadOnlyMemory<byte> privateKeyBytes, ReadOnlyMemory<byte> dataToSign, BaseMemoryPool signaturePool, System.Collections.Frozen.FrozenDictionary<string, object>? context = null, CancellationToken ct = default) =>
             SignWithEcdsaAsync(signer.SigningKey, dataToSign, signaturePool);
 
         DigestValue signingCertificateDigest = await CryptographicKeyEvents.ComputeDigestAsync(

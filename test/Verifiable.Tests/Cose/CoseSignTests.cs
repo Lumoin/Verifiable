@@ -1,12 +1,12 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Cose;
 
@@ -183,7 +183,7 @@ internal sealed class CoseSignTests
             bodyProtectedHeader, null, payload, signers, CoseSerialization.BuildCoseSignatureSigStructure,
             BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
             await CoseSign.VerifyAsync(
                 message, static _ => false, CoseSerialization.BuildCoseSignatureSigStructure, publicKey, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -205,7 +205,7 @@ internal sealed class CoseSignTests
             bodyProtectedHeader, null, payload, signers, CoseSerialization.BuildCoseSignatureSigStructure,
             BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await CoseSign.VerifyAsync(
                 message, 1, CoseSerialization.BuildCoseSignatureSigStructure, publicKey, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -216,7 +216,7 @@ internal sealed class CoseSignTests
     {
         EncodedCoseProtectedHeader bodyProtectedHeader = BuildEmptyProtectedHeader();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await CoseSign.SignAsync(
                 bodyProtectedHeader, null, BuildTestPayload(), [], CoseSerialization.BuildCoseSignatureSigStructure,
                 BaseMemoryPool.Shared, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
@@ -295,7 +295,7 @@ internal sealed class CoseSignTests
         using EncodedCoseSign encoded = CoseSerialization.SerializeCoseSign(message, BaseMemoryPool.Shared);
 
         var reader = new CborReader(encoded.AsReadOnlyMemory(), CborOptions.Lax);
-        reader.ReadTag();
+        _ = reader.ReadTag();
         byte[] untaggedBytes = reader.ReadEncodedValue().ToArray();
 
         using CoseSignParseResult parseResult = CoseSerialization.ParseCoseSign(untaggedBytes, BaseMemoryPool.Shared);
@@ -326,7 +326,7 @@ internal sealed class CoseSignTests
 
         var wrongTagWriterBuffer = new ArrayBufferWriter<byte>();
         var wrongTagWriter = new CborWriter(wrongTagWriterBuffer, CborOptions.RfcCanonical);
-        wrongTagWriter.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        wrongTagWriter.WriteTag(new CborTag(CoseTags.Sign1));
         wrongTagWriter.WriteEncodedValue(untaggedBody);
         byte[] wrongTaggedBytes = wrongTagWriterBuffer.WrittenSpan.ToArray();
 
@@ -354,7 +354,7 @@ internal sealed class CoseSignTests
 
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
+        writer.WriteTag(new CborTag(CoseTags.Sign));
         writer.WriteStartArray(4);
         writer.WriteByteString(bodyProtectedHeader.AsReadOnlySpan());
         writer.WriteStartMap(0);
@@ -385,7 +385,7 @@ internal sealed class CoseSignTests
 
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.Lax);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
+        writer.WriteTag(new CborTag(CoseTags.Sign));
         writer.WriteStartArray(4);
         writer.WriteStartIndefiniteByteString();
         writer.WriteByteString([0xA0]);
@@ -648,7 +648,7 @@ internal sealed class CoseSignTests
             new CoseSignerInput(EncodedCoseProtectedHeader.FromBytes(CoseSerialization.SerializeProtectedHeader(new Dictionary<int, object>()), metered.Pool), null, x25519PrivateKey)
         ];
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await CoseSign.SignAsync(
                 bodyProtectedHeader, null, payload, signers, CoseSerialization.BuildCoseSignatureSigStructure,
                 metered.Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
@@ -760,7 +760,7 @@ internal sealed class CoseSignTests
     {
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)98));
+        writer.WriteTag(new CborTag(98));
         writer.WriteStartArray(4);
         writer.WriteByteString([]);
         writer.WriteStartMap(0);
@@ -783,7 +783,7 @@ internal sealed class CoseSignTests
     {
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)98));
+        writer.WriteTag(new CborTag(98));
         writer.WriteStartArray(4);
         writer.WriteByteString([]);
         writer.WriteStartMap(0);

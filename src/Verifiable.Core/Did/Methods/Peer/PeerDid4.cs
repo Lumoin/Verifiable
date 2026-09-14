@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Text;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.Did.Methods.Peer;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Did.Methods.Peer;
@@ -153,7 +150,7 @@ internal static class PeerDid4
         //async seam, so a hardware-async backend (TPM2_Hash, KMS) works as well as a synchronous software one.
         int byteCount = Encoding.UTF8.GetByteCount(encodedDocument);
         using IMemoryOwner<byte> encodedBytes = pool.Rent(byteCount);
-        Encoding.UTF8.GetBytes(encodedDocument, encodedBytes.Memory.Span[..byteCount]);
+        _ = Encoding.UTF8.GetBytes(encodedDocument, encodedBytes.Memory.Span[..byteCount]);
 
         using DigestValue computed = await CryptographicKeyEvents.ComputeDigestAsync(
             computeDigest, new ReadOnlySequence<byte>(encodedBytes.Memory[..byteCount]), Sha256DigestLength, CryptoTags.Sha256Digest, pool, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -196,10 +193,7 @@ internal static class PeerDid4
         {
             foreach(VerificationMethod method in document.VerificationMethod)
             {
-                if(method.Controller is null)
-                {
-                    method.Controller = idToSet;
-                }
+                method.Controller ??= idToSet;
             }
         }
 

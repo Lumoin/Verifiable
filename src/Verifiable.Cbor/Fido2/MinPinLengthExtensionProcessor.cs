@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Assessment;
 using Verifiable.Fido2;
 

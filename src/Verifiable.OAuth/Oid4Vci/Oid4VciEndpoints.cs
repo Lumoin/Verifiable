@@ -5,7 +5,6 @@ using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 using static Verifiable.Server.EndpointInput;
 
 namespace Verifiable.OAuth.Oid4Vci;
@@ -146,10 +145,10 @@ public static class Oid4VciEndpoints
                 string responseJson;
                 try
                 {
-                    sb.Append('{');
+                    _ = sb.Append('{');
                     bool first = true;
                     JsonAppender.AppendStringField(sb, "c_nonce", credentialNonce, ref first);
-                    sb.Append('}');
+                    _ = sb.Append('}');
                     responseJson = sb.ToString();
                 }
                 finally
@@ -508,28 +507,28 @@ public static class Oid4VciEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
-            sb.Append('"');
+            _ = sb.Append('{');
+            _ = sb.Append('"');
             JsonAppender.AppendEscapedString(sb, Oid4VciCredentialParameterNames.Credentials);
-            sb.Append("\":[");
+            _ = sb.Append("\":[");
 
             bool firstCredential = true;
             foreach(string credential in credentials)
             {
                 if(!firstCredential)
                 {
-                    sb.Append(',');
+                    _ = sb.Append(',');
                 }
 
                 firstCredential = false;
-                sb.Append('{');
+                _ = sb.Append('{');
                 bool credentialFieldFirst = true;
                 JsonAppender.AppendStringField(
                     sb, Oid4VciCredentialParameterNames.Credential, credential, ref credentialFieldFirst);
-                sb.Append('}');
+                _ = sb.Append('}');
             }
 
-            sb.Append(']');
+            _ = sb.Append(']');
 
             //credentials is already written, so the notification_id field (when present) is
             //not the first member and carries a leading comma.
@@ -540,7 +539,7 @@ public static class Oid4VciEndpoints
                     sb, Oid4VciCredentialParameterNames.NotificationId, notificationId, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -750,14 +749,22 @@ public static class Oid4VciEndpoints
 
                 //§9.3: invalid_transaction_id, or credential_request_denied when the Issuer
                 //can no longer issue (the Wallet then stops polling).
-                return Respond((decision.ErrorReason switch
+                return Respond(decision.ErrorReason switch
                 {
+                    //A refusal with no reason set, and an explicit InvalidTransactionId refusal,
+                    //share the same §9.3 mapping.
+                    null => CredentialError(Oid4VciCredentialErrors.InvalidTransactionId,
+                        decision.ErrorDescription ?? "The transaction_id was not issued by this Credential Issuer or was already used."),
+                    DeferredCredentialError.InvalidTransactionId =>
+                        CredentialError(Oid4VciCredentialErrors.InvalidTransactionId,
+                            decision.ErrorDescription ?? "The transaction_id was not issued by this Credential Issuer or was already used."),
                     DeferredCredentialError.CredentialRequestDenied =>
                         CredentialError(Oid4VciCredentialErrors.CredentialRequestDenied,
                             decision.ErrorDescription ?? "The Credential Issuer can no longer issue the credential(s)."),
+
                     _ => CredentialError(Oid4VciCredentialErrors.InvalidTransactionId,
                         decision.ErrorDescription ?? "The transaction_id was not issued by this Credential Issuer or was already used.")
-                }));
+                });
             },
 
             BuildResponse = static (state, _, _) =>
@@ -774,13 +781,13 @@ public static class Oid4VciEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringField(
                 sb, Oid4VciCredentialParameterNames.TransactionId, transactionId, ref first);
             JsonAppender.AppendInt64Field(
                 sb, Oid4VciCredentialParameterNames.Interval, intervalSeconds, ref first);
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -984,7 +991,7 @@ public static class Oid4VciEndpoints
         }
 
         ServerHttpResponse? attestationFailure = ValidateKeyAttestationRequirement(
-            configuration, request, oauth.Codecs.Decoder, oauth.MemoryPool!);
+            configuration, request, oauth.Codecs.Decoder, oauth.MemoryPool);
         if(attestationFailure is not null)
         {
             return attestationFailure;
@@ -1005,7 +1012,7 @@ public static class Oid4VciEndpoints
         if(string.IsNullOrWhiteSpace(request.CredentialConfigurationId)
             || contribution.CredentialConfigurationsSupported is null
             || !contribution.CredentialConfigurationsSupported.TryGetValue(
-                request.CredentialConfigurationId!, out object? configurationObject)
+                request.CredentialConfigurationId, out object? configurationObject)
             || configurationObject is not IReadOnlyDictionary<string, object> configuration)
         {
             return null;
@@ -1527,6 +1534,13 @@ public static class Oid4VciEndpoints
     private static ServerHttpResponse MapCredentialError(CredentialIssuanceDecision decision) =>
         decision.ErrorReason switch
         {
+            //A refusal with no reason set, and an explicit InvalidCredentialRequest refusal,
+            //share the same §8.3.1.2 catch-all mapping.
+            null => CredentialError(Oid4VciCredentialErrors.InvalidCredentialRequest,
+                decision.ErrorDescription ?? "The Credential Request is invalid."),
+            CredentialRequestError.InvalidCredentialRequest =>
+                CredentialError(Oid4VciCredentialErrors.InvalidCredentialRequest,
+                    decision.ErrorDescription ?? "The Credential Request is invalid."),
             CredentialRequestError.UnknownCredentialConfiguration =>
                 CredentialError(Oid4VciCredentialErrors.UnknownCredentialConfiguration,
                     decision.ErrorDescription ?? "The requested Credential Configuration is unknown."),
@@ -1545,6 +1559,7 @@ public static class Oid4VciEndpoints
             CredentialRequestError.CredentialRequestDenied =>
                 CredentialError(Oid4VciCredentialErrors.CredentialRequestDenied,
                     decision.ErrorDescription ?? "The Credential Request was not accepted."),
+
             _ => CredentialError(Oid4VciCredentialErrors.InvalidCredentialRequest,
                 decision.ErrorDescription ?? "The Credential Request is invalid.")
         };
@@ -1760,7 +1775,7 @@ public static class Oid4VciEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
 
             bool first = true;
             JsonAppender.AppendStringField(
@@ -1832,7 +1847,7 @@ public static class Oid4VciEndpoints
                     sb, CredentialIssuerMetadataParameterNames.SignedMetadata, signedMetadata, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -2151,13 +2166,13 @@ public static class Oid4VciEndpoints
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
         first = false;
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":");
+        _ = sb.Append("\":");
         JsonAppender.AppendValue(sb, value);
     }
 }

@@ -1,7 +1,4 @@
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Dpop;
 

@@ -1,8 +1,6 @@
-using System;
-using System.Linq;
+using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Tests.Resolver;
@@ -173,8 +171,8 @@ internal sealed class DidDocumentOperationsTests
 
         _ = DidDocumentOperations.Apply(current, WellKnownDidRegistrationValues.AddToDidDocument, additions);
 
-        Assert.HasCount(1, current.VerificationMethod!, "Apply must not mutate the current document.");
-        Assert.HasCount(1, additions.VerificationMethod!, "Apply must not mutate the payload.");
+        Assert.HasCount(1, current.VerificationMethod, "Apply must not mutate the current document.");
+        Assert.HasCount(1, additions.VerificationMethod, "Apply must not mutate the payload.");
     }
 
 

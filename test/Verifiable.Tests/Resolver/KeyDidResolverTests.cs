@@ -1,18 +1,13 @@
-using System;
 using System.Buffers;
-using System.Linq;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
-using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -30,7 +25,7 @@ internal sealed class KeyDidResolverTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
@@ -82,7 +77,7 @@ internal sealed class KeyDidResolverTests
         Assert.AreEqual($"{did}#{multibase}", method.Id, $"{algorithmName}: the verification method fragment MUST be the multibase value.");
         Assert.AreEqual("Multikey", method.Type);
         Assert.AreEqual(did, method.Controller);
-        Assert.IsInstanceOfType<PublicKeyMultibase>(method.KeyFormat);
+        _ = Assert.IsInstanceOfType<PublicKeyMultibase>(method.KeyFormat);
         Assert.AreEqual(multibase, ((PublicKeyMultibase)method.KeyFormat!).Key);
 
         //A signing key earns authentication, assertionMethod, capabilityInvocation, and capabilityDelegation.
@@ -168,7 +163,7 @@ internal sealed class KeyDidResolverTests
         Assert.IsTrue(result.IsSuccessful, $"A BLS12-381 G2 did:key MUST resolve. Error: {result.ResolutionMetadata.Error?.Type}.");
         VerificationMethod method = result.Document!.VerificationMethod![0];
         Assert.AreEqual("Multikey", method.Type);
-        Assert.IsInstanceOfType<PublicKeyMultibase>(method.KeyFormat);
+        _ = Assert.IsInstanceOfType<PublicKeyMultibase>(method.KeyFormat);
     }
 
 
@@ -422,6 +417,6 @@ internal sealed class KeyDidResolverTests
     private static void AssertHasDidContext(DidDocument document)
     {
         Assert.IsTrue(document.Context?.Entries is { Count: > 0 }, "A resolved did:key document MUST carry @context.");
-        Assert.AreEqual("https://www.w3.org/ns/did/v1", document.Context!.Entries[0].Iri, "The first @context MUST be the DID v1 context.");
+        Assert.AreEqual("https://www.w3.org/ns/did/v1", document.Context.Entries[0].Iri, "The first @context MUST be the DID v1 context.");
     }
 }

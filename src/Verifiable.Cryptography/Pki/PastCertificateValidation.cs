@@ -1,10 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Formats.Asn1;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -130,7 +125,7 @@ public static class PastCertificateValidation
             {
                 //A certificate the completion seam newly acquired belongs to the run from here on; one that was
                 //supplied to it belongs to the caller and is not tracked twice.
-                resources.Track(chain[i]);
+                _ = resources.Track(chain[i]);
             }
         }
 

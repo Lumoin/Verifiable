@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.StatusList;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;

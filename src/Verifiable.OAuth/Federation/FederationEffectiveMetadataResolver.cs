@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 
@@ -151,7 +149,7 @@ public static class FederationEffectiveMetadataResolver
     /// </summary>
     private static bool TryReadAllowedEntityTypes(UnverifiedJwtPayload payload, out HashSet<string> allowed)
     {
-        allowed = new HashSet<string>(StringComparer.Ordinal);
+        allowed = new(StringComparer.Ordinal);
         if(!payload.TryGetValue(WellKnownFederationClaimNames.Constraints, out object? constraintsObj)
             || constraintsObj is not IReadOnlyDictionary<string, object> constraints
             || !constraints.TryGetValue(WellKnownFederationClaimNames.AllowedEntityTypes, out object? typesObj)
@@ -164,7 +162,7 @@ public static class FederationEffectiveMetadataResolver
         {
             if(item is string value && !string.IsNullOrWhiteSpace(value))
             {
-                allowed.Add(value);
+                _ = allowed.Add(value);
             }
         }
 

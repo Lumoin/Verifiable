@@ -1,7 +1,5 @@
-using System;
 using System.Diagnostics;
 using System.Numerics;
-using System.Text;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.Cryptography
@@ -148,7 +146,7 @@ namespace Verifiable.Cryptography
                 return encodedRsaModulusBytes.ToArray();
             }
 
-            if(!(encodedRsaModulusBytes.Length == Rsa2048DerEncodedBytesLength || encodedRsaModulusBytes.Length == Rsa4096DerEncodedBytesLength))
+            if(encodedRsaModulusBytes.Length is not (Rsa2048DerEncodedBytesLength or Rsa4096DerEncodedBytesLength))
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(encodedRsaModulusBytes),

@@ -1,8 +1,6 @@
 using System.Buffers;
-using System.Collections.Generic;
 using Verifiable.DidComm;
 using Verifiable.DidComm.OutOfBand;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -159,7 +157,7 @@ internal sealed class DidCommOutOfBandInvitationTests
             From = "did:example:alice"
         };
 
-        Assert.ThrowsExactly<ArgumentException>(() => notAnInvitation.ToOutOfBandUrl(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => notAnInvitation.ToOutOfBandUrl(
             SpecGoldenVectorBaseUrl, DidCommMessageJson.Serializer, TestSetup.Base64UrlEncoder, Pool));
     }
 

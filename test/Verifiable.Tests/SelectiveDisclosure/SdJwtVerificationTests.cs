@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -88,12 +87,12 @@ internal sealed class SdJwtVerificationTests
         //the whole issuance pipeline (IssueSdJwtTokenAsync -> SdIssuance -> SdJwtPipeline.Redact ->
         //SdJwtClaimRedaction -> DecoyDigests.Augment -> policy), not just the redaction step.
         var probe = new DecoyProbe { DecoysPerLocation = 3 };
-        DecoyDigestCountDelegate policy = static context =>
+        static int policy(DecoyDigestContext context)
         {
             var engine = (DecoyProbe)context.State!;
 
             return engine.Decide(context);
-        };
+        }
 
         using SdToken<string> token = await IssueAsync(
             privateKey, TestContext.CancellationToken, new DecoyDigestOptions(policy, probe)).ConfigureAwait(false);

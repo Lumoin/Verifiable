@@ -1,22 +1,18 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Text;
 using System.Collections.Immutable;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
-using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
@@ -280,7 +276,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
 
         ValidationContext validationContext = new()
         {
-            Context = new ExchangeContext(),
+            Context = [],
             Now = TimeProvider.GetUtcNow(),
             CredentialTypePresent = parsed.Credential.CredentialType is not null
         };
@@ -585,7 +581,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             verifierKeys, parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
         string walletFlowId = $"wallet-nested-{Guid.NewGuid():N}";
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId,
@@ -775,7 +771,7 @@ internal sealed class SdJwtVpTokenVerificationPathTests
             verifierKeys, parHandle, TestContext.CancellationToken).ConfigureAwait(false);
 
         string walletFlowId = $"wallet-untyped-{Guid.NewGuid():N}";
-        wallet.HandleQrScan(requestUri, walletFlowId);
+        _ = wallet.HandleQrScan(requestUri, walletFlowId);
 
         await wallet.HandleJarFetchAsync(
             walletFlowId,

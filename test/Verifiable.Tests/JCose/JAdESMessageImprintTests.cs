@@ -1,11 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -192,7 +188,7 @@ internal sealed class JAdESMessageImprintTests
             SignatureValueBase64Url = ReadOnlyMemory<byte>.Empty
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
             JAdESMessageImprints.BuildArchiveTimestampValidationMessageImprintInputAsync(
                 context, etsiU, arcTstElementIndex: 0, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -213,11 +209,11 @@ internal sealed class JAdESMessageImprintTests
             [MakeClearSigTstElement(), MakeClearXValsElement()]);
 
         var invocationLog = new List<string>();
-        JAdESCanonicalizeUnsignedElementDelegate canonicalize = (canonAlg, element, pool, cancellationToken) =>
+        ValueTask<PooledMemory> canonicalize(string canonAlg, JAdESUnsignedHeaderElement element, BaseMemoryPool pool, CancellationToken cancellationToken = default)
         {
             invocationLog.Add($"{canonAlg}:{element.Kind}");
             return ValueTask.FromResult(PooledMemory.FromBytes(Utf8($"canon-{element.Kind}"), pool, CryptoTags.JAdESMessageImprintInput));
-        };
+        }
 
         byte[] expected = Concat(payload, [Dot], header, [Dot], signature, [Dot], Utf8("canon-sigTst"), Utf8("canon-xVals"));
 
@@ -256,7 +252,7 @@ internal sealed class JAdESMessageImprintTests
             Canonicalize = (_, _, pool, _) => ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, CryptoTags.JAdESMessageImprintInput))
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
             JAdESMessageImprints.BuildArchiveTimestampGenerationMessageImprintInputAsync(
                 context, etsiU, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -277,7 +273,7 @@ internal sealed class JAdESMessageImprintTests
             Canonicalize = (_, _, pool, _) => ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, CryptoTags.JAdESMessageImprintInput))
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
             JAdESMessageImprints.BuildArchiveTimestampGenerationMessageImprintInputAsync(
                 context, etsiU, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -298,7 +294,7 @@ internal sealed class JAdESMessageImprintTests
             CanonAlg = "http://example.org/canon-alg"
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(() =>
             JAdESMessageImprints.BuildArchiveTimestampGenerationMessageImprintInputAsync(
                 context, etsiU, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -316,11 +312,11 @@ internal sealed class JAdESMessageImprintTests
     {
         using JAdESUnsignedHeaders etsiU = new(JAdESEtsiUIncorporationMode.Base64Url, [MakeOpaqueUnknownElement("x-custom", "x")]);
         int invocationCount = 0;
-        JAdESCanonicalizeUnsignedElementDelegate canonicalize = (_, _, pool, _) =>
+        ValueTask<PooledMemory> canonicalize(string _1, JAdESUnsignedHeaderElement _2, BaseMemoryPool pool, CancellationToken _3 = default)
         {
             invocationCount++;
             return ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, CryptoTags.JAdESMessageImprintInput));
-        };
+        }
 
         var context = new JAdESArchiveTimestampImprintContext
         {
@@ -331,7 +327,7 @@ internal sealed class JAdESMessageImprintTests
             Canonicalize = canonicalize
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
             JAdESMessageImprints.BuildArchiveTimestampGenerationMessageImprintInputAsync(
                 context, etsiU, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
 
@@ -480,7 +476,7 @@ internal sealed class JAdESMessageImprintTests
     {
         using JAdESUnsignedHeaders etsiU = new(JAdESEtsiUIncorporationMode.Base64Url, [MakeOpaqueRRefsElement("not-a-rfstst")]);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(() =>
             JAdESMessageImprints.BuildReferencesOnlyTimestampValidationMessageImprintInputAsync(
                 etsiU, rfsTstElementIndex: 0, canonAlg: null, canonicalize: null, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }
@@ -497,11 +493,11 @@ internal sealed class JAdESMessageImprintTests
             [MakeClearSigTstElement(), MakeClearXValsElement(), MakeClearArRefsElement()]);
 
         var invoked = new List<string>();
-        JAdESCanonicalizeUnsignedElementDelegate canonicalize = (canonAlg, element, pool, cancellationToken) =>
+        ValueTask<PooledMemory> canonicalize(string canonAlg, JAdESUnsignedHeaderElement element, BaseMemoryPool pool, CancellationToken cancellationToken = default)
         {
             invoked.Add(element.Kind);
             return ValueTask.FromResult(PooledMemory.FromBytes(Utf8($"c-{element.Kind}"), pool, CryptoTags.JAdESMessageImprintInput));
-        };
+        }
 
         byte[] expected = Utf8("c-arRefs"); //sigTst and xVals are both excluded from rfsTst's own component list.
 
@@ -526,7 +522,7 @@ internal sealed class JAdESMessageImprintTests
             JAdESEtsiUIncorporationMode.ClearJson,
             [MakeClearSigTstElement(), MakeClearXValsElement()]);
 
-        JAdESCanonicalizeUnsignedElementDelegate canonicalize = (canonAlg, element, pool, cancellationToken) =>
+        static ValueTask<PooledMemory> canonicalize(string canonAlg, JAdESUnsignedHeaderElement element, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PooledMemory.FromBytes(Utf8($"c-{element.Kind}"), pool, CryptoTags.JAdESMessageImprintInput));
 
         var context = new JAdESArchiveTimestampImprintContext
@@ -562,7 +558,7 @@ internal sealed class JAdESMessageImprintTests
             JAdESEtsiUIncorporationMode.ClearJson,
             [MakeClearSigTstElement(), MakeClearArRefsElement()]);
 
-        JAdESCanonicalizeUnsignedElementDelegate canonicalize = (canonAlg, element, pool, cancellationToken) =>
+        static ValueTask<PooledMemory> canonicalize(string canonAlg, JAdESUnsignedHeaderElement element, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PooledMemory.FromBytes(Utf8($"c-{element.Kind}"), pool, CryptoTags.JAdESMessageImprintInput));
 
         using(PooledMemory result = await JAdESMessageImprints.BuildSignatureAndReferencesTimestampGenerationMessageImprintInputAsync(

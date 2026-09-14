@@ -1,15 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -184,7 +179,7 @@ internal sealed class CAdESMultiServerWireFlowTests
 
         using CmsSignedData longTerm = CAdESSignatureAugmentation.AddValidationData(
             timestamped, signerIndex: 0,
-            new CAdESValidationMaterial { Certificates = [rootCertificateForMinting], OcspResponses = [retained.Response!] },
+            new CAdESValidationMaterial { Certificates = [rootCertificateForMinting], OcspResponses = [retained.Response] },
             BaseMemoryPool.Shared);
 
         //=== B-LTA: a second real TimeStampReq/TimeStampResp round trip to Host A. ===
@@ -371,7 +366,7 @@ internal sealed class CAdESMultiServerWireFlowTests
         var offlineChecker = new OcspRevocationChecker(replay.FetchAsync, includeNonce: false, allowResponsesWithoutNonce: true);
 
         CertificateRevocationStatus status = await offlineChecker.CheckAsync(
-            facts.SigningCertificate!, [trustAnchor], validationTime, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+            facts.SigningCertificate, [trustAnchor], validationTime, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(CertificateRevocationStatus.Good, status,
             "The signer's revocation status is decided Good from the embedded, wire-surfaced OCSP response through the shipped checker — no OCSP responder was ever reachable in this test.");

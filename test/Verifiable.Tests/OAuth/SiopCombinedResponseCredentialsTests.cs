@@ -1,26 +1,16 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Collections.Immutable;
 using System.Net;
-using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
-using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
-using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop.Server;
 using Verifiable.OAuth.Siop.Server.States;
-using Verifiable.OAuth.Siop.Wallet;
-using Verifiable.Server;
-using Verifiable.Server.Pipeline;
-using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 using StatusListType = Verifiable.Core.StatusList.StatusList;
@@ -107,7 +97,7 @@ internal sealed class SiopCombinedResponseCredentialsTests
                 "Section 12's compliance MUST makes the verified presentation the relying party's to read, " +
                 "so a combined response that carried a vp_token publishes its credential.");
             Assert.IsTrue(
-                verified.Credentials!.TryGetValue(
+                verified.Credentials.TryGetValue(
                     SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId,
                     out VpCredentialClaims? credential),
                 "Section 8.1 keys the presentation by the credential query identifier, which on this seat is " +
@@ -163,7 +153,7 @@ internal sealed class SiopCombinedResponseCredentialsTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
@@ -225,7 +215,7 @@ internal sealed class SiopCombinedResponseCredentialsTests
             FlowInput input = await executor.ExecuteAsync(
                 new ValidateCombinedSiopResponse(
                     idToken, vpToken, SiopCombinedResponseFixture.RelyingPartyClientId, Nonce, SiopCombinedResponseFixture.AllowedSiopAlgorithms),
-                new ExchangeContext(),
+                [],
                 TestContext.CancellationToken).ConfigureAwait(false);
 
             SelfIssuedAuthenticationVerified verified =
@@ -234,11 +224,11 @@ internal sealed class SiopCombinedResponseCredentialsTests
             Assert.IsNotNull(verified.Credentials,
                 "The combined response carried a vp_token, so its credential is published.");
             Assert.IsTrue(
-                verified.Credentials!.ContainsKey(deploymentCredentialQueryId),
+                verified.Credentials.ContainsKey(deploymentCredentialQueryId),
                 "Section 8.1's key is the id the deployment's own Credential Query used, which is the " +
                 "identifier this seat was registered with.");
             Assert.IsFalse(
-                verified.Credentials!.ContainsKey(
+                verified.Credentials.ContainsKey(
                     SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId),
                 "A deployment that named its own credential query identifier is never published under the " +
                 "library's default one as well.");
@@ -282,10 +272,10 @@ internal sealed class SiopCombinedResponseCredentialsTests
             Assert.IsNotNull(verified.Credentials,
                 "The combined response carried a vp_token, so its credential is published.");
             Assert.IsTrue(
-                verified.Credentials!.ContainsKey(deploymentCredentialQueryId),
+                verified.Credentials.ContainsKey(deploymentCredentialQueryId),
                 "Section 8.1's key is the id the hosted deployment configured its Credential Query with.");
             Assert.IsFalse(
-                verified.Credentials!.ContainsKey(
+                verified.Credentials.ContainsKey(
                     SiopVerifierExecutor.SiopCombinedResponseCredentialQueryId),
                 "A hosted deployment that named its own credential query identifier is never published " +
                 "under the library's default one as well.");
@@ -336,14 +326,14 @@ internal sealed class SiopCombinedResponseCredentialsTests
             Assert.IsNotNull(verified.Credentials,
                 "The combined response carried a vp_token, so its credential is published.");
             Assert.IsTrue(
-                verified.Credentials!.TryGetValue(credentialQueryId, out VpCredentialClaims? credential),
+                verified.Credentials.TryGetValue(credentialQueryId, out VpCredentialClaims? credential),
                 "Section 8.1 names the Referenced Token by the credential query identifier.");
             Assert.IsNotNull(credential);
 
             Assert.IsNotNull(verified.CredentialStatuses,
                 "The credential carried a status claim, so Section 8.3's status steps ran and recorded an outcome.");
             Assert.IsTrue(
-                verified.CredentialStatuses!.ContainsKey(credentialQueryId),
+                verified.CredentialStatuses.ContainsKey(credentialQueryId),
                 "The outcome is published under the same identifier the credential itself is published under, " +
                 "so the two maps are read together without a second correlation.");
 
@@ -351,7 +341,7 @@ internal sealed class SiopCombinedResponseCredentialsTests
                 "Section 8.3 step 1 checks for the existence of a status claim; this credential carries one.");
             Assert.AreEqual(
                 new StatusListReference(CredentialIndex, StatusListUri),
-                credential.Status!.StatusList,
+                credential.Status.StatusList,
                 "The published record states the Section 6.2 reference the credential's issuer wrote, so the " +
                 "relying party reads the same entry the status step resolved.");
         }

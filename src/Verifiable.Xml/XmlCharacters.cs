@@ -59,9 +59,7 @@ internal static class XmlCharacters
     public static bool IsChar(int codePoint)
     {
         return codePoint is 0x9 or 0xA or 0xD
-            || (codePoint >= 0x20 && codePoint <= 0xD7FF)
-            || (codePoint >= 0xE000 && codePoint <= 0xFFFD)
-            || (codePoint >= 0x10000 && codePoint <= 0x10FFFF);
+            or (>= 0x20 and <= 0xD7FF) or (>= 0xE000 and <= 0xFFFD) or (>= 0x10000 and <= 0x10FFFF);
     }
 
 
@@ -77,21 +75,8 @@ internal static class XmlCharacters
     /// <returns><see langword="true"/> when the code point may start an <c>NCName</c>.</returns>
     public static bool IsNameStartCharacter(int codePoint)
     {
-        return (codePoint >= 'A' && codePoint <= 'Z')
-            || codePoint == '_'
-            || (codePoint >= 'a' && codePoint <= 'z')
-            || (codePoint >= 0xC0 && codePoint <= 0xD6)
-            || (codePoint >= 0xD8 && codePoint <= 0xF6)
-            || (codePoint >= 0xF8 && codePoint <= 0x2FF)
-            || (codePoint >= 0x370 && codePoint <= 0x37D)
-            || (codePoint >= 0x37F && codePoint <= 0x1FFF)
-            || (codePoint >= 0x200C && codePoint <= 0x200D)
-            || (codePoint >= 0x2070 && codePoint <= 0x218F)
-            || (codePoint >= 0x2C00 && codePoint <= 0x2FEF)
-            || (codePoint >= 0x3001 && codePoint <= 0xD7FF)
-            || (codePoint >= 0xF900 && codePoint <= 0xFDCF)
-            || (codePoint >= 0xFDF0 && codePoint <= 0xFFFD)
-            || (codePoint >= 0x10000 && codePoint <= 0xEFFFF);
+        return codePoint is (>= 'A' and <= 'Z') or '_'
+            or (>= 'a' and <= 'z') or (>= 0xC0 and <= 0xD6) or (>= 0xD8 and <= 0xF6) or (>= 0xF8 and <= 0x2FF) or (>= 0x370 and <= 0x37D) or (>= 0x37F and <= 0x1FFF) or (>= 0x200C and <= 0x200D) or (>= 0x2070 and <= 0x218F) or (>= 0x2C00 and <= 0x2FEF) or (>= 0x3001 and <= 0xD7FF) or (>= 0xF900 and <= 0xFDCF) or (>= 0xFDF0 and <= 0xFFFD) or (>= 0x10000 and <= 0xEFFFF);
     }
 
 
@@ -136,7 +121,7 @@ internal static class XmlCharacters
         }
 
         byte first = uriReference[0];
-        bool isAlpha = (first >= (byte)'A' && first <= (byte)'Z') || (first >= (byte)'a' && first <= (byte)'z');
+        bool isAlpha = first is (>= ((byte)'A') and <= ((byte)'Z')) or (>= ((byte)'a') and <= ((byte)'z'));
         if(!isAlpha)
         {
             return false;
@@ -150,10 +135,7 @@ internal static class XmlCharacters
                 return true;
             }
 
-            bool isSchemeCharacter = (octet >= (byte)'A' && octet <= (byte)'Z')
-                || (octet >= (byte)'a' && octet <= (byte)'z')
-                || (octet >= (byte)'0' && octet <= (byte)'9')
-                || octet is (byte)'+' or (byte)'-' or (byte)'.';
+            bool isSchemeCharacter = octet is (>= ((byte)'A') and <= ((byte)'Z')) or (>= ((byte)'a') and <= ((byte)'z')) or (>= ((byte)'0') and <= ((byte)'9')) or (byte)'+' or (byte)'-' or (byte)'.';
             if(!isSchemeCharacter)
             {
                 return false;

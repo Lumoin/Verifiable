@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Constants;
@@ -125,7 +124,7 @@ public sealed class TpmuPublicId: IDisposable
             return ReadOnlySpan<byte>.Empty;
         }
 
-        return RsaStorage.Memory.Span.Slice(0, RsaLength);
+        return RsaStorage.Memory.Span[..RsaLength];
     }
 
     /// <summary>
@@ -143,7 +142,7 @@ public sealed class TpmuPublicId: IDisposable
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return RsaStorage.Memory.Slice(0, RsaLength);
+        return RsaStorage.Memory[..RsaLength];
     }
 
     /// <summary>
@@ -188,7 +187,7 @@ public sealed class TpmuPublicId: IDisposable
             return ReadOnlySpan<byte>.Empty;
         }
 
-        return KeyedHashStorage.Memory.Span.Slice(0, KeyedHashLength);
+        return KeyedHashStorage.Memory.Span[..KeyedHashLength];
     }
 
     /// <summary>
@@ -237,7 +236,7 @@ public sealed class TpmuPublicId: IDisposable
     /// Creates an empty keyed-hash public ID (for sealed-data templates; the TPM fills in the unique value).
     /// </summary>
     /// <returns>An empty keyed-hash unique.</returns>
-    public static TpmuPublicId EmptyKeyedHash() => new((IMemoryOwner<byte>?)null, 0);
+    public static TpmuPublicId EmptyKeyedHash() => new(null, 0);
 
     /// <summary>
     /// Gets the serialized size of this union.
@@ -268,7 +267,7 @@ public sealed class TpmuPublicId: IDisposable
 
         switch(Type)
         {
-            case(TpmAlgIdConstants.TPM_ALG_RSA):
+            case TpmAlgIdConstants.TPM_ALG_RSA:
             {
                 writer.WriteUInt16((ushort)RsaLength);
                 if(RsaLength > 0)
@@ -278,17 +277,17 @@ public sealed class TpmuPublicId: IDisposable
 
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_ECC):
+            case TpmAlgIdConstants.TPM_ALG_ECC:
             {
                 Ecc!.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_KEYEDHASH):
+            case TpmAlgIdConstants.TPM_ALG_KEYEDHASH:
             {
                 writer.WriteUInt16((ushort)KeyedHashLength);
                 if(KeyedHashLength > 0)
                 {
-                    writer.WriteBytes(KeyedHashStorage!.Memory.Span.Slice(0, KeyedHashLength));
+                    writer.WriteBytes(KeyedHashStorage!.Memory.Span[..KeyedHashLength]);
                 }
 
                 break;
@@ -328,7 +327,7 @@ public sealed class TpmuPublicId: IDisposable
             }
 
             IMemoryOwner<byte> storage = pool.Rent(size);
-            reader.ReadBytes(size).CopyTo(storage.Memory.Span.Slice(0, size));
+            reader.ReadBytes(size).CopyTo(storage.Memory.Span[..size]);
 
             return new TpmuPublicId(TpmAlgIdConstants.TPM_ALG_RSA, storage, size);
         }
@@ -342,7 +341,7 @@ public sealed class TpmuPublicId: IDisposable
             }
 
             IMemoryOwner<byte> storage = pool.Rent(size);
-            reader.ReadBytes(size).CopyTo(storage.Memory.Span.Slice(0, size));
+            reader.ReadBytes(size).CopyTo(storage.Memory.Span[..size]);
 
             return new TpmuPublicId(storage, size);
         }

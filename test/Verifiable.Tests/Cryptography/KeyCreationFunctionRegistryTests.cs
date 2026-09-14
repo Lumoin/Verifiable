@@ -1,13 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cryptography;
@@ -43,8 +40,7 @@ internal sealed class KeyCreationFunctionRegistryTests
             using PrivateKeyMemory privateKey = keys.PrivateKey;
 
             Assert.Contains(
-                (KeyMaterialGeneratedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.P256
+                e => e.Algorithm == CryptoAlgorithm.P256
                     && e.Purpose == Purpose.Signing
                     && e.Backend == "System.Security.Cryptography"
                     && e.MaterialSemantics == MaterialSemantics.Direct,
@@ -69,8 +65,7 @@ internal sealed class KeyCreationFunctionRegistryTests
             using PrivateKeyMemory privateKey = keys.PrivateKey;
 
             Assert.Contains(
-                (KeyMaterialGeneratedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.Ed25519
+                e => e.Algorithm == CryptoAlgorithm.Ed25519
                     && e.Purpose == Purpose.Signing
                     && e.Backend == "Org.BouncyCastle.Cryptography"
                     && e.MaterialSemantics == MaterialSemantics.Direct,
@@ -97,8 +92,7 @@ internal sealed class KeyCreationFunctionRegistryTests
             using PrivateKeyMemory privateKey = keys.PrivateKey;
 
             Assert.Contains(
-                (KeyMaterialGeneratedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.P256
+                e => e.Algorithm == CryptoAlgorithm.P256
                     && e.Purpose == Purpose.Exchange
                     && e.Backend == "Org.BouncyCastle.Cryptography",
                 observed.OfType<KeyMaterialGeneratedEvent>(),
@@ -117,7 +111,7 @@ internal sealed class KeyCreationFunctionRegistryTests
     [TestMethod]
     public void ResolveCreationThrowsForTheDocumentedMlKemExclusion()
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.ResolveCreation(CryptoAlgorithm.MlKem768, Purpose.Exchange));
     }
 

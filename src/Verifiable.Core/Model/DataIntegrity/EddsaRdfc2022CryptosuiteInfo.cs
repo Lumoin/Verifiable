@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography.Context;
 

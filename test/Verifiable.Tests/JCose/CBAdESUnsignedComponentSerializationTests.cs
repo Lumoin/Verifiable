@@ -1,10 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -322,8 +318,8 @@ internal sealed class CBAdESUnsignedComponentSerializationTests
         bool parsed = CBAdESSerialization.TryParseValidationData(expected, out CBAdESValidationData? result);
         Assert.IsTrue(parsed);
         Assert.HasCount(2, result!.CertificateValues!);
-        Assert.IsInstanceOfType<CBAdESX509Certificate>(result.CertificateValues![0]);
-        Assert.IsInstanceOfType<CBAdESOtherCertificate>(result.CertificateValues[1]);
+        _ = Assert.IsInstanceOfType<CBAdESX509Certificate>(result.CertificateValues![0]);
+        _ = Assert.IsInstanceOfType<CBAdESOtherCertificate>(result.CertificateValues[1]);
         Assert.IsTrue(x509.AsSpan().SequenceEqual(((CBAdESX509Certificate)result.CertificateValues[0]).Certificate.Val.Span));
         Assert.IsTrue(other.AsSpan().SequenceEqual(((CBAdESOtherCertificate)result.CertificateValues[1]).Certificate.Val.Span));
     }

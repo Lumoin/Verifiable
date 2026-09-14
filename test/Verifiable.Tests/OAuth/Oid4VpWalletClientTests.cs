@@ -1,35 +1,22 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Security.Cryptography;
-using System.Text.Json;
-using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
-using System.Text;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
-using Verifiable.Cryptography.Pki;
-using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.Json;
-using Verifiable.Json.Sd;
 using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Oid4Vp;
-using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.Federation;
-using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -51,8 +38,6 @@ internal sealed class Oid4VpWalletClientTests
     private static Uri VerifierBaseUri { get; } = new("https://verifier.example.com");
 
     private const string IssuerId = SdJwtVpFixture.IssuerId;
-
-    private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
 
     private static ImmutableHashSet<CapabilityIdentifier> Oid4VpCapabilities { get; } =
         ImmutableHashSet.Create(
@@ -91,8 +76,8 @@ internal sealed class Oid4VpWalletClientTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result.PostedResponseArtifact);
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState);
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState);
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "Verifier PDA must reach PresentationVerified after the wallet POSTs the encrypted response.");
     }
@@ -121,7 +106,7 @@ internal sealed class Oid4VpWalletClientTests
         using PublicKeyMemory issuerKey = issuerPublicKey;
         app.RegisterIssuerTrust(IssuerId, issuerKey);
 
-        (Uri requestUri, string _, string compactJar) = await IssueJarAsync(
+        (Uri requestUri, _, string compactJar) = await IssueJarAsync(
             app, verifierKeys).ConfigureAwait(false);
 
         //The direct_post POST is the wallet client's only outbound call in this flow (PAR/JAR are
@@ -159,7 +144,7 @@ internal sealed class Oid4VpWalletClientTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result.PostedResponseArtifact);
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "OID4VP 1.0 §8.2: unrecognized response members (response_code, x-future) must not fail the presentation.");
     }
 
@@ -264,7 +249,7 @@ internal sealed class Oid4VpWalletClientTests
         using PublicKeyMemory issuerKey = issuerPublicKey;
         app.RegisterIssuerTrust(IssuerId, issuerKey);
 
-        (Uri requestUri, string _, string compactJar) = await IssueJarAsync(
+        (Uri requestUri, _, string compactJar) = await IssueJarAsync(
             app, verifierKeys).ConfigureAwait(false);
 
         Oid4VpWalletClient walletClient = BuildWalletClient(
@@ -273,7 +258,7 @@ internal sealed class Oid4VpWalletClientTests
         using CancellationTokenSource cts = new();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             _ = await walletClient.PresentJarAsync(
                 new PresentJarOptions
@@ -417,7 +402,7 @@ internal sealed class Oid4VpWalletClientTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(firstHandle).State,
             "The first presentation of fresh salts must verify and record them.");
 
@@ -432,7 +417,7 @@ internal sealed class Oid4VpWalletClientTests
                     CompactJar = secondJar,
                     RequestUri = secondUri,
                     ExpectedVerifierClientId = VerifierClientId,
-                        FlowId = $"wallet-second-{Guid.NewGuid():N}"
+                    FlowId = $"wallet-second-{Guid.NewGuid():N}"
                 },
                 TestContext.CancellationToken).ConfigureAwait(false);
         }
@@ -491,7 +476,7 @@ internal sealed class Oid4VpWalletClientTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "The issuer's Entity Identifier is a subject on a validated OpenID Federation trust path to a familiar anchor, so the trusted_authorities constraint naming that identifier is satisfied.");
     }
@@ -610,12 +595,12 @@ internal sealed class Oid4VpWalletClientTests
             [familiarAnchor.Value] = anchorEc.CompactJws
         };
 
-        FetchEntityConfigurationDelegate fetchConfiguration = (entity, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchConfiguration(EntityIdentifier entity, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(configByEntity.TryGetValue(entity.Value, out string? jws)
                 ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
                 : null);
 
-        FetchEntityStatementDelegate fetchSubordinate = (subject, fetchEndpoint, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchSubordinate(EntityIdentifier subject, Uri fetchEndpoint, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(
                 string.Equals(fetchEndpoint.ToString(), AnchorFetchEndpoint, StringComparison.Ordinal)
                     && string.Equals(subject.Value, issuerEntity.Value, StringComparison.Ordinal)
@@ -634,10 +619,10 @@ internal sealed class Oid4VpWalletClientTests
             resolveFederationTrustPath: (issuer, ct) => FederationTrustPathEvidence.ResolveAsync(
                 issuer,
                 [familiarAnchor],
-                fetchConfiguration,
-                fetchSubordinate,
+fetchConfiguration,
+fetchSubordinate,
                 validate,
-                new ExchangeContext(),
+                [],
                 maxChainLength: 5,
                 validationTime: now,
                 clockSkew: TimeSpan.FromMinutes(5),
@@ -690,7 +675,7 @@ internal sealed class Oid4VpWalletClientTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(
             app.GetFlowState(parHandle).State,
             "A disclosed claim value that matches the DCQL values constraint must verify.");
     }
@@ -805,7 +790,7 @@ internal sealed class Oid4VpWalletClientTests
 
         public ValueTask Record(DigestValue commitment, CancellationToken cancellationToken)
         {
-            Seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
+            _ = Seen.Add(Convert.ToHexString(commitment.AsReadOnlySpan()));
 
             return ValueTask.CompletedTask;
         }

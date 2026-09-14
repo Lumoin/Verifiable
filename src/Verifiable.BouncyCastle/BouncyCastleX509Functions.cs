@@ -1,21 +1,17 @@
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Pkix;
-using BcAuthorityKeyIdentifier = Org.BouncyCastle.Asn1.X509.AuthorityKeyIdentifier;
-using PkiAuthorityKeyIdentifier = Verifiable.Cryptography.Pki.AuthorityKeyIdentifier;
-using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Utilities.Collections;
 using Org.BouncyCastle.X509;
 using Org.BouncyCastle.X509.Extension;
 using Org.BouncyCastle.X509.Store;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
-using System.Linq;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
+using BcAuthorityKeyIdentifier = Org.BouncyCastle.Asn1.X509.AuthorityKeyIdentifier;
 using BouncyCastleX509 = Org.BouncyCastle.X509.X509Certificate;
+using PkiAuthorityKeyIdentifier = Verifiable.Cryptography.Pki.AuthorityKeyIdentifier;
 
 namespace Verifiable.BouncyCastle;
 
@@ -151,7 +147,7 @@ public static class BouncyCastleX509Functions
         {
             BouncyCastleX509 anchorCert = CertificateParser.ReadCertificate(
                 anchor.AsReadOnlyMemory().ToArray());
-            trustAnchorSet.Add(new TrustAnchor(anchorCert, null));
+            _ = trustAnchorSet.Add(new TrustAnchor(anchorCert, null));
         }
 
         var intermediateCerts = new List<BouncyCastleX509>();

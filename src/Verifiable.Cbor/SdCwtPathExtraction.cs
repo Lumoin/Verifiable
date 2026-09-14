@@ -1,6 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -161,7 +158,7 @@ public static class SdCwtPathExtraction
         var interiorClaims = new Dictionary<CredentialPath, object?>();
         var seenDigests = new HashSet<string>(StringComparer.Ordinal);
 
-        WalkAndClean(reader, CredentialPath.Root, digestToDisclosure, disclosurePaths, issuerSignedClaims, interiorClaims, seenDigests, encoder, depth: 0);
+        _ = WalkAndClean(reader, CredentialPath.Root, digestToDisclosure, disclosurePaths, issuerSignedClaims, interiorClaims, seenDigests, encoder, depth: 0);
 
         return new SdCwtWalkResult(disclosurePaths, issuerSignedClaims, interiorClaims);
     }
@@ -232,7 +229,7 @@ public static class SdCwtPathExtraction
 
         foreach(CredentialPath path in disclosurePaths.Values)
         {
-            allPathsWithDisclosures.Add(path);
+            _ = allPathsWithDisclosures.Add(path);
         }
 
         return new PathLattice(allPathsWithDisclosures, mandatoryPaths);
@@ -285,7 +282,7 @@ public static class SdCwtPathExtraction
 
         if(state == CborReaderState.StartMap)
         {
-            reader.ReadStartMap();
+            _ = reader.ReadStartMap();
 
             var localNames = new HashSet<string>(StringComparer.Ordinal);
             var redactedDigests = new List<string>();
@@ -298,7 +295,7 @@ public static class SdCwtPathExtraction
                 //The key is a CBOR simple value — not an integer or text string.
                 if(reader.PeekState() == CborReaderState.SimpleValue)
                 {
-                    int simpleKey = (int)reader.ReadSimpleValue();
+                    int simpleKey = reader.ReadSimpleValue();
                     if(simpleKey == SdCwtConstants.RedactedClaimKeysSimpleValue
                         && reader.PeekState() == CborReaderState.StartArray)
                     {
@@ -395,7 +392,7 @@ public static class SdCwtPathExtraction
 
         if(state == CborReaderState.StartArray)
         {
-            reader.ReadStartArray();
+            _ = reader.ReadStartArray();
 
             var cleaned = new List<object?>();
             int index = 0;
@@ -594,7 +591,7 @@ public static class SdCwtPathExtraction
     /// <param name="encoder">Delegate for Base64Url encoding byte-string digests.</param>
     private static void ReadDigestArray(CborReader reader, List<string> digests, EncodeDelegate encoder)
     {
-        reader.ReadStartArray();
+        _ = reader.ReadStartArray();
 
         while(reader.PeekState() != CborReaderState.EndArray)
         {
@@ -639,7 +636,7 @@ public static class SdCwtPathExtraction
         CredentialPath currentPath,
         HashSet<CredentialPath> paths)
     {
-        paths.Add(currentPath);
+        _ = paths.Add(currentPath);
 
         var reader = new CborReader(payload.ToArray(), CborOptions.Lax);
         CollectPathsFromCborReader(reader, currentPath, paths);
@@ -655,7 +652,7 @@ public static class SdCwtPathExtraction
 
         if(state == CborReaderState.StartMap)
         {
-            reader.ReadStartMap();
+            _ = reader.ReadStartMap();
 
             while(reader.PeekState() != CborReaderState.EndMap)
             {
@@ -671,7 +668,7 @@ public static class SdCwtPathExtraction
                 {
                     string keyName = key is int ik ? ik.ToString(CultureInfo.InvariantCulture) : (string)key;
                     CredentialPath childPath = currentPath.Append(keyName);
-                    paths.Add(childPath);
+                    _ = paths.Add(childPath);
                     CollectPathsFromCborReader(reader, childPath, paths);
                 }
             }
@@ -680,13 +677,13 @@ public static class SdCwtPathExtraction
         }
         else if(state == CborReaderState.StartArray)
         {
-            reader.ReadStartArray();
+            _ = reader.ReadStartArray();
             int index = 0;
 
             while(reader.PeekState() != CborReaderState.EndArray)
             {
                 CredentialPath childPath = currentPath.Append(index);
-                paths.Add(childPath);
+                _ = paths.Add(childPath);
                 CollectPathsFromCborReader(reader, childPath, paths);
                 index++;
             }
@@ -705,7 +702,7 @@ public static class SdCwtPathExtraction
         CredentialPath currentPath,
         HashSet<CredentialPath> mandatory)
     {
-        mandatory.Add(currentPath);
+        _ = mandatory.Add(currentPath);
 
         var reader = new CborReader(payload.ToArray(), CborOptions.Lax);
         CollectMandatoryPathsFromCborReader(reader, currentPath, mandatory);
@@ -721,7 +718,7 @@ public static class SdCwtPathExtraction
 
         if(state == CborReaderState.StartMap)
         {
-            reader.ReadStartMap();
+            _ = reader.ReadStartMap();
 
             while(reader.PeekState() != CborReaderState.EndMap)
             {
@@ -738,7 +735,7 @@ public static class SdCwtPathExtraction
                 {
                     string keyName = key is int ik ? ik.ToString(CultureInfo.InvariantCulture) : (string)key;
                     CredentialPath childPath = currentPath.Append(keyName);
-                    mandatory.Add(childPath);
+                    _ = mandatory.Add(childPath);
                     CollectMandatoryPathsFromCborReader(reader, childPath, mandatory);
                 }
             }
@@ -747,13 +744,13 @@ public static class SdCwtPathExtraction
         }
         else if(state == CborReaderState.StartArray)
         {
-            reader.ReadStartArray();
+            _ = reader.ReadStartArray();
             int index = 0;
 
             while(reader.PeekState() != CborReaderState.EndArray)
             {
                 CredentialPath childPath = currentPath.Append(index);
-                mandatory.Add(childPath);
+                _ = mandatory.Add(childPath);
                 CollectMandatoryPathsFromCborReader(reader, childPath, mandatory);
                 index++;
             }

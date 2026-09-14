@@ -1,11 +1,8 @@
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.DidComm;
 using Verifiable.DidComm.DiscoverFeatures;
 using Verifiable.DidComm.ProblemReports;
 using Verifiable.DidComm.Routing;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 

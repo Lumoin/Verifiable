@@ -1,7 +1,6 @@
-using System;
-using System.Buffers;
-using Lumoin.Base;
 using Lumoin.Base.Libsodium;
+using System.Buffers;
+using Verifiable.Libsodium;
 
 namespace Verifiable.Tests.Cryptography
 {
@@ -120,6 +119,42 @@ namespace Verifiable.Tests.Cryptography
             Assert.IsTrue(
                 SodiumBacking.IsAvailable,
                 "SodiumBacking.IsAvailable must observe the native library this project's own libsodium PackageReference already deploys.");
+        }
+
+
+        /// <summary>
+        /// Off browser-wasm, <see cref="LibsodiumCryptographicFunctions.UsesSodiumGuardedScratchMemory"/>
+        /// reports that Ed25519 secret-key scratch memory is sodium-guarded native memory. A
+        /// browser-wasm smoke run asserts the same property is <see langword="false"/> there, so this
+        /// test pins the off-browser side of that platform split: the two runs together prove the
+        /// posture cannot silently flip either way on either platform.
+        /// </summary>
+        [TestMethod]
+        public void UsesSodiumGuardedScratchMemoryIsTrueOffBrowser()
+        {
+            Assert.IsTrue(
+                LibsodiumCryptographicFunctions.UsesSodiumGuardedScratchMemory,
+                "Off browser-wasm, Ed25519 secret-key scratch memory must be sodium-guarded native memory.");
+        }
+
+
+        /// <summary>
+        /// Off browser-wasm, <see cref="SodiumScratchPool.Rent(int)"/> hands out sodium-guarded native
+        /// memory, observed here by the returned owner never being
+        /// <see cref="SodiumScratchPool.PinnedZeroOnReturnMemoryOwner"/> — the managed, pinned,
+        /// zero-on-return owner that branch reserves for browser-wasm, where WebAssembly's linear
+        /// memory has no guard-page or memory-locking primitive. This observes the branch
+        /// <see cref="Rent(int)"/> actually takes, rather than restating the
+        /// <see cref="SodiumScratchPool.IsGuardedNativeMemory"/> predicate that branch is guarded by.
+        /// </summary>
+        [TestMethod]
+        public void SodiumScratchPoolRentOffBrowserNeverReturnsThePinnedManagedOwner()
+        {
+            using IMemoryOwner<byte> owner = SodiumScratchPool.Instance.Rent(LibsodiumCrypto.Ed25519SecretKeyLength);
+
+            Assert.IsNotInstanceOfType<SodiumScratchPool.PinnedZeroOnReturnMemoryOwner>(
+                owner,
+                "Off browser-wasm, SodiumScratchPool.Rent must never hand out the browser-only pinned managed owner.");
         }
     }
 }

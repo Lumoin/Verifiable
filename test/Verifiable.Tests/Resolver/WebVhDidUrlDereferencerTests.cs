@@ -1,12 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
@@ -17,9 +14,7 @@ using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
@@ -71,7 +66,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes["https://example.com/governance/issuers.json"] = (200, served, "application/json");
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", routes).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"A did:webvh path DID URL MUST dereference. Error: {result.DereferencingMetadata.Error?.Type}.");
 
@@ -90,7 +85,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes["https://example.com/governance/issuers.json"] = (404, null, null);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A 404 file MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.NotFound, result.DereferencingMetadata.Error);
@@ -107,7 +102,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(
             Domain, controller, GenesisTime, explicitFilesServiceEndpoint: "ftp://example.com/").ConfigureAwait(false);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", log, LogRoutes(log)).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", LogRoutes(log)).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A non-HTTP(S) #files endpoint MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.InvalidDid, result.DereferencingMetadata.Error);
@@ -127,10 +122,10 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"A faithfully minted whois.vp MUST dereference. Error: {result.DereferencingMetadata.Error?.Type}.");
-        Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(result.ContentStream,
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(result.ContentStream,
             "A dereferenced whois MUST return the verified secured presentation.");
     }
 
@@ -151,7 +146,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(tampered), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A whois.vp with a tampered proof MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.InvalidDid, result.DereferencingMetadata.Error);
@@ -174,7 +169,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A whois.vp signed by a key outside the document's authentication MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.InvalidDid, result.DereferencingMetadata.Error);
@@ -196,7 +191,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(withoutCredential), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A whois.vp with no credential about the DID MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.InvalidDid, result.DereferencingMetadata.Error);
@@ -219,7 +214,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A whois.vp carrying a challenge/domain binding MUST NOT dereference through the static verify.");
         Assert.AreEqual(DidResolutionErrors.InvalidDid, result.DereferencingMetadata.Error);
@@ -237,7 +232,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (404, null, null);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A missing whois.vp MUST be NotFound.");
         Assert.AreEqual(DidResolutionErrors.NotFound, result.DereferencingMetadata.Error);
@@ -261,7 +256,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         //so a successful dereference proves the explicit override was used.
         routes["https://files.example/governance/issuers.json"] = (200, served, "application/json");
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", routes).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"An explicit #files override MUST be dereferenced. Error: {result.DereferencingMetadata.Error?.Type}.");
 
@@ -290,7 +285,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes["https://files.example/governance/issuers.json"] = (200, served, "application/json");
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/governance/issuers.json", routes).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"A serviceEndpoint map #files override MUST be dereferenced. Error: {result.DereferencingMetadata.Error?.Type}.");
 
@@ -324,10 +319,10 @@ internal sealed class WebVhDidUrlDereferencerTests
         //populated, so a successful dereference proves the explicit #whois override was used.
         routes[explicitWhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"An explicit #whois override MUST be dereferenced. Error: {result.DereferencingMetadata.Error?.Type}.");
-        Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(result.ContentStream,
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(result.ContentStream,
             "The explicit #whois override MUST return the verified secured presentation.");
     }
 
@@ -359,10 +354,10 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"A whois proof referencing the alsoKnownAs did:web DID MUST cross-verify. Error: {result.DereferencingMetadata.Error?.Type}.");
-        Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(result.ContentStream,
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(result.ContentStream,
             "The cross-verified whois MUST return the verified secured presentation.");
     }
 
@@ -387,7 +382,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         var routes = LogRoutes(log);
         routes[WhoisUrl] = (200, Encoding.UTF8.GetBytes(whois), WellKnownWebVhValues.WhoisMediaType);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", log, routes).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}/whois", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A whois proof referencing an unrelated did:web DID MUST NOT cross-verify.");
         Assert.AreEqual(DidResolutionErrors.InvalidDid, result.DereferencingMetadata.Error);
@@ -407,7 +402,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         routes["https://example.com/governance/issuers.json"] = (200, Encoding.UTF8.GetBytes("{}"), "application/json");
 
         DidDereferencingResult result = await DereferenceAsync(
-            $"{log.Did}/governance/issuers.json?versionId=9-QmUnknownVersionXXXXXXXXXXXXXXXXXXXXXXXXXXXX", log, routes).ConfigureAwait(false);
+            $"{log.Did}/governance/issuers.json?versionId=9-QmUnknownVersionXXXXXXXXXXXXXXXXXXXXXXXXXXXX", routes).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A path DID URL pinned to a nonexistent version MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.NotFound, result.DereferencingMetadata.Error);
@@ -428,10 +423,10 @@ internal sealed class WebVhDidUrlDereferencerTests
             new WebVhEntryPlan(controller, [controller.Multikey], NextKeyHashes: null, Deactivated: false, "2025-02-01T00:00:00Z")
         ]).ConfigureAwait(false);
 
-        DidDereferencingResult result = await DereferenceAsync($"{log.Did}?versionId={log.VersionIds[0]}", log, LogRoutes(log)).ConfigureAwait(false);
+        DidDereferencingResult result = await DereferenceAsync($"{log.Did}?versionId={log.VersionIds[0]}", LogRoutes(log)).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccessful, $"A query-only versionId DID URL MUST dereference. Error: {result.DereferencingMetadata.Error?.Type}.");
-        Assert.IsInstanceOfType<DidDocument>(result.ContentStream, "A query-only DID URL with no path/fragment MUST return the DID document.");
+        _ = Assert.IsInstanceOfType<DidDocument>(result.ContentStream, "A query-only DID URL with no path/fragment MUST return the DID document.");
         Assert.AreEqual(log.VersionIds[0], result.ContentMetadata?.VersionId,
             "The dereferenced version MUST be the requested genesis version, not the latest.");
     }
@@ -445,7 +440,7 @@ internal sealed class WebVhDidUrlDereferencerTests
         WebVhMintedLog log = await WebVhTestLog.MintGenesisAsync(Domain, controller, GenesisTime).ConfigureAwait(false);
 
         DidDereferencingResult result = await DereferenceAsync(
-            $"{log.Did}?versionId=9-QmUnknownVersionXXXXXXXXXXXXXXXXXXXXXXXXXXXX", log, LogRoutes(log)).ConfigureAwait(false);
+            $"{log.Did}?versionId=9-QmUnknownVersionXXXXXXXXXXXXXXXXXXXXXXXXXXXX", LogRoutes(log)).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsSuccessful, "A query-only DID URL pinned to a nonexistent version MUST NOT dereference.");
         Assert.AreEqual(DidResolutionErrors.NotFound, result.DereferencingMetadata.Error);
@@ -523,13 +518,12 @@ internal sealed class WebVhDidUrlDereferencerTests
     private static void HashCanonical(string json, Span<byte> destination)
     {
         var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
-        SHA256.HashData(canonical.Span, destination);
+        _ = SHA256.HashData(canonical.Span, destination);
     }
 
 
     private async Task<DidDereferencingResult> DereferenceAsync(
         string didUrl,
-        WebVhMintedLog log,
         Dictionary<string, (int Status, byte[]? Body, string? ContentType)> routes)
     {
         var transport = new RoutingTransport(routes);
@@ -567,7 +561,7 @@ internal sealed class WebVhDidUrlDereferencerTests
                 (WellKnownDidMethodPrefixes.WebVhDidMethodPrefix, webVhDereferencer)),
             additionalMethods: (WellKnownDidMethodPrefixes.WebVhDidMethodPrefix, webVhResolver));
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         return await composed.DereferenceAsync(didUrl, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);

@@ -12,7 +12,7 @@ internal sealed class StatusListAggregationTests
     /// Gets the example subject value used for token generation in test scenarios. 
     /// </summary>
     private string ExampleTokenSubject { get; } = StatusListTestConstants.ExampleTokenSubject;
-    
+
     /// <summary>
     /// Gets the subject identifier associated with the second token used in status list tests.
     /// </summary>
@@ -32,12 +32,12 @@ internal sealed class StatusListAggregationTests
     [TestMethod]
     public void ConstructorThrowsForNullList()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new StatusListAggregation(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new StatusListAggregation(null!));
     }
 
     [TestMethod]
     public void ConstructorThrowsForEmptyList()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new StatusListAggregation(Array.Empty<string>()));
-    }    
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new StatusListAggregation(Array.Empty<string>()));
+    }
 }

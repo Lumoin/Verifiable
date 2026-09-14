@@ -1,9 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -103,7 +101,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
             });
 
         UnverifiedJwtHeader jarHeader = ParseHeader(compactJar);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOpenIdFederationTrustAnchors([anchorNode.Identifier]);
         context.SetValidationTime(now);
         using PublicKeyMemory key = await composite(
@@ -179,7 +177,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
                 });
 
             UnverifiedJwtHeader jarHeader = ParseHeader(compactJar);
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(trustAnchors);
             context.SetValidationTime(now);
             using PublicKeyMemory key = await composite(
@@ -289,7 +287,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
             });
 
         UnverifiedJwtHeader jarHeader = ParseHeader(compactJar);
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetVerifierAttestationTrustAnchorKey(trustAnchorPublicKey);
         context.SetValidationTime(now);
         using PublicKeyMemory key = await composite(
@@ -314,10 +312,10 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
                         "Should not be reached — different prefix in test."),
             });
 
-        UnverifiedJwtHeader emptyHeader = new();
-        await Assert.ThrowsExactlyAsync<SecurityException>(
+        UnverifiedJwtHeader emptyHeader = [];
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(
             async () => await composite(
-                new ExchangeContext(),
+                [],
                 "x509_san_dns:verifier.example.com",
                 emptyHeader,
                 TestContext.CancellationToken).ConfigureAwait(false));
@@ -330,10 +328,10 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
         ResolveClientIdSigningKeyAsyncDelegate composite = CompositeClientIdSigningKeyResolver.Build(
             new Dictionary<ClientIdPrefix, ResolveClientIdSigningKeyAsyncDelegate>());
 
-        UnverifiedJwtHeader emptyHeader = new();
-        await Assert.ThrowsExactlyAsync<SecurityException>(
+        UnverifiedJwtHeader emptyHeader = [];
+        _ = await Assert.ThrowsExactlyAsync<SecurityException>(
             async () => await composite(
-                new ExchangeContext(),
+                [],
                 "verifier.example.com",  //no prefix
                 emptyHeader,
                 TestContext.CancellationToken).ConfigureAwait(false));
@@ -350,7 +348,7 @@ internal sealed class CompositeClientIdSigningKeyResolverTests
             Pool);
         //The header dictionary survives Dispose because UnverifiedJwtHeader holds
         //its own dictionary; the wrapper around it doesn't depend on the JWS message.
-        return new UnverifiedJwtHeader(unverified.Signatures[0].ProtectedHeader);
+        return new(unverified.Signatures[0].ProtectedHeader);
     }
 
 

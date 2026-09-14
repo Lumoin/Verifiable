@@ -1,8 +1,6 @@
-using System.Linq;
-
 namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
-    public sealed class Ed25519VerificationKey2020VerificationMethodTypeInfo : VerificationMethodTypeInfo
+    public sealed class Ed25519VerificationKey2020VerificationMethodTypeInfo: VerificationMethodTypeInfo
     {
         public static Ed25519VerificationKey2020VerificationMethodTypeInfo Instance { get; } = new()
         {

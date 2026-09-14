@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Base;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -79,7 +79,7 @@ internal static class XmlBase64Content
                 return false;
             }
 
-            significant.Add(octet);
+            _ = significant.Add(octet);
         }
 
         int significantCount = significant.Count;
@@ -204,15 +204,15 @@ internal static class XmlBase64Content
             _ = TryBase64Value(quantum[3], out fourth);
         }
 
-        output.Add((byte)((first << 2) | (second >> 4)));
+        _ = output.Add((byte)((first << 2) | (second >> 4)));
         if(padCount < 2)
         {
-            output.Add((byte)((second << 4) | (third >> 2)));
+            _ = output.Add((byte)((second << 4) | (third >> 2)));
         }
 
         if(padCount < 1)
         {
-            output.Add((byte)((third << 6) | fourth));
+            _ = output.Add((byte)((third << 6) | fourth));
         }
     }
 

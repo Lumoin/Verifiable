@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 
 namespace Verifiable;
@@ -52,14 +51,6 @@ internal static partial class ConsoleFormatter
     private const string BrandGray256 = "38;5;238";             //Gray23
     private const string BrandWhite256 = "38;5;255";            //Gray93
 
-    //Basic ANSI fallbacks (8/16 color).
-    private const string BasicBlue = "94";                      //Bright blue
-    private const string BasicGreen = "92";                     //Bright green
-    private const string BasicGray = "90";                      //Bright black (gray)
-    private const string BasicWhite = "97";                     //Bright white
-    private const string BasicRed = "91";                       //Bright red
-    private const string BasicYellow = "93";                    //Bright yellow
-
     //Styles.
     private const string BoldCode = "1";
     private const string DimCode = "2";
@@ -67,22 +58,34 @@ internal static partial class ConsoleFormatter
     /// <summary>
     /// Applies brand primary color (blue) to text.
     /// </summary>
-    public static string Primary(string text) => Colorize(text, BrandBlueRgb, BrandBlue256, BasicBlue);
+    public static string Primary(string text) => Colorize(text, BrandBlueRgb, BrandBlue256);
 
     /// <summary>
     /// Applies brand accent color (green) to text.
     /// </summary>
-    public static string Accent(string text) => Colorize(text, BrandGreenRgb, BrandGreen256, BasicGreen);
+    public static string Accent(string text) => Colorize(text, BrandGreenRgb, BrandGreen256);
 
     /// <summary>
     /// Applies brand muted color (dark gray) to text.
     /// </summary>
-    public static string Muted(string text) => Colorize(text, BrandGrayRgb, BrandGray256, BasicGray);
+    public static string Muted(string text) => Colorize(text, BrandGrayRgb, BrandGray256);
 
     //Semantic colors.
     public static string Success(string text) => Accent(text);
-    public static string Warning(string text) => Colorize(text, "38;2;255;200;0", "38;5;220", BasicYellow);
-    public static string Error(string text) => Colorize(text, "38;2;255;85;85", "38;5;203", BasicRed);
+
+    /// <summary>
+    /// Applies the semantic warning color (amber) to <paramref name="text"/>.
+    /// </summary>
+    /// <param name="text">The text to color.</param>
+    /// <returns><paramref name="text"/> wrapped in the warning ANSI escape codes when colors are supported.</returns>
+    public static string Warning(string text) => Colorize(text, "38;2;255;200;0", "38;5;220");
+
+    /// <summary>
+    /// Applies the semantic error color (red) to <paramref name="text"/>.
+    /// </summary>
+    /// <param name="text">The text to color.</param>
+    /// <returns><paramref name="text"/> wrapped in the error ANSI escape codes when colors are supported.</returns>
+    public static string Error(string text) => Colorize(text, "38;2;255;85;85", "38;5;203");
 
     //Text styles.
     public static string Bold(string text) => Style(text, BoldCode);
@@ -91,7 +94,13 @@ internal static partial class ConsoleFormatter
     //Combined styles.
     public static string Header(string text) => Bold(Primary(text));
     public static string Label(string text) => Muted(text);
-    public static string Value(string text) => Colorize(text, BrandWhiteRgb, BrandWhite256, BasicWhite);
+
+    /// <summary>
+    /// Applies the brand white color to <paramref name="text"/>, for the value half of a labeled line.
+    /// </summary>
+    /// <param name="text">The text to color.</param>
+    /// <returns><paramref name="text"/> wrapped in the value ANSI escape codes when colors are supported.</returns>
+    public static string Value(string text) => Colorize(text, BrandWhiteRgb, BrandWhite256);
 
     /// <summary>
     /// Prints a labeled value with consistent formatting.
@@ -110,11 +119,11 @@ internal static partial class ConsoleFormatter
         Console.WriteLine();
         Console.WriteLine(Header(text));
 
-        string line = new string('─', text.Length);
+        string line = new('─', text.Length);
         Console.WriteLine(Muted(line));
     }
 
-    private static string Colorize(string text, string rgbCode, string code256, string basicCode)
+    private static string Colorize(string text, string rgbCode, string code256)
     {
         if(!ColorsSupported)
         {

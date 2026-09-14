@@ -104,7 +104,7 @@ internal sealed class IdJagAssertionValidationTests
     public void MissingIssuerIsMissingIssuer()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Iss);
+        _ = payload.Remove(WellKnownJwtClaimNames.Iss);
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
@@ -128,7 +128,7 @@ internal sealed class IdJagAssertionValidationTests
     public void MissingAudienceIsMissingAudience()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Aud);
+        _ = payload.Remove(WellKnownJwtClaimNames.Aud);
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
@@ -176,7 +176,7 @@ internal sealed class IdJagAssertionValidationTests
     public void MissingClientIdIsMissingClientId()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.ClientId);
+        _ = payload.Remove(WellKnownJwtClaimNames.ClientId);
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
@@ -200,7 +200,7 @@ internal sealed class IdJagAssertionValidationTests
     public void MissingSubjectIsMissingSubject()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Sub);
+        _ = payload.Remove(WellKnownJwtClaimNames.Sub);
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
@@ -212,7 +212,7 @@ internal sealed class IdJagAssertionValidationTests
     public void MissingExpirationIsMissingExpiration()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Exp);
+        _ = payload.Remove(WellKnownJwtClaimNames.Exp);
 
         IdJagAssertionValidationResult result = Validate(ValidHeader(), payload);
 
@@ -526,7 +526,7 @@ internal sealed class IdJagAssertionValidationTests
 
         Assert.IsTrue(result.IsValid, result.FailureDescription);
         Assert.IsNotNull(result.Act);
-        Assert.AreEqual(CurrentActorSubject, (string)result.Act![WellKnownJwtClaimNames.Sub]);
+        Assert.AreEqual(CurrentActorSubject, (string)result.Act[WellKnownJwtClaimNames.Sub]);
         IReadOnlyDictionary<string, object> nested =
             (IReadOnlyDictionary<string, object>)result.Act[WellKnownJwtClaimNames.Act];
         Assert.AreEqual(PriorActorSubject, (string)nested[WellKnownJwtClaimNames.Sub]);
@@ -681,7 +681,7 @@ internal sealed class IdJagAssertionValidationTests
 
         Assert.IsTrue(result.IsValid, result.FailureDescription);
         Assert.IsNotNull(result.MayAct);
-        Assert.AreEqual(CurrentActorSubject, (string)result.MayAct![WellKnownJwtClaimNames.Sub]);
+        Assert.AreEqual(CurrentActorSubject, (string)result.MayAct[WellKnownJwtClaimNames.Sub]);
         Assert.AreEqual(ResourceServerIssuer, (string)result.MayAct[WellKnownJwtClaimNames.Iss]);
     }
 

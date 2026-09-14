@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;

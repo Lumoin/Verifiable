@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Cryptography.EventLogs;
 
 /// <summary>

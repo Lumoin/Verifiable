@@ -1,13 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Lds;
-using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -114,14 +110,14 @@ internal sealed class CardSimulatorReadTests
         IReadOnlyList<TraceEntry<CardSimulatorState, CardSimulatorInput>> entries = observer.Received;
         Assert.HasCount(2, entries, "One trace entry per processed command.");
 
-        Assert.IsInstanceOfType<SelectElementaryFileRequested>(entries[0].Input, "The first input is a SELECT.");
+        _ = Assert.IsInstanceOfType<SelectElementaryFileRequested>(entries[0].Input, "The first input is a SELECT.");
         Assert.AreEqual(TraceOutcome.Transitioned, entries[0].Outcome, "The SELECT transitioned.");
         Assert.IsNull(entries[0].StateBefore.SelectedFile, "No file is selected before the SELECT.");
-        Assert.AreEqual((ushort?)efCom.FileIdentifier, entries[0].StateAfter.SelectedFile, "The SELECT makes EF.COM the current file.");
+        Assert.AreEqual(efCom.FileIdentifier, entries[0].StateAfter.SelectedFile, "The SELECT makes EF.COM the current file.");
         Assert.AreEqual("passport-trace", entries[0].RunId, "The trace carries the card identifier.");
 
-        Assert.IsInstanceOfType<ReadBinaryRequested>(entries[1].Input, "The second input is a READ BINARY.");
-        Assert.IsInstanceOfType<BinaryReadResponse>(entries[1].StateAfter.ResponseIntent, "The READ BINARY produced a data response.");
+        _ = Assert.IsInstanceOfType<ReadBinaryRequested>(entries[1].Input, "The second input is a READ BINARY.");
+        _ = Assert.IsInstanceOfType<BinaryReadResponse>(entries[1].StateAfter.ResponseIntent, "The READ BINARY produced a data response.");
     }
 
 

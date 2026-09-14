@@ -1,6 +1,5 @@
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Cryptography;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;

@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Collections.Immutable;
 using Verifiable.Core.Model.Did;

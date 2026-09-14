@@ -1,6 +1,3 @@
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Constants;
-
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>
@@ -23,9 +20,9 @@ internal sealed class TpmSignedOctetWireTests
     /// <param name="value">The Table 19 value under test.</param>
     /// <param name="expectedOctet">The single octet the value's two's complement encoding occupies.</param>
     [TestMethod]
-    [DataRow((sbyte)(-3), (byte)0xFD, DisplayName = "TPM_CLOCK_COARSE_SLOWER (-3) frames as FD")]
-    [DataRow((sbyte)(-2), (byte)0xFE, DisplayName = "TPM_CLOCK_MEDIUM_SLOWER (-2) frames as FE")]
-    [DataRow((sbyte)(-1), (byte)0xFF, DisplayName = "TPM_CLOCK_FINE_SLOWER (-1) frames as FF")]
+    [DataRow((sbyte)-3, (byte)0xFD, DisplayName = "TPM_CLOCK_COARSE_SLOWER (-3) frames as FD")]
+    [DataRow((sbyte)-2, (byte)0xFE, DisplayName = "TPM_CLOCK_MEDIUM_SLOWER (-2) frames as FE")]
+    [DataRow((sbyte)-1, (byte)0xFF, DisplayName = "TPM_CLOCK_FINE_SLOWER (-1) frames as FF")]
     [DataRow((sbyte)0, (byte)0x00, DisplayName = "TPM_CLOCK_NO_CHANGE (0) frames as 00")]
     [DataRow((sbyte)1, (byte)0x01, DisplayName = "TPM_CLOCK_FINE_FASTER (1) frames as 01")]
     [DataRow((sbyte)2, (byte)0x02, DisplayName = "TPM_CLOCK_MEDIUM_FASTER (2) frames as 02")]
@@ -44,7 +41,7 @@ internal sealed class TpmSignedOctetWireTests
     /// <param name="value">The extreme value under test.</param>
     /// <param name="expectedOctet">The single octet the value's two's complement encoding occupies.</param>
     [TestMethod]
-    [DataRow((sbyte)(-128), (byte)0x80, DisplayName = "the most negative INT8 frames as 80")]
+    [DataRow((sbyte)-128, (byte)0x80, DisplayName = "the most negative INT8 frames as 80")]
     [DataRow((sbyte)127, (byte)0x7F, DisplayName = "the most positive INT8 frames as 7F")]
     public void SignedOctetRoundTripsTheIntegerExtremesByteExactly(sbyte value, byte expectedOctet)
     {
@@ -69,7 +66,7 @@ internal sealed class TpmSignedOctetWireTests
         Assert.AreSequenceEqual(new byte[] { 0xFD, 0x7F }, buffer);
 
         var reader = new TpmReader(buffer);
-        Assert.AreEqual((sbyte)(-3), reader.ReadInt8(), "The first octet decodes to its own value alone.");
+        Assert.AreEqual((sbyte)-3, reader.ReadInt8(), "The first octet decodes to its own value alone.");
         Assert.AreEqual(1, reader.Consumed, "Reading an INT8 consumes exactly one octet.");
         Assert.AreEqual((sbyte)127, reader.ReadInt8(), "The neighbouring octet is unaffected by the first read.");
         Assert.AreEqual(0, reader.Remaining, "Both octets are consumed and nothing remains.");

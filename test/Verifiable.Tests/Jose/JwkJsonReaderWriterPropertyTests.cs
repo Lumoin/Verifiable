@@ -43,8 +43,8 @@ internal sealed class JwkJsonReaderWriterPropertyTests
             (string key, string value) = kv;
 
             int bufferLength =
-                10 + Encoding.UTF8.GetByteCount(key) * 2
-                   + Encoding.UTF8.GetByteCount(value) * 2;
+                10 + (Encoding.UTF8.GetByteCount(key) * 2)
+                   + (Encoding.UTF8.GetByteCount(value) * 2);
             byte[] buffer = new byte[bufferLength];
             JwkJsonWriter writer = new(buffer);
             writer.WriteObjectStart();

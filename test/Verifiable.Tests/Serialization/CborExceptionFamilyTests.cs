@@ -1,4 +1,3 @@
-using System;
 using Lumoin.Veritas.Cbor;
 using Verifiable.Cbor;
 using Verifiable.Cryptography.Pki;
@@ -426,7 +425,7 @@ internal sealed class CborExceptionFamilyTests
         CborContentException exception = Assert.ThrowsExactly<CborContentException>(
             () => ReadIntegerKeyedMap(TruncatedMapDocument, CborOptions.RfcCanonical));
 
-        Assert.IsInstanceOfType<CborException>(exception);
+        _ = Assert.IsInstanceOfType<CborException>(exception);
     }
 
 
@@ -444,7 +443,7 @@ internal sealed class CborExceptionFamilyTests
         CborConformanceException exception = Assert.ThrowsExactly<CborConformanceException>(
             () => ReadIntegerKeyedMap(DuplicateKeyDocument, CborOptions.RfcCanonical));
 
-        Assert.IsInstanceOfType<CborException>(exception);
+        _ = Assert.IsInstanceOfType<CborException>(exception);
     }
 
 
@@ -466,7 +465,7 @@ internal sealed class CborExceptionFamilyTests
 
         Assert.IsTrue(isParsed);
         Assert.IsNotNull(result);
-        Assert.AreEqual("FI", result!.AddressCountry);
+        Assert.AreEqual("FI", result.AddressCountry);
     }
 
 

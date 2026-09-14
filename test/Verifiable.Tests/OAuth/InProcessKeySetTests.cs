@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Verifiable.Cryptography;
-using Verifiable.Microsoft;
 using Verifiable.OAuth.Server.Keys;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -89,7 +88,7 @@ internal sealed class InProcessKeySetTests
     {
         using InProcessKeySet keySet = new();
 
-        Assert.ThrowsExactly<InvalidOperationException>(
+        _ = Assert.ThrowsExactly<InvalidOperationException>(
             () => keySet.PromoteIncomingToCurrent(new KeyId("kid-missing")));
     }
 
@@ -99,7 +98,7 @@ internal sealed class InProcessKeySetTests
     {
         using InProcessKeySet keySet = new();
 
-        Assert.ThrowsExactly<InvalidOperationException>(
+        _ = Assert.ThrowsExactly<InvalidOperationException>(
             () => keySet.RetireCurrent(new KeyId("kid-missing")));
     }
 

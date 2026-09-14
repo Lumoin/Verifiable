@@ -368,7 +368,7 @@ internal sealed class EcdhEsTests
             TestSetup.Base64UrlDecoder,
             Pool);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
             await parsed.DecryptAsync(
                 privateKey,
                 BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
@@ -414,7 +414,7 @@ internal sealed class EcdhEsTests
             TestSetup.Base64UrlDecoder,
             Pool);
 
-        await Assert.ThrowsAsync<CryptographicException>(async () =>
+        _ = await Assert.ThrowsAsync<CryptographicException>(async () =>
             await parsed.DecryptAsync(
                 privateKey,
                 BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
@@ -447,7 +447,7 @@ internal sealed class EcdhEsTests
                 Pool,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<FormatException>(() =>
+        _ = Assert.ThrowsExactly<FormatException>(() =>
             JweParsing.ParseCompact(
                 encrypted.ToCompactJwe(TestSetup.Base64UrlEncoder),
                 WellKnownJweAlgorithms.EcdhEsA128Kw,
@@ -462,7 +462,7 @@ internal sealed class EcdhEsTests
     {
         string oversized = new('A', JweParsing.MaxCompactJweByteCount + 1);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             JweParsing.ParseCompact(
                 oversized,
                 WellKnownJweAlgorithms.EcdhEs,
@@ -493,7 +493,7 @@ internal sealed class EcdhEsTests
                 Pool,
                 TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<FormatException>(() =>
+        _ = Assert.ThrowsExactly<FormatException>(() =>
             JweParsing.ParseCompact(
                 encrypted.ToCompactJwe(TestSetup.Base64UrlEncoder),
                 WellKnownJweAlgorithms.EcdhEs,

@@ -1,12 +1,9 @@
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.StatusList;
-using Verifiable.JsonPointer.Jsonata;
 using Verifiable.Vcalm;
 
 namespace Verifiable.Json;
@@ -159,16 +156,6 @@ public static class VcalmJsonParsing
 
 
     /// <summary>
-    /// Builds a <see cref="ParseVcalmTemplateInputDelegate"/> — the §3.6 JSON → <see cref="JsonataValue"/>
-    /// adapter the exchange engine uses to feed an exchange's <c>variables.results</c> and an issue
-    /// request's <c>variables</c> to the credential-template evaluation. A fragment that is not parseable
-    /// JSON adapts to <see cref="JsonataValue.Null"/> (the template then navigates it to nothing).
-    /// </summary>
-    public static ParseVcalmTemplateInputDelegate CreateTemplateInputParser() =>
-        json => ParseTemplateInput(json);
-
-
-    /// <summary>
     /// Builds a <see cref="ParseVcalmPresentationSchemaDelegate"/> for a step's §3.6.1
     /// <c>presentationSchema</c> envelope: <c>{type, jsonSchema?}</c> with a REQUIRED string
     /// <c>type</c>, where the JSON Schema mechanism carries the inline <c>jsonSchema</c> object
@@ -296,71 +283,6 @@ public static class VcalmJsonParsing
             };
         }
     }
-
-
-    //§3.6 JSON → JsonataValue adapter: the local value model the minimal JSONata evaluator reads. Object
-    //member order is preserved so a constructed credential body renders deterministically.
-    private static JsonataValue ParseTemplateInput(string json)
-    {
-        ArgumentNullException.ThrowIfNull(json);
-
-        JsonDocument doc;
-        try
-        {
-            doc = JsonDocument.Parse(json);
-        }
-        catch(JsonException)
-        {
-            return JsonataValue.Null;
-        }
-
-        using(doc)
-        {
-            return ConvertElement(doc.RootElement);
-        }
-    }
-
-
-    private static JsonataValue ConvertElement(JsonElement element) => element.ValueKind switch
-    {
-        JsonValueKind.Object => ConvertObject(element),
-        JsonValueKind.Array => ConvertArray(element),
-        JsonValueKind.String => JsonataValue.FromString(element.GetString()!),
-        JsonValueKind.Number => ConvertNumber(element),
-        JsonValueKind.True => JsonataValue.True,
-        JsonValueKind.False => JsonataValue.False,
-        _ => JsonataValue.Null
-    };
-
-
-    private static JsonataValue ConvertObject(JsonElement element)
-    {
-        var members = new Dictionary<string, JsonataValue>(StringComparer.Ordinal);
-        foreach(JsonProperty property in element.EnumerateObject())
-        {
-            members[property.Name] = ConvertElement(property.Value);
-        }
-
-        return JsonataValue.FromObject(members);
-    }
-
-
-    private static JsonataValue ConvertArray(JsonElement element)
-    {
-        var elements = new List<JsonataValue>();
-        foreach(JsonElement item in element.EnumerateArray())
-        {
-            elements.Add(ConvertElement(item));
-        }
-
-        return JsonataValue.FromArray(elements);
-    }
-
-
-    private static JsonataValue ConvertNumber(JsonElement element) =>
-        element.TryGetInt64(out long integer)
-            ? JsonataValue.FromInteger(integer)
-            : JsonataValue.FromNumber(element.GetDouble());
 
 
     //§3.6.1 create-workflow: {id?, initialStep (REQUIRED), steps (REQUIRED), credentialTemplates?,

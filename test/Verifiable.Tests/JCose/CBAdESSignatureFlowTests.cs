@@ -1,10 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -219,7 +215,7 @@ internal sealed class CBAdESSignatureFlowTests
     {
         byte[] payloadBytes = "CB-AdES flow 1 negative -- one byte of this payload gets flipped after signing"u8.ToArray();
 
-        (AdESCertificateThumbprint thumbprint, byte[] _) =
+        (AdESCertificateThumbprint thumbprint, _) =
             await CreateSigningCertificateThumbprintAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -251,7 +247,7 @@ internal sealed class CBAdESSignatureFlowTests
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(validationResult.IsValid, "A signature over a mutated payload must not validate.");
-        Assert.IsInstanceOfType<CBAdESSignatureInvalidFailure>(validationResult.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESSignatureInvalidFailure>(validationResult.Failure);
     }
 
 
@@ -425,7 +421,7 @@ internal sealed class CBAdESSignatureFlowTests
             [betaReference] = betaContent
         };
 
-        (AdESCertificateThumbprint thumbprint, byte[] _) =
+        (AdESCertificateThumbprint thumbprint, _) =
             await CreateSigningCertificateThumbprintAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -469,7 +465,7 @@ internal sealed class CBAdESSignatureFlowTests
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(validationResult.IsValid, "Validation must fail closed when the verifier cannot dereference every referenced object.");
-        Assert.IsInstanceOfType<CBAdESDetachedObjectUnresolvableFailure>(validationResult.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESDetachedObjectUnresolvableFailure>(validationResult.Failure);
     }
 
 
@@ -573,7 +569,7 @@ internal sealed class CBAdESSignatureFlowTests
             [betaReference] = betaContent
         };
 
-        (AdESCertificateThumbprint thumbprint, byte[] _) =
+        (AdESCertificateThumbprint thumbprint, _) =
             await CreateSigningCertificateThumbprintAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
@@ -624,7 +620,7 @@ internal sealed class CBAdESSignatureFlowTests
             BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(validationResult.IsValid, "Validation must fail closed when a re-digested object no longer matches its signed hashV.");
-        Assert.IsInstanceOfType<CBAdESDetachedObjectDigestMismatchFailure>(validationResult.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESDetachedObjectDigestMismatchFailure>(validationResult.Failure);
     }
 
 
@@ -965,10 +961,10 @@ internal sealed class CBAdESSignatureFlowTests
         var reader = new CborReader(wireBytes.ToArray(), CborOptions.RfcCanonical);
         if(reader.PeekState() == CborReaderState.Tag)
         {
-            reader.ReadTag();
+            _ = reader.ReadTag();
         }
 
-        reader.ReadStartArray();
+        _ = reader.ReadStartArray();
         reader.SkipValue(); // body_protected bstr.
         reader.SkipValue(); // the unprotected headers map.
         Assert.AreEqual(CborReaderState.Null, reader.PeekState(),

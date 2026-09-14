@@ -1,3 +1,7 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
@@ -6,52 +10,39 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
+using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
-using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
+using Verifiable.OAuth.Oidc;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.Audit;
 using Verifiable.OAuth.Server.Keys;
-using Verifiable.OAuth.Server.States;
+using Verifiable.OAuth.Server.Pipeline;
+using Verifiable.OAuth.Server.Registration;
 using Verifiable.OAuth.Siop.Server;
-using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Validation;
+using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
-using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.OAuth.Server.Metadata;
-using Verifiable.OAuth.Server.Registration;
-using Verifiable.Server;
-using Verifiable.Server.Pipeline;
 using Verifiable.Vcalm;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -118,14 +109,8 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <summary>The <see cref="Default"/> host's authorization-code secondary index.</summary>
     private ConcurrentDictionary<string, string> CodeIndex => Default.CodeIndex;
 
-    /// <summary>The <see cref="Default"/> host's DPoP <c>jti</c> replay index.</summary>
-    private ConcurrentDictionary<string, string> JtiIndex => Default.JtiIndex;
-
     /// <summary>The <see cref="Default"/> host's access-token secondary index.</summary>
     private ConcurrentDictionary<string, string> AccessTokenIndex => Default.AccessTokenIndex;
-
-    /// <summary>The <see cref="Default"/> host's refresh-token secondary index.</summary>
-    private ConcurrentDictionary<string, string> RefreshTokenIndex => Default.RefreshTokenIndex;
 
     /// <summary>The <see cref="Default"/> host's token/JAR signing key store.</summary>
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> SigningKeys => Default.SigningKeys;
@@ -135,9 +120,6 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>The <see cref="Default"/> host's response-encryption decryption key store.</summary>
     private ConcurrentDictionary<KeyId, PrivateKeyMemory> DecryptionKeys => Default.DecryptionKeys;
-
-    /// <summary>The <see cref="Default"/> host's RFC 7592 registration access token store.</summary>
-    private ConcurrentDictionary<string, string> RegistrationAccessTokens => Default.RegistrationAccessTokens;
 
     /// <summary>Disposable DPoP-related resources owned by this shell, released on <see cref="DisposeAsync"/>.</summary>
     private List<IDisposable> DpopOwnedDisposables { get; } = [];
@@ -153,13 +135,6 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>Guards <see cref="DisposeAsync"/> against running its teardown more than once.</summary>
     private bool Disposed { get; set; }
-
-    /// <summary>The <see cref="Default"/> host's HTTPS <see cref="WebApplication"/> instance, set once <see cref="StartHttpHostAsync"/> runs.</summary>
-    private global::Microsoft.AspNetCore.Builder.WebApplication? HttpHost
-    {
-        get => Default.HttpHost;
-        set => Default.HttpHost = value;
-    }
 
     /// <summary>The <see cref="Default"/> host's loopback base address once it is serving HTTPS.</summary>
     private Uri? HttpBaseAddress
@@ -721,7 +696,7 @@ internal sealed class TestHostShell: IAsyncDisposable
 
         VerifierClientMetadata? clientMetadata = capabilities.Contains(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation)
-            ? BuildClientMetadata(clientId, exchangeKeyPair.PublicKey, encryptionKeyId)
+            ? BuildClientMetadata(clientId, exchangeKeyPair.PublicKey)
             : null;
 
         Uri responseUri = new(baseUri, TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.Oid4VpDirectPost, segment));
@@ -762,7 +737,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.Server.RegisterClient(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
 
         //Dispose the exchange public key — only the private key is retained.
         //The signing public key is retained in VerificationKeys for JAR verification.
@@ -816,7 +791,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //is disposed unconditionally afterward.
         VerifierClientMetadata? clientMetadata = capabilities.Contains(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation)
-            ? BuildClientMetadata(clientId, exchangeKeyPair.PublicKey, encryptionKeyId)
+            ? BuildClientMetadata(clientId, exchangeKeyPair.PublicKey)
             : null;
         exchangeKeyPair.PublicKey.Dispose();
 
@@ -842,7 +817,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Server.RegisterClient(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
 
         return new VerifierKeyMaterial(
             registration,
@@ -903,7 +878,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Server.RegisterClient(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
 
         return registration;
     }
@@ -983,7 +958,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.Server.RegisterClient(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
 
         return registration;
     }
@@ -1127,7 +1102,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.Server.RegisterClient(
             federated,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
 
         //Re-point baseKeys' Registration to the federation-bearing record so
         //test code that reaches through baseKeys.Registration sees the same
@@ -1521,7 +1496,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     /// <returns>A new context carrying <paramref name="policy"/>.</returns>
     public static Verifiable.Core.ExchangeContext ExchangeContextWith(Verifiable.Core.OutboundFetch.OutboundFetchPolicy policy)
     {
-        Verifiable.Core.ExchangeContext context = new();
+        Verifiable.Core.ExchangeContext context = [];
         context.SetOutboundFetchPolicy(policy);
 
         return context;
@@ -1671,9 +1646,9 @@ internal sealed class TestHostShell: IAsyncDisposable
     private static ProduceVpTokenPresentationsDelegate BuildSdJwtProduceDelegateCore(
         Func<string, string> resolveStoredSdJwt, PrivateKeyMemory holderKey, bool minimalDisclosure = true)
     {
-        JwtHeaderSerializer headerSerializer = header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)header, TestSetup.DefaultSerializationOptions);
-        JwtPayloadSerializer payloadSerializer = payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        ReadOnlySpan<byte> payloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
             (Dictionary<string, object>)payload, TestSetup.DefaultSerializationOptions);
 
         return async (context, cancellationToken) =>
@@ -1906,7 +1881,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                     tenantId,
                     jsonBody,
                     capabilities,
-                    new ExchangeContext(),
+                    [],
                     Server,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -1979,7 +1954,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             Body = body
         };
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(IssuerUri);
         context.SetRegistration(registration);
@@ -2219,7 +2194,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         string? responseMode,
         CancellationToken cancellationToken)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keyMaterial.Registration.TenantId);
         context.SetTransactionNonce(nonce);
         context.SetPreparedQuery(dcqlQuery);
@@ -2361,7 +2336,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentNullException.ThrowIfNull(allowedAlgorithms);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keyMaterial.Registration.TenantId);
         context.SetSiopNonce(nonce);
         context.SetSiopClientId(clientId);
@@ -2433,7 +2408,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentNullException.ThrowIfNull(keyMaterial);
         ArgumentException.ThrowIfNullOrWhiteSpace(externalToken);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keyMaterial.Registration.TenantId);
         context.SetCorrelationKey(externalToken);
 
@@ -2478,7 +2453,7 @@ internal sealed class TestHostShell: IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(externalToken);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keyMaterial.Registration.TenantId);
         context.SetCorrelationKey(externalToken);
 
@@ -2525,7 +2500,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(externalToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(walletNonce);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keyMaterial.Registration.TenantId);
         context.SetCorrelationKey(externalToken);
 
@@ -2576,7 +2551,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Uri? redirectUri,
         CancellationToken cancellationToken)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(keyMaterial.Registration.TenantId);
 
         if(redirectUri is not null)
@@ -3265,7 +3240,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             return;
         }
 
-        Server.DeregisterClient(registration, reason, new ExchangeContext());
+        Server.DeregisterClient(registration, reason, []);
     }
 
 
@@ -3329,7 +3304,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //via the ClientUpdated event, but explicit update ensures consistency.
         Registrations[segment] = updated;
 
-        Server.UpdateClient(previous, updated, new ExchangeContext());
+        Server.UpdateClient(previous, updated, []);
 
         return new VerifierKeyMaterial(
             updated,
@@ -3394,7 +3369,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         };
 
         Registrations[segment] = updated;
-        Server.UpdateClient(previous, updated, new ExchangeContext());
+        Server.UpdateClient(previous, updated, []);
     }
 
 
@@ -3491,7 +3466,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.Server.RegisterClient(
             registration,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
 
         return new VerifierKeyMaterial(
             registration,
@@ -3541,7 +3516,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.Registrations[segment] = updated;
         host.Registrations[updated.ClientId] = updated;
 
-        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        host.Server.UpdateClient(previous, updated, []);
 
         material.Registration = updated;
     }
@@ -3581,7 +3556,51 @@ internal sealed class TestHostShell: IAsyncDisposable
         host.Registrations[segment] = updated;
         host.Registrations[updated.ClientId] = updated;
 
-        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        host.Server.UpdateClient(previous, updated, []);
+
+        material.Registration = updated;
+    }
+
+
+    /// <summary>
+    /// Re-registers <paramref name="material"/>'s client with <paramref name="redirectUris"/>
+    /// replacing <see cref="ClientRecord.AllowedRedirectUris"/> and
+    /// <paramref name="tokenEndpointAuthMethod"/> replacing
+    /// <see cref="ClientRecord.TokenEndpointAuthMethod"/>. Drives the RFC 8252 §7.3 loopback
+    /// redirect fallback's public-client gate: <see langword="null"/> exercises the public-client
+    /// path (no declared <c>token_endpoint_auth_method</c>), and any other value proves the
+    /// fallback stays off for a confidential client. Uses the same register-then-upgrade pattern
+    /// as <see cref="SetAccessTokenLifetime"/>, because the routing dictionaries are host-internal.
+    /// </summary>
+    public void SetRedirectUrisAndAuthMethod(
+        VerifierKeyMaterial material,
+        ImmutableHashSet<Uri> redirectUris,
+        ClientAuthenticationMethod? tokenEndpointAuthMethod,
+        string hostName = "default")
+    {
+        ArgumentNullException.ThrowIfNull(material);
+        ArgumentNullException.ThrowIfNull(redirectUris);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+
+        HostedAuthorizationServer host = Host(hostName);
+
+        string segment = material.Registration.TenantId.Value;
+        if(!host.Registrations.TryGetValue(segment, out ClientRecord? previous))
+        {
+            throw new InvalidOperationException(
+                $"No registration found for segment '{segment}'.");
+        }
+
+        ClientRecord updated = previous with
+        {
+            AllowedRedirectUris = redirectUris,
+            TokenEndpointAuthMethod = tokenEndpointAuthMethod
+        };
+
+        host.Registrations[segment] = updated;
+        host.Registrations[updated.ClientId] = updated;
+
+        host.Server.UpdateClient(previous, updated, []);
 
         material.Registration = updated;
     }
@@ -3631,7 +3650,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         Server.RegisterClient(
             updated,
             new RegistrationAccessToken(Guid.NewGuid().ToString("N")),
-            new ExchangeContext());
+            []);
         material.Registration = updated;
 
         return material;
@@ -4101,7 +4120,7 @@ internal sealed class TestHostShell: IAsyncDisposable
         //useDistinctCertificate: true, the shell's shared one otherwise); the dispatched URL uses
         //127.0.0.1 explicitly. A single explicit HTTPS Listen call — no UseUrls — so there is no
         //plaintext fallback on this host at all.
-        builder.WebHost.ConfigureKestrel(options =>
+        _ = builder.WebHost.ConfigureKestrel(options =>
             LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
@@ -4155,7 +4174,7 @@ internal sealed class TestHostShell: IAsyncDisposable
             global::Microsoft.AspNetCore.Builder.WebApplication.CreateSlimBuilder();
         LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
 
-        builder.WebHost.ConfigureKestrel(options =>
+        _ = builder.WebHost.ConfigureKestrel(options =>
             LoopbackKestrel.ConfigureLoopbackListener(options, hostCertificate));
 
         global::Microsoft.AspNetCore.Builder.WebApplication app = builder.Build();
@@ -4205,6 +4224,9 @@ internal sealed class TestHostShell: IAsyncDisposable
                 await host.HttpHost.DisposeAsync().ConfigureAwait(false);
                 host.HttpHost = null;
             }
+
+            host.EventSubscription?.Dispose();
+            host.EventSubscription = null;
 
             host.Server.Dispose();
 
@@ -4430,13 +4452,12 @@ internal sealed class TestHostShell: IAsyncDisposable
 
     /// <summary>
     /// Builds an OID4VP verifier's <c>client_metadata</c> claim by publishing
-    /// <paramref name="exchangePublicKey"/> as a JWK under <paramref name="encryptionKeyId"/>, so the
-    /// wallet can encrypt its <c>direct_post.jwt</c> response to it.
+    /// <paramref name="exchangePublicKey"/> as a JWK, so the wallet can encrypt its
+    /// <c>direct_post.jwt</c> response to it.
     /// </summary>
     private static VerifierClientMetadata BuildClientMetadata(
         string clientId,
-        PublicKeyMemory exchangePublicKey,
-        KeyId encryptionKeyId)
+        PublicKeyMemory exchangePublicKey)
     {
         string jwksJson = EphemeralEncryptionKeyPair.CreatePublicKeyJwks(
             exchangePublicKey,
@@ -4518,7 +4539,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                 Headers: BuildIncomingHeaders(headers),
                 RouteValues: RouteValues.Empty);
 
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetTenantId(segment);
             context.SetIssuer(new Uri(issuerUri));
             context.SetRegistration(registration);
@@ -4629,7 +4650,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                 Headers: BuildIncomingHeaders(headers),
                 RouteValues: RouteValues.Empty);
 
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetTenantId(segment);
             context.SetIssuer(new Uri(issuerUri));
             context.SetRegistration(registration);
@@ -4663,7 +4684,7 @@ internal sealed class TestHostShell: IAsyncDisposable
                 return string.Empty;
             }
             int start = prefix.Length;
-            int end = path.IndexOf('/', start);
+            int end = path.IndexOf('/', start, StringComparison.Ordinal);
             return end < 0 ? path[start..] : path[start..end];
         }
     }

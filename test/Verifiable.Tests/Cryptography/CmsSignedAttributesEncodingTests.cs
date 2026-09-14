@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -172,10 +169,10 @@ internal sealed class CmsSignedAttributesEncodingTests
         using CmsAttribute contentType = CmsAttribute.Create(CAdESSignatureFacts.ContentTypeAttributeOid, WriteObjectIdentifier(WellKnownContentTypeOid), BaseMemoryPool.Shared);
         using CmsAttribute repeated = CmsAttribute.Create(CAdESSignatureFacts.ContentTypeAttributeOid, WriteObjectIdentifier(WellKnownContentTypeOid), BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CmsSignedAttributesEncoding.Create([], BaseMemoryPool.Shared),
             "RFC 5652 §5.3: SignedAttributes is SET SIZE (1..MAX) OF Attribute.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CmsSignedAttributesEncoding.Create([contentType, repeated], BaseMemoryPool.Shared),
             "RFC 5652 §5.3: signed attributes include at most one instance of each attribute type.");
     }
@@ -196,13 +193,13 @@ internal sealed class CmsSignedAttributesEncodingTests
         alreadyRetagged[0] = SetOfTagOctet;
         byte[] withTrailingOctet = [.. embedded, 0x00];
 
-        Assert.ThrowsExactly<CryptographicException>(
+        _ = Assert.ThrowsExactly<CryptographicException>(
             () => CmsSignedAttributesEncoding.ToSigningInput([], BaseMemoryPool.Shared),
             "An empty input carries no signed attributes at all.");
-        Assert.ThrowsExactly<CryptographicException>(
+        _ = Assert.ThrowsExactly<CryptographicException>(
             () => CmsSignedAttributesEncoding.ToSigningInput(alreadyRetagged, BaseMemoryPool.Shared),
             "A universal SET OF is the signature input, not the embedded form; retagging it again would be a silent no-op.");
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => CmsSignedAttributesEncoding.ToSigningInput(withTrailingOctet, BaseMemoryPool.Shared),
             "Trailing octets after the set are rejected rather than ignored.");
     }
@@ -219,13 +216,13 @@ internal sealed class CmsSignedAttributesEncodingTests
         byte[] truncated = value[..^1];
         byte[] withTrailingOctet = [.. value, 0x00];
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CmsAttribute.Create(CAdESSignatureFacts.ContentTypeAttributeOid, ReadOnlySpan<byte>.Empty, BaseMemoryPool.Shared),
             "RFC 5652 §5.3: an attribute value is a DER-encoded value.");
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => CmsAttribute.Create(CAdESSignatureFacts.ContentTypeAttributeOid, truncated, BaseMemoryPool.Shared),
             "A truncated value is malformed DER.");
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => CmsAttribute.Create(CAdESSignatureFacts.ContentTypeAttributeOid, withTrailingOctet, BaseMemoryPool.Shared),
             "Octets after the value are rejected rather than ignored.");
     }

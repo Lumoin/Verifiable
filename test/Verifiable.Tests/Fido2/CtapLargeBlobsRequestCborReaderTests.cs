@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
@@ -154,7 +153,7 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
     {
         byte[] truncated = [0xA2, 0x03]; //map(2) claimed, but only one key with no value follows
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsRequestCborReader.Read(truncated));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsRequestCborReader.Read(truncated));
     }
 
 
@@ -170,6 +169,6 @@ internal sealed class CtapLargeBlobsRequestCborReaderTests
         writer.WriteByteString(new byte[] { 0x01, 0x02 });
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => CtapLargeBlobsRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray()));
     }
 }

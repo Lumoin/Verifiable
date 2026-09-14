@@ -1,6 +1,4 @@
-using System;
-using System.Buffers;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using Org.BouncyCastle.Asn1.Sec;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto;
@@ -8,16 +6,16 @@ using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Math;
 using Org.BouncyCastle.Security;
+using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Foundation.Automata;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -325,7 +323,7 @@ internal sealed class TpmInHouseSimulatorKemTests
         using EncapsulateResponse encapsulated = await EncapsulateAsync(tpm, registry, pool, primary.ObjectHandle).ConfigureAwait(false);
 
         Assert.AreEqual(Dhkem.P256HkdfSha256.NSecret, encapsulated.SharedSecret.Size, "DHKEM(P-256, HKDF-SHA256)'s Nsecret is 32.");
-        Assert.AreEqual(1 + 2 * 32, encapsulated.Ciphertext.Size, "A SEC 1 uncompressed P-256 point is 65 octets: 0x04 plus two 32-octet coordinates.");
+        Assert.AreEqual(1 + (2 * 32), encapsulated.Ciphertext.Size, "A SEC 1 uncompressed P-256 point is 65 octets: 0x04 plus two 32-octet coordinates.");
         Assert.AreEqual(0x04, encapsulated.Ciphertext.Ciphertext[0]);
 
         byte[] ciphertextBytes = encapsulated.Ciphertext.Ciphertext.ToArray();
@@ -719,10 +717,10 @@ internal sealed class TpmInHouseSimulatorKemTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time CreatePrimary returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(primary.ObjectHandle, out TransientKeyState? maybeKemKey), "The newly created KEM key must be present in the captured post-CreatePrimary state.");
-        TransientKeyState kemKey = maybeKemKey!;
+        TransientKeyState kemKey = maybeKemKey;
         Assert.IsNotNull(kemKey.KemKdfScheme, "Sanity: the captured key really is a KEM key before it is forced restricted.");
 
         TransientKeyState forcedRestrictedKey = kemKey with { Attributes = kemKey.Attributes | TpmaObject.RESTRICTED };
@@ -741,9 +739,9 @@ internal sealed class TpmInHouseSimulatorKemTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_Decapsulate() always yields a transition — either a rejection or a declared action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
-        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
         Assert.AreEqual(
             HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 0), rejection.ResponseCode,
             "A KEM key additionally carrying RESTRICTED must be refused with TPM_RC_ATTRIBUTES — the clause 14.11.1 anti-oracle gate that keeps the general-purpose KEM from decapsulating Labeled-KEM (e.g. storage-parent) traffic.");
@@ -776,10 +774,10 @@ internal sealed class TpmInHouseSimulatorKemTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time CreatePrimary returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(primary.ObjectHandle, out TransientKeyState? maybeKemKey), "The newly created KEM key must be present in the captured post-CreatePrimary state.");
-        TransientKeyState kemKey = maybeKemKey!;
+        TransientKeyState kemKey = maybeKemKey;
         Assert.IsNotNull(kemKey.KemKdfScheme, "Sanity: the captured key really is a KEM key before its decrypt attribute is forced clear.");
 
         TransientKeyState forcedDecryptClearKey = kemKey with { Attributes = kemKey.Attributes & ~TpmaObject.DECRYPT };
@@ -798,9 +796,9 @@ internal sealed class TpmInHouseSimulatorKemTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_Decapsulate() always yields a transition — either a rejection or a declared action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
-        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
         Assert.AreEqual(
             HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_ATTRIBUTES, 0), rejection.ResponseCode,
             "A KEM key with decrypt forced CLEAR must be refused with TPM_RC_ATTRIBUTES independently of the RESTRICTED bit.");
@@ -907,7 +905,7 @@ internal sealed class TpmInHouseSimulatorKemTests
         using CreatePrimaryResponse primary = await CreateKemPrimaryAsync(tpm, registry, pool).ConfigureAwait(false);
 
         TpmRcConstants code = await SubmitHandFramedDecapsulateAsync(
-            simulator, pool, primary.ObjectHandle.Value, declaredCiphertextSize: (ushort)(Tpm2bKemCiphertext.MaxSize + 1), actualCiphertextPayload: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
+            simulator, pool, primary.ObjectHandle.Value, declaredCiphertextSize: Tpm2bKemCiphertext.MaxSize + 1, actualCiphertextPayload: ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
 
         Assert.AreEqual(
             HmacKeyHarness.ParameterEncodedRc(TpmRcConstants.TPM_RC_SIZE, parameterIndex: 0), code,
@@ -1237,7 +1235,7 @@ internal sealed class TpmInHouseSimulatorKemTests
         header.WriteTo(ref writer);
         writer.WriteUInt32(keyHandle);
 
-        writer.WriteUInt32((uint)AuthAreaSize);
+        writer.WriteUInt32(AuthAreaSize);
         writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
         writer.WriteUInt16(0); //nonceCaller: empty.
         writer.WriteByte(0); //sessionAttributes: none set.

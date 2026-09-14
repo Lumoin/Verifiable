@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.EventLogs;

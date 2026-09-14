@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -65,7 +60,7 @@ internal sealed class AnnexAValidationReportFlowTests
             "Clause 4.3.4.2 fixes the URI for TOTAL-PASSED in the validation report of a signature.");
         Assert.IsEmpty(element.Status.SubIndications, "Clause 4.3.4.3: sub-indication elements explain a non-passing indication, of which there is none here.");
         AssociatedValidationReportDataElement associated = element.Status.AssociatedValidationReportData.Single();
-        Assert.IsInstanceOfType<CertificateRevocationReportData>(associated.Source,
+        _ = Assert.IsInstanceOfType<CertificateRevocationReportData>(associated.Source,
             "Step 11) of EN 319 102-1 clause 5.5.4 returns, alongside PASSED, the additional information the intermediate steps used — here the revocation the signature time-stamp let the process overcome; clause 4.3.4.2 carries it in an associated validation data element.");
         Assert.HasCount(3, associated.CertificateChain, "Clause 4.3.12.4 projects the chain that evidence names, certificate by certificate.");
         Assert.AreEqual(scenario.Chain[^1], associated.TrustAnchor, "Clause 4.3.12.4.1: the trust anchor is the last element of the chain.");
@@ -133,7 +128,7 @@ internal sealed class AnnexAValidationReportFlowTests
         Assert.IsTrue(objects.All(o => o.ObjectType != ValidationObjectKind.Unknown),
             "Every carrier the builder gathers is classified into the vocabulary clause 4.4.4 fixes.");
 
-        List<PkiCertificateMemory> certificates = [.. objects.Where(o => o.ObjectType == ValidationObjectKind.Certificate).Select(o => (PkiCertificateMemory)o.Representation!)];
+        List<PkiCertificateMemory> certificates = [.. objects.Where(o => o.ObjectType == ValidationObjectKind.Certificate).Select(o => (PkiCertificateMemory)o.Representation)];
         Assert.HasCount(4, certificates,
             "The validated certificate chain Table 5 of EN 319 102-1 clause 5.1.3 mandates on TOTAL-PASSED is projected certificate by certificate, together with the one further certification authority certificate the Driving Application supplied as validation data and the run therefore reports as used.");
         for(int i = 0; i < scenario.Chain.Count; ++i)

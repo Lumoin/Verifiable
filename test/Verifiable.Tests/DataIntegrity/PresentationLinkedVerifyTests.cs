@@ -2,15 +2,13 @@ using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -40,7 +38,7 @@ internal sealed class PresentationLinkedVerifyTests
     private static CanonicalizationDelegate JcsCanonicalizer { get; } = (json, contextResolver, _, cancellationToken) =>
         ValueTask.FromResult(new CanonicalizationResult { CanonicalForm = Jcs.Canonicalize(json) });
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static ProofValueEncoderDelegate ProofValueEncoder { get; } = ProofValueCodecs.EncodeBase58Btc;
     private static ProofValueDecoderDelegate ProofValueDecoder { get; } = ProofValueCodecs.DecodeBase58Btc;
@@ -278,7 +276,7 @@ internal sealed class PresentationLinkedVerifyTests
 
         string wire = SerializePresentation(bound);
         JsonObject wireObject = JsonNode.Parse(wire)!.AsObject();
-        ((JsonObject)((JsonArray)wireObject["proof"]!)[0]!).Remove("challenge");
+        _ = ((JsonObject)((JsonArray)wireObject["proof"]!)[0]!).Remove("challenge");
         var stripped = (DataIntegritySecuredPresentation)DeserializePresentation(wireObject.ToJsonString());
 
         var result = await VerifyStaticAsync(stripped, holderDidDocument).ConfigureAwait(false);
@@ -312,7 +310,7 @@ internal sealed class PresentationLinkedVerifyTests
     private static void HashCanonical(string json, Span<byte> destination)
     {
         var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
-        System.Security.Cryptography.SHA256.HashData(canonical.Span, destination);
+        _ = System.Security.Cryptography.SHA256.HashData(canonical.Span, destination);
     }
 
 

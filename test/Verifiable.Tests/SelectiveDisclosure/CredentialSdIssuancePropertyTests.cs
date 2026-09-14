@@ -1,7 +1,5 @@
 using CsCheck;
-using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Json.Sd;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -51,7 +49,7 @@ internal sealed class CredentialSdIssuancePropertyTests
                 CredentialPath.FromJsonPointer($"/{name}")
             };
 
-            Assert.Throws<ArgumentException>(() =>
+            _ = Assert.Throws<ArgumentException>(() =>
                 SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
         });
     }
@@ -89,7 +87,7 @@ internal sealed class CredentialSdIssuancePropertyTests
                 CredentialPath.FromJsonPointer($"/{invalidName}")
             };
 
-            Assert.Throws<ArgumentException>(() =>
+            _ = Assert.Throws<ArgumentException>(() =>
                 SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
         });
     }
@@ -108,10 +106,10 @@ internal sealed class CredentialSdIssuancePropertyTests
                 CredentialPath.FromJsonPointer($"/{name}")
             };
 
-            Assert.Throws<ArgumentException>(() =>
+            _ = Assert.Throws<ArgumentException>(() =>
                 SdJwtIssuanceExtensions.ValidateCredentialPaths(paths));
 
-            Assert.Throws<ArgumentException>(() =>
+            _ = Assert.Throws<ArgumentException>(() =>
                 SdCwtIssuanceExtensions.ValidateCredentialPaths(paths));
         });
     }

@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using System.Text;
-using Verifiable.Server;
 
 namespace Verifiable.Vcalm;
 
@@ -29,7 +27,7 @@ public static class VcalmWorkflowResponseWriter
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Id, workflowId, ref first);
@@ -48,7 +46,7 @@ public static class VcalmWorkflowResponseWriter
             AppendSteps(sb, configuration, ref first);
             AppendCredentialTemplates(sb, configuration, ref first);
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -64,29 +62,29 @@ public static class VcalmWorkflowResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Steps);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool stepsFirst = true;
         foreach(KeyValuePair<string, VcalmWorkflowStep> entry in configuration.Steps)
         {
             if(!stepsFirst)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('"');
+            _ = sb.Append('"');
             JsonAppender.AppendEscapedString(sb, entry.Key);
-            sb.Append("\":");
+            _ = sb.Append("\":");
             AppendStep(sb, entry.Value);
             stepsFirst = false;
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
         first = false;
     }
 
@@ -94,7 +92,7 @@ public static class VcalmWorkflowResponseWriter
     //§3.6.2 one step: the directives the engine drives, in a stable order.
     private static void AppendStep(StringBuilder sb, VcalmWorkflowStep step)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
 
         if(step.CreateChallenge)
@@ -142,7 +140,7 @@ public static class VcalmWorkflowResponseWriter
             JsonAppender.AppendStringField(sb, VcalmParameterNames.NextStep, nextStep, ref first);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -150,17 +148,17 @@ public static class VcalmWorkflowResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.Callback);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool callbackFirst = true;
         JsonAppender.AppendStringField(sb, VcalmParameterNames.Url, callbackUrl, ref callbackFirst);
 
-        sb.Append('}');
+        _ = sb.Append('}');
         first = false;
     }
 
@@ -169,22 +167,22 @@ public static class VcalmWorkflowResponseWriter
     {
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.IssueRequests);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         bool requestsFirst = true;
         foreach(VcalmIssueRequest issueRequest in step.IssueRequests)
         {
             if(!requestsFirst)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('{');
+            _ = sb.Append('{');
             bool entryFirst = true;
 
             if(issueRequest.CredentialTemplateId is { } templateId)
@@ -202,11 +200,11 @@ public static class VcalmWorkflowResponseWriter
                 JsonAppender.AppendRawField(sb, VcalmParameterNames.Variables, variablesJson, ref entryFirst);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
             requestsFirst = false;
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 
@@ -221,22 +219,22 @@ public static class VcalmWorkflowResponseWriter
 
         if(!first)
         {
-            sb.Append(',');
+            _ = sb.Append(',');
         }
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, VcalmParameterNames.CredentialTemplates);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         bool templatesFirst = true;
         foreach(VcalmCredentialTemplate template in configuration.CredentialTemplates)
         {
             if(!templatesFirst)
             {
-                sb.Append(',');
+                _ = sb.Append(',');
             }
 
-            sb.Append('{');
+            _ = sb.Append('{');
             bool entryFirst = true;
 
             if(template.Id is { } id)
@@ -247,11 +245,11 @@ public static class VcalmWorkflowResponseWriter
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Type, template.TemplateType, ref entryFirst);
             JsonAppender.AppendStringField(sb, VcalmParameterNames.Template, template.Template, ref entryFirst);
 
-            sb.Append('}');
+            _ = sb.Append('}');
             templatesFirst = false;
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
         first = false;
     }
 }

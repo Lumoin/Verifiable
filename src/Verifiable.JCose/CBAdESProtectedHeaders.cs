@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -419,7 +418,7 @@ public abstract record CBAdESContentTypeIndicator
 /// </summary>
 /// <param name="Value">The media-type string.</param>
 [DebuggerDisplay("CBAdESContentTypeText: {Value}")]
-public sealed record CBAdESContentTypeText(string Value) : CBAdESContentTypeIndicator;
+public sealed record CBAdESContentTypeText(string Value): CBAdESContentTypeIndicator;
 
 
 /// <summary>
@@ -428,7 +427,7 @@ public sealed record CBAdESContentTypeText(string Value) : CBAdESContentTypeIndi
 /// </summary>
 /// <param name="Value">The CoAP Content-Format identifier.</param>
 [DebuggerDisplay("CBAdESContentTypeNumeric: {Value}")]
-public sealed record CBAdESContentTypeNumeric(uint Value) : CBAdESContentTypeIndicator;
+public sealed record CBAdESContentTypeNumeric(uint Value): CBAdESContentTypeIndicator;
 
 
 /// <summary>
@@ -467,7 +466,7 @@ public abstract class CBAdESX5Chain
 /// is a borrowed view, never disposed, so the comparison is always safe.
 /// </remarks>
 [DebuggerDisplay("CBAdESX5ChainSingleCertificate: {Certificate.Length} bytes")]
-public sealed class CBAdESX5ChainSingleCertificate : CBAdESX5Chain, IEquatable<CBAdESX5ChainSingleCertificate>
+public sealed class CBAdESX5ChainSingleCertificate: CBAdESX5Chain, IEquatable<CBAdESX5ChainSingleCertificate>
 {
     /// <summary>Initializes a new <see cref="CBAdESX5ChainSingleCertificate"/>.</summary>
     /// <param name="certificate">
@@ -527,7 +526,7 @@ public sealed class CBAdESX5ChainSingleCertificate : CBAdESX5Chain, IEquatable<C
 /// least <see cref="MinimumCertificateCount"/> DER-encoded certificates, the signing certificate first.
 /// </summary>
 [DebuggerDisplay("CBAdESX5ChainCertificatePath: {Certificates.Count} certificates")]
-public sealed class CBAdESX5ChainCertificatePath : CBAdESX5Chain
+public sealed class CBAdESX5ChainCertificatePath: CBAdESX5Chain
 {
     /// <summary>The minimum number of entries the CDDL <c>2*certs</c> occurrence operator requires (RFC 9360 §2).</summary>
     public const int MinimumCertificateCount = 2;

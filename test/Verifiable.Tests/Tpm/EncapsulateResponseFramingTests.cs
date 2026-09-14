@@ -1,4 +1,3 @@
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Infrastructure.Commands;
 
 namespace Verifiable.Tests.Tpm;

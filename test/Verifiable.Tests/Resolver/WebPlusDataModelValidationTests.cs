@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 using System.Text.Json;
 using Verifiable.Core.Did.Methods.WebPlus;
@@ -289,7 +288,7 @@ internal sealed class WebPlusDataModelValidationTests
             """;
         byte[] jcs = Jcs.CanonicalizeToUtf8Bytes(nonArrayVerificationMethod);
 
-        Assert.ThrowsExactly<JsonException>(() => WebPlusDidDocumentJson.Parser(jcs));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebPlusDidDocumentJson.Parser(jcs));
     }
 
 
@@ -337,6 +336,6 @@ internal sealed class WebPlusDataModelValidationTests
             """{"id":"did:webplus:example.com:uHiCa77-pRHbSiSIPSFO_EOlpw100j30VQnhWCXuwVMSA-w","selfHash":"uHiCa77-pRHbSiSIPSFO_EOlpw100j30VQnhWCXuwVMSA-w","selfHash":"uHiZZ77-pRHbSiSIPSFO_EOlpw100j30VQnhWCXuwVMSA-w","updateRules":{"key":"u7QFCWKaWNQ5FsNShO8BlZwjHa5xkGleeETKwu-vjf1SZXg"},"validFrom":"2025-11-19T01:21:47.699Z","versionId":0}""";
         byte[] bytes = Encoding.UTF8.GetBytes(duplicateKeyDocument);
 
-        Assert.ThrowsExactly<JsonException>(() => WebPlusDidDocumentJson.Parser(bytes));
+        _ = Assert.ThrowsExactly<JsonException>(() => WebPlusDidDocumentJson.Parser(bytes));
     }
 }

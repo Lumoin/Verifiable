@@ -147,7 +147,7 @@ public class JsonWebKey: Dictionary<string, object>, IEquatable<JsonWebKey>
     {
         if(value is null)
         {
-            Remove(key);
+            _ = Remove(key);
             return;
         }
 

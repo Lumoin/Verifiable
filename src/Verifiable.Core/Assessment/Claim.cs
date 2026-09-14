@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Core.Assessment
 {
     /// <summary>
@@ -206,7 +203,7 @@ namespace Verifiable.Core.Assessment
         /// </summary>
         /// <param name="id">The identifier for this claim.</param>
         /// <param name="outcome">The outcome of the claim check.</param>
-        public Claim(ClaimId id, ClaimOutcome outcome): this(id, outcome, ClaimContext.None, NoSubClaims) { }
+        public Claim(ClaimId id, ClaimOutcome outcome) : this(id, outcome, ClaimContext.None, NoSubClaims) { }
     }
 
 
@@ -228,7 +225,7 @@ namespace Verifiable.Core.Assessment
     /// </remarks>
     public record FailedClaim: Claim
     {
-        public FailedClaim(string failedRuleIdentifier, string failureContext): base(
+        public FailedClaim(string failedRuleIdentifier, string failureContext) : base(
             ClaimId.FailedClaim,
             ClaimOutcome.Failure,
             new FailedClaimContext { FailedRuleIdentifier = failedRuleIdentifier, FailureMessage = failureContext },

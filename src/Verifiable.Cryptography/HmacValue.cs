@@ -88,8 +88,8 @@ public sealed class HmacValue: SensitiveMemory, IEquatable<HmacValue>
             && HmacLifetime is not null
             && Tag.TryGet(out HashAlgorithmName algorithmName))
         {
-            HmacLifetime.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
-            HmacLifetime.SetTag(CryptoTelemetry.Hmac.OutputLength, Length);
+            _ = HmacLifetime.SetTag(CryptoTelemetry.Hmac.Algorithm, algorithmName.Name);
+            _ = HmacLifetime.SetTag(CryptoTelemetry.Hmac.OutputLength, Length);
         }
 
         base.Dispose(disposing);

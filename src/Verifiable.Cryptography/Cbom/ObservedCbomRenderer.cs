@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Linq;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Cbom;
@@ -227,7 +223,7 @@ public static class ObservedCbomRenderer
             materialRef,
             $"{purpose} ({materialType})",
             new CbomCryptoProperties("related-crypto-material", null, materialProperties)));
-        seenRefs.Add(materialRef);
+        _ = seenRefs.Add(materialRef);
 
         //Entropy edge: the consumed material depends on the DRBG and the producing library.
         AddDependency(dependencies, materialRef, DrbgRef, libraryRef);
@@ -325,7 +321,7 @@ public static class ObservedCbomRenderer
             new CbomCryptoProperties("algorithm", signatureProperties, null)));
 
         signatureAlgorithmIndex[algorithmRef] = components.Count - 1;
-        seenRefs.Add(algorithmRef);
+        _ = seenRefs.Add(algorithmRef);
 
         if(libraryRef is not null)
         {

@@ -299,7 +299,7 @@ public static class CoseCounterSign
         {
             CounterSignatureV2 full =>
                 (false, (ReadOnlyMemory<byte>?)full.Component.ProtectedHeader.AsReadOnlyMemory(), full.Component.Signature.AsReadOnlyMemory()),
-            CounterSignature0V2 abbreviated => (true, (ReadOnlyMemory<byte>?)null, abbreviated.Value.AsReadOnlyMemory()),
+            CounterSignature0V2 abbreviated => (true, null, abbreviated.Value.AsReadOnlyMemory()),
             _ => throw new ArgumentOutOfRangeException(nameof(counterSignature), counterSignature, "Unsupported countersignature form.")
         };
 

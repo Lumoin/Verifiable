@@ -62,13 +62,13 @@ internal sealed class XAdESHostileDocumentFuzzTests
     {
         int fragmentCount = 1 + (int)(NextRandom(state) % 3);
         var builder = new StringBuilder();
-        builder.Append(CultureInfo.InvariantCulture, $"""<QualifyingProperties xmlns="{V132}" xmlns:ds="{DsNamespace}" Target="#sig{index}">""");
+        _ = builder.Append(CultureInfo.InvariantCulture, $"""<QualifyingProperties xmlns="{V132}" xmlns:ds="{DsNamespace}" Target="#sig{index}">""");
         for(int i = 0; i < fragmentCount; ++i)
         {
-            builder.Append(FragmentPool[NextRandom(state) % (ulong)FragmentPool.Length]);
+            _ = builder.Append(FragmentPool[NextRandom(state) % (ulong)FragmentPool.Length]);
         }
 
-        builder.Append("</QualifyingProperties>");
+        _ = builder.Append("</QualifyingProperties>");
 
         return builder.ToString();
     }
@@ -96,48 +96,48 @@ internal sealed class XAdESHostileDocumentFuzzTests
                 return baseOctets;
 
             case 1:
-                //Truncate at a random prefix length -- exercises UnexpectedEndOfDocument refusals across
-                //every boundary class the nesting reaches.
-                {
-                    int cut = baseOctets.Length == 0 ? 0 : (int)(NextRandom(state) % (ulong)baseOctets.Length);
+            //Truncate at a random prefix length -- exercises UnexpectedEndOfDocument refusals across
+            //every boundary class the nesting reaches.
+            {
+                int cut = baseOctets.Length == 0 ? 0 : (int)(NextRandom(state) % (ulong)baseOctets.Length);
 
-                    return baseOctets[..cut];
-                }
+                return baseOctets[..cut];
+            }
 
             case 2:
-                //Corrupt a single byte -- classic bit-level fuzzing, exercises ill-formed-UTF-8/malformed-markup
-                //paths the byte-level reader must refuse rather than crash on.
+            //Corrupt a single byte -- classic bit-level fuzzing, exercises ill-formed-UTF-8/malformed-markup
+            //paths the byte-level reader must refuse rather than crash on.
+            {
+                if(baseOctets.Length == 0)
                 {
-                    if(baseOctets.Length == 0)
-                    {
-                        return baseOctets;
-                    }
-
-                    byte[] mutated = (byte[])baseOctets.Clone();
-                    int position = (int)(NextRandom(state) % (ulong)mutated.Length);
-                    mutated[position] = (byte)(NextRandom(state) % 256);
-
-                    return mutated;
+                    return baseOctets;
                 }
+
+                byte[] mutated = (byte[])baseOctets.Clone();
+                int position = (int)(NextRandom(state) % (ulong)mutated.Length);
+                mutated[position] = (byte)(NextRandom(state) % 256);
+
+                return mutated;
+            }
 
             default:
-                //Duplicate a random-length slice in place -- produces duplicate/unbalanced tag shapes.
+            //Duplicate a random-length slice in place -- produces duplicate/unbalanced tag shapes.
+            {
+                if(baseOctets.Length == 0)
                 {
-                    if(baseOctets.Length == 0)
-                    {
-                        return baseOctets;
-                    }
-
-                    int sliceLength = 1 + (int)(NextRandom(state) % (ulong)baseOctets.Length);
-                    int start = (int)(NextRandom(state) % (ulong)baseOctets.Length);
-                    int actualLength = Math.Min(sliceLength, baseOctets.Length - start);
-                    byte[] slice = baseOctets[start..(start + actualLength)];
-                    byte[] duplicated = new byte[baseOctets.Length + slice.Length];
-                    baseOctets.CopyTo(duplicated, 0);
-                    slice.CopyTo(duplicated, baseOctets.Length);
-
-                    return duplicated;
+                    return baseOctets;
                 }
+
+                int sliceLength = 1 + (int)(NextRandom(state) % (ulong)baseOctets.Length);
+                int start = (int)(NextRandom(state) % (ulong)baseOctets.Length);
+                int actualLength = Math.Min(sliceLength, baseOctets.Length - start);
+                byte[] slice = baseOctets[start..(start + actualLength)];
+                byte[] duplicated = new byte[baseOctets.Length + slice.Length];
+                baseOctets.CopyTo(duplicated, 0);
+                slice.CopyTo(duplicated, baseOctets.Length);
+
+                return duplicated;
+            }
         }
     }
 

@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.Model.SelectiveDisclosure.Strategy;
@@ -152,9 +148,9 @@ public static class DcqlDisclosure
         DcqlEvaluationResult result = DcqlEvaluator.EvaluateSingle(
             credentialQuery, credential, metadata, claimExtractor);
 
-        var allAvailablePaths = metadata.AvailablePaths is null
-            ? new HashSet<CredentialPath>()
-            : new HashSet<CredentialPath>(metadata.AvailablePaths);
+        HashSet<CredentialPath> allAvailablePaths = metadata.AvailablePaths is null
+            ? []
+            : [.. metadata.AvailablePaths];
         if(mandatoryPaths is not null)
         {
             allAvailablePaths.UnionWith(mandatoryPaths);

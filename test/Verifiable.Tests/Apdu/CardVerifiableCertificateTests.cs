@@ -1,8 +1,6 @@
-using System;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Apdu.Eac;
-using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using static Verifiable.Tests.TestInfrastructure.ApduWireFixtures;

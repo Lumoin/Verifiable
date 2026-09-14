@@ -1,7 +1,5 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -10,11 +8,6 @@ using Verifiable.Tpm.Extensions.Nv;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -258,7 +251,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockAuthorizationTests
             "A permanent entity other than TPM_RH_LOCKOUT receives no DA protection, so the refusal charges no failedTries.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A refused command SETs no lock bit.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A refused command SETs no lock bit.");
     }
 
     /// <summary>
@@ -286,7 +279,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockAuthorizationTests
             "Platform authorization is categorically exempt from dictionary-attack protection, so the refusal charges no failedTries.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A refused command SETs no lock bit.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A refused command SETs no lock bit.");
     }
 
     /// <summary>
@@ -415,7 +408,7 @@ internal sealed class TpmInHouseSimulatorNvGlobalWriteLockAuthorizationTests
         Assert.AreEqual(HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_VALUE, 0), result.ResponseCode, "TPMI_RH_PROVISION admits TPM_RH_OWNER and TPM_RH_PLATFORM alone.");
 
         TpmaNv attributes = await ReadIndexAttributesAsync(device, GlobalLockIndexHandle).ConfigureAwait(false);
-        Assert.AreEqual(default(TpmaNv), attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A handle the interface type refuses runs no part of the command's effect.");
+        Assert.AreEqual(default, attributes & TpmaNv.TPMA_NV_WRITELOCKED, "A handle the interface type refuses runs no part of the command's effect.");
     }
 
     /// <summary>

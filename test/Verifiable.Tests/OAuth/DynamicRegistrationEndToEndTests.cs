@@ -72,7 +72,7 @@ internal sealed class DynamicRegistrationEndToEndTests
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
             $"PAR against dynamically registered client must succeed. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
         Assert.IsNotNull(parResult.RedirectUri);
-        Assert.Contains("request_uri", parResult.RedirectUri!.ToString(), StringComparison.Ordinal,
+        Assert.Contains("request_uri", parResult.RedirectUri.ToString(), StringComparison.Ordinal,
             "Authorize redirect URI must carry the PAR-issued request_uri.");
     }
 

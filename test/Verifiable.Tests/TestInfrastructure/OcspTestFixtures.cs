@@ -1,16 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Formats.Asn1;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Ocsp;
 using Org.BouncyCastle.Security;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Formats.Asn1;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.X509;
@@ -944,6 +941,8 @@ internal static class OcspTestFixtures
         CertificateStatus certStatus = status switch
         {
             OcspCertificateStatus.Good => CertificateStatus.Good,
+            OcspCertificateStatus.Unknown => throw new ArgumentOutOfRangeException(nameof(status), status, "This RSA fixture supports only the Good status."),
+            OcspCertificateStatus.Revoked => throw new ArgumentOutOfRangeException(nameof(status), status, "This RSA fixture supports only the Good status."),
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, "This RSA fixture supports only the Good status.")
         };
 
@@ -986,6 +985,8 @@ internal static class OcspTestFixtures
         CertificateStatus certStatus = status switch
         {
             OcspCertificateStatus.Good => CertificateStatus.Good,
+            OcspCertificateStatus.Unknown => throw new ArgumentOutOfRangeException(nameof(status), status, "This ML-DSA fixture supports only the Good status."),
+            OcspCertificateStatus.Revoked => throw new ArgumentOutOfRangeException(nameof(status), status, "This ML-DSA fixture supports only the Good status."),
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, "This ML-DSA fixture supports only the Good status.")
         };
 

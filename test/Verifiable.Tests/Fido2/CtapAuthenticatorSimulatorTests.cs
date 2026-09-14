@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
@@ -82,7 +77,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
         Assert.Contains(WellKnownCtapVersions.Fido23, new List<string>(decoded.Versions));
         Assert.AreEqual(expectedAaguid, decoded.Aaguid);
         Assert.IsNotNull(decoded.Options);
-        Assert.IsTrue(decoded.Options!.ResidentKey);
+        Assert.IsTrue(decoded.Options.ResidentKey);
     }
 
 
@@ -212,7 +207,7 @@ internal sealed class CtapAuthenticatorSimulatorTests
     [TestMethod]
     public async Task MakeCredentialAssociatesUserNameAndDisplayNameWithTheStoredRecord()
     {
-        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("user-name-fidelity",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CtapMakeCredentialGetAssertionFixtures.CreateSimulator("user-name-fidelity", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         var trace = new TestObserver<TraceEntry<CtapAuthenticatorState, CtapAuthenticatorInput>>();

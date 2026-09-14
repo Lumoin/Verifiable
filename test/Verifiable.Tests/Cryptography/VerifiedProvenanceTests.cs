@@ -71,12 +71,12 @@ internal sealed class VerifiedProvenanceTests
         Assert.IsNotNull(firstProvenance);
         Assert.IsNotNull(secondProvenance);
 
-        Verified<TestPayload>? first = Verified<TestPayload>.TryCreateBound(value, firstProvenance!);
-        Verified<TestPayload>? second = Verified<TestPayload>.TryCreateBound(value, secondProvenance!);
+        Verified<TestPayload>? first = Verified<TestPayload>.TryCreateBound(value, firstProvenance);
+        Verified<TestPayload>? second = Verified<TestPayload>.TryCreateBound(value, secondProvenance);
         Assert.IsTrue(first.HasValue);
         Assert.IsTrue(second.HasValue);
 
-        Assert.AreNotEqual(first!.Value, second!.Value);
+        Assert.AreNotEqual(first.Value, second.Value);
     }
 
 
@@ -92,7 +92,7 @@ internal sealed class VerifiedProvenanceTests
             new KeyId("k"), "k", VerificationRelationship.Authentication, subject);
         Assert.IsNotNull(provenance);
 
-        Verified<int>? bound = Verified<int>.TryCreateBound(42, provenance!);
+        Verified<int>? bound = Verified<int>.TryCreateBound(42, provenance);
 
         Assert.IsFalse(bound.HasValue);
     }
@@ -171,11 +171,11 @@ internal sealed class VerifiedProvenanceTests
             senderKeyId, isDecryptionAuthenticated: true, senderKeyId, value);
 
         Assert.IsNotNull(provenance);
-        Assert.AreEqual(ResolutionSource.KeyAgreement, provenance!.Source);
+        Assert.AreEqual(ResolutionSource.KeyAgreement, provenance.Source);
 
         Verified<TestPayload>? bound = Verified<TestPayload>.TryCreateBound(value, provenance);
         Assert.IsTrue(bound.HasValue);
-        Assert.IsTrue(bound!.Value.IsIdentityBound);
+        Assert.IsTrue(bound.Value.IsIdentityBound);
     }
 
 

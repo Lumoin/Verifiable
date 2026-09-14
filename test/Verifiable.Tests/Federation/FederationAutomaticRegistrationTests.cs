@@ -1,5 +1,3 @@
-using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -77,13 +75,13 @@ internal sealed class FederationAutomaticRegistrationTests
             $"A valid chain with declared RP metadata must register. Reason: {result.RejectionReason}");
         Assert.IsNull(result.RejectionReason);
         Assert.IsNotNull(result.EffectiveMetadata);
-        Assert.AreEqual("openid profile", result.EffectiveMetadata!["scope"],
+        Assert.AreEqual("openid profile", result.EffectiveMetadata["scope"],
             "Effective metadata must carry the declared RP scope.");
         Assert.IsTrue(result.EffectiveMetadata.ContainsKey("redirect_uris"),
             "Effective metadata must carry the declared redirect_uris.");
         Assert.IsNotNull(result.Chain);
         Assert.IsNotNull(result.Assessment);
-        Assert.IsTrue(result.Assessment!.IsTrusted);
+        Assert.IsTrue(result.Assessment.IsTrusted);
         Assert.IsNotNull(result.ValidUntil,
             "The party-trust freshness assessor bounds validity to the chain's earliest exp.");
     }
@@ -125,7 +123,7 @@ internal sealed class FederationAutomaticRegistrationTests
         Assert.IsFalse(result.IsRegistered,
             "A chain whose subject differs from the asserted client_id must be refused.");
         Assert.IsNotNull(result.RejectionReason);
-        Assert.Contains("does not match", result.RejectionReason!);
+        Assert.Contains("does not match", result.RejectionReason);
     }
 
 
@@ -157,7 +155,7 @@ internal sealed class FederationAutomaticRegistrationTests
         Assert.IsFalse(result.IsRegistered,
             "Automatic registration requires the RP to declare openid_relying_party metadata.");
         Assert.IsNotNull(result.RejectionReason);
-        Assert.Contains("did not declare", result.RejectionReason!);
+        Assert.Contains("did not declare", result.RejectionReason);
     }
 
 
@@ -355,7 +353,7 @@ internal sealed class FederationAutomaticRegistrationTests
         Assert.IsTrue(result.IsRegistered,
             $"A 5-element chain whose stacked policy still admits the declared grant must register. Reason: {result.RejectionReason}");
         Assert.IsNotNull(result.EffectiveMetadata);
-        Assert.IsTrue(result.EffectiveMetadata!.ContainsKey("grant_types"),
+        Assert.IsTrue(result.EffectiveMetadata.ContainsKey("grant_types"),
             "Effective metadata must carry the policy-applied grant_types.");
     }
 

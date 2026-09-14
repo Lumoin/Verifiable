@@ -1,13 +1,11 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Diagnostics;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Server.Diagnostics;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -46,7 +44,7 @@ internal sealed class ParRequestIntegrityTests
     public async Task PushedRedirectUriIsAuthoritativeAndGetRedirectUriIsIgnored()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -62,9 +60,9 @@ internal sealed class ParRequestIntegrityTests
             host, material, authorizeFields, staleAuth: false).ConfigureAwait(false);
 
         Assert.AreEqual(302, authorizeResponse.StatusCode, authorizeResponse.Body);
-        Assert.StartsWith(RedirectUri.OriginalString, authorizeResponse.Location!,
+        Assert.StartsWith(RedirectUri.OriginalString, authorizeResponse.Location,
             $"The code must be delivered to the PUSHED redirect_uri, never the front-channel one. Location: {authorizeResponse.Location}");
-        Assert.DoesNotContain("attacker.example.com", authorizeResponse.Location!, StringComparison.Ordinal,
+        Assert.DoesNotContain("attacker.example.com", authorizeResponse.Location, StringComparison.Ordinal,
             "A front-channel redirect_uri must never receive the authorization code.");
     }
 
@@ -77,7 +75,7 @@ internal sealed class ParRequestIntegrityTests
     public async Task PushedAcrValuesAreAuthoritativeAndGetAcrValuesAreIgnored()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -116,7 +114,7 @@ internal sealed class ParRequestIntegrityTests
     public async Task PushedMaxAgeIsAuthoritativeAndGetMaxAgeIsIgnored()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -151,7 +149,7 @@ internal sealed class ParRequestIntegrityTests
     public async Task ExtraneousFrontChannelParameterEmitsTamperingEvent()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -179,7 +177,7 @@ internal sealed class ParRequestIntegrityTests
     public async Task CleanReferencedAuthorizeEmitsNoTamperingEvent()
     {
         await using TestHostShell host = new(TimeProvider);
-        host.SeedTestSubject(subject: SubjectId);
+        _ = host.SeedTestSubject(subject: SubjectId);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, profile: PolicyProfile.Rfc6749WithPkce);
 
@@ -217,7 +215,7 @@ internal sealed class ParRequestIntegrityTests
         {
             ShouldListenTo = static source => string.Equals(
                 source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = static (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity =>
             {
                 lock(captured)
@@ -269,7 +267,7 @@ internal sealed class ParRequestIntegrityTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
@@ -283,7 +281,7 @@ internal sealed class ParRequestIntegrityTests
     private async Task<ServerHttpResponse> AuthorizeAsync(
         TestHostShell host, VerifierKeyMaterial material, RequestFields authorizeFields, bool staleAuth)
     {
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         authorizeContext.SetAuthTime(staleAuth
             ? TimeProvider.GetUtcNow() - TimeSpan.FromMinutes(30)

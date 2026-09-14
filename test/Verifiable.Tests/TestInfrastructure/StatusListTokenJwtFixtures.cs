@@ -1,8 +1,6 @@
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.DataIntegrity;

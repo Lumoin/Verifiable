@@ -162,7 +162,7 @@ public static class GeneralJweParsing
                 recipients.Add(new AeadGeneralRecipient(keyId, wrappedKeyOwner));
             }
 
-            AeadGeneralMessage result = new AeadGeneralMessage(
+            AeadGeneralMessage result = new(
                 header, epk, iv, ciphertext, tag, aad, recipients, expectedEncryption, expectedAlgorithm);
 
             //Ownership transferred to AeadGeneralMessage.
@@ -322,7 +322,7 @@ public static class GeneralJweParsing
 
             recipients.Add(new AeadGeneralRecipient(kid, base64UrlDecoder(encryptedKey, pool)));
 
-            AeadGeneralMessage result = new AeadGeneralMessage(
+            AeadGeneralMessage result = new(
                 header, epk, iv, ciphertext, tag, aad, recipients, expectedEncryption, expectedAlgorithm);
 
             //Ownership transferred to AeadGeneralMessage.
@@ -683,7 +683,7 @@ public static class GeneralJweParsing
 
         int aadByteCount = Encoding.ASCII.GetByteCount(aadString);
         IMemoryOwner<byte> aadOwner = pool.Rent(aadByteCount);
-        Encoding.ASCII.GetBytes(aadString, aadOwner.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(aadString, aadOwner.Memory.Span);
 
         Tag aadTag = family switch
         {

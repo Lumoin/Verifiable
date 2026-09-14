@@ -1,6 +1,5 @@
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Client;
 
@@ -226,7 +225,7 @@ public static class DynamicRegistrationHandlers
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             if(metadata.RedirectUris.Count > 0)
             {
@@ -264,7 +263,7 @@ public static class DynamicRegistrationHandlers
             {
                 JsonAppender.AppendUriField(sb, ClientMetadataParameterNames.JwksUri, metadata.JwksUri, ref first);
             }
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }

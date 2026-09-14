@@ -1,14 +1,11 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Tests.EventLogs;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -18,11 +15,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -302,7 +294,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
             await CryptoProofLogReplayHarness.ReplayGenesisAsync(entry, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsSuccess, $"An in-house TPM quote must replay as a crypto-proof log entry; error: '{result.Error}'.");
-        Assert.IsInstanceOfType<ActiveLogState<int>>(result.State);
+        _ = Assert.IsInstanceOfType<ActiveLogState<int>>(result.State);
     }
 
     /// <summary>
@@ -532,7 +524,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
         //simulator signed (Part 3, clause 18.4: the PCR digest uses the hash of the signing scheme).
         byte[] expectedPcrDigest = await ReadAndComputePcrCompositeAsync(tpm, registry, pool, schemeHashAlg).ConfigureAwait(false);
         Assert.IsTrue(
-            attest.Attested.Quote!.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
+            attest.Attested.Quote.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
             "The quote's pcrDigest must equal the hash of the concatenated selected PCR values under the scheme hash.");
     }
 
@@ -1260,13 +1252,13 @@ internal sealed class TpmInHouseSimulatorQuoteTests
                 TpmRcConstants.TPM_RC_SUCCESS, result.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : result.ResponseCode,
                 "An audit-claiming sign session succeeds (TPM 2.0 Library Part 1, clause 17.1).");
 
-            (TpmCcConstants Code, byte[] Command, byte[] Response) audited = wire[^1];
-            byte auditedAttributes = ReadResponseSessionAttributes(audited.Response, outHandleCount: 0, sessionIndex: 0);
+            (TpmCcConstants Code, byte[] Command, byte[] Response) = wire[^1];
+            byte auditedAttributes = ReadResponseSessionAttributes(Response, outHandleCount: 0, sessionIndex: 0);
             Assert.AreEqual(
                 (byte)(TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT | TpmaSession.AUDIT_EXCLUSIVE), auditedAttributes,
                 "The response echoes audit SET and auditExclusive SET (the session's first use as an audit session), with auditReset CLEAR (TPM 2.0 Library Part 2, clause 8.4, Table 38).");
 
-            byte[] responseParameters = ReadResponseParameters(audited.Response, outHandleCount: 0);
+            byte[] responseParameters = ReadResponseParameters(Response, outHandleCount: 0);
             byte[] cpHash = await ComputeCpHashAsync(TpmCcConstants.TPM_CC_Quote, handleNames, SerializeCommandParameters(quoteInput, handleCount: 1), pool).ConfigureAwait(false);
             byte[] rpHash = await ComputeRpHashAsync(TpmCcConstants.TPM_CC_Quote, responseParameters, pool).ConfigureAwait(false);
             byte[] expectedDigest = await ExtendAuditDigestAsync(priorDigest: null, cpHash, rpHash, pool).ConfigureAwait(false);
@@ -1722,7 +1714,7 @@ internal sealed class TpmInHouseSimulatorQuoteTests
 
             byte[] expectedPcrDigest = await ReadAndComputePcrCompositeAsync(tpm, registry, pool, TpmAlgIdConstants.TPM_ALG_SHA256).ConfigureAwait(false);
             Assert.IsTrue(
-                attest.Attested.Quote!.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
+                attest.Attested.Quote.PcrDigest.AsReadOnlySpan().SequenceEqual(expectedPcrDigest),
                 "The quote's pcrDigest must equal the hash of the concatenated selected PCR values.");
         }
         finally

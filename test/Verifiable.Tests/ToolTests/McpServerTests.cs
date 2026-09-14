@@ -2,7 +2,6 @@ using ModelContextProtocol.Client;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Lumoin.Base;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 
@@ -125,7 +124,7 @@ internal sealed class McpServerTests
 
         if(result.IsSuccess)
         {
-            using var doc = JsonDocument.Parse(result.Value!);
+            using var doc = JsonDocument.Parse(result.Value);
             Assert.AreEqual(JsonValueKind.Object, doc.RootElement.ValueKind);
         }
         else
@@ -201,15 +200,15 @@ internal sealed class McpServerTests
     {
         var maxResult = VerifiableOperations.CreateDid(int.MaxValue, "param", null);
         Assert.IsTrue(maxResult.IsSuccess);
-        Assert.Contains(int.MaxValue.ToString(CultureInfo.InvariantCulture), maxResult.Value!, StringComparison.Ordinal);
+        Assert.Contains(int.MaxValue.ToString(CultureInfo.InvariantCulture), maxResult.Value, StringComparison.Ordinal);
 
         var minResult = VerifiableOperations.CreateDid(int.MinValue, "param", null);
         Assert.IsTrue(minResult.IsSuccess);
-        Assert.Contains(int.MinValue.ToString(CultureInfo.InvariantCulture), minResult.Value!, StringComparison.Ordinal);
+        Assert.Contains(int.MinValue.ToString(CultureInfo.InvariantCulture), minResult.Value, StringComparison.Ordinal);
 
         var zeroResult = VerifiableOperations.CreateDid(0, "param", null);
         Assert.IsTrue(zeroResult.IsSuccess);
-        Assert.Contains("0", zeroResult.Value!, StringComparison.Ordinal);
+        Assert.Contains("0", zeroResult.Value, StringComparison.Ordinal);
     }
 
 
@@ -222,8 +221,8 @@ internal sealed class McpServerTests
         var result = VerifiableOperations.CreateDid(1, unicodeParam, unicodeExtra);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.Contains(unicodeParam, result.Value!, StringComparison.Ordinal);
-        Assert.Contains(unicodeExtra, result.Value!, StringComparison.Ordinal);
+        Assert.Contains(unicodeParam, result.Value, StringComparison.Ordinal);
+        Assert.Contains(unicodeExtra, result.Value, StringComparison.Ordinal);
     }
 
 
@@ -269,13 +268,13 @@ internal sealed class McpServerTests
         {
             if(e.Data is not null)
             {
-                stderrCapture.AppendLine(e.Data);
+                _ = stderrCapture.AppendLine(e.Data);
             }
         };
 
         try
         {
-            process.Start();
+            _ = process.Start();
             process.BeginErrorReadLine();
 
             string initializeJson = JsonSerializer.Serialize(new

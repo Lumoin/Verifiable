@@ -1,8 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -202,7 +200,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         string json = MinimalValidDocument().Replace("\"backupState\":false", "\"backupState\":false,\"unexpected\":1", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -212,7 +210,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         string json = MinimalValidDocument().Replace("\"kty\":2", "\"kty\":2,\"unexpected\":1", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -222,7 +220,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         string json = MinimalValidDocument().Replace("\"version\":1,", "\"version\":1,\"version\":1,", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -232,7 +230,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         string json = MinimalValidDocument().Replace("\"id\":\"AQIDBA\"", "\"id\":\"not base64url!!\"", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -242,7 +240,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         string json = MinimalValidDocument().Replace("\"signCount\":0,", "", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -252,7 +250,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         const string json = """{"version":1,"type":"public-key","id":"AQIDBA","publicKey":{"kty":{"nested":{"deeper":{"deepest":1}}}},"signCount":0,"uvInitialized":false,"transports":[],"backupEligible":false,"backupState":false}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -262,7 +260,7 @@ internal sealed class Fido2CredentialRecordJsonTests
     {
         string json = MinimalValidDocument().Replace("\"version\":1", "\"version\":999", StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => Fido2CredentialRecordJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 

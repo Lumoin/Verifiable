@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -554,7 +552,7 @@ public static class VcalmVerificationService
             //§3.4 multibase: a u-prefixed base64url value whose CBOR body is 0xd9 5d 01-tagged is a
             //derived proof; the parser throws on a base (0xd9 5d 00) or malformed header, so a base
             //proof is not routed here.
-            if(proof.ProofValue![0] != MultibaseAlgorithms.Base64Url)
+            if(proof.ProofValue[0] != MultibaseAlgorithms.Base64Url)
             {
                 return false;
             }

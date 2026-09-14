@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using Verifiable.Core.Did.Methods.WebVh;
 

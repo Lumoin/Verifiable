@@ -1,21 +1,14 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -77,7 +70,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
             Assert.IsTrue(PolicyA.AsSpan().SequenceEqual(publicArea.AuthPolicy.AsReadOnlySpan()), "authPolicy must equal the published PolicyA digest.");
 
             Assert.IsNotNull(publicArea.Parameters.EccDetail, "The EK must carry ECC parameters.");
-            TpmsEccParms eccParms = publicArea.Parameters.EccDetail!.Value;
+            TpmsEccParms eccParms = publicArea.Parameters.EccDetail.Value;
             Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_AES, eccParms.Symmetric.Algorithm, "The EK's symmetric algorithm must be AES.");
             Assert.AreEqual((ushort)128, eccParms.Symmetric.KeyBits, "The EK's symmetric key size must be 128 bits.");
             Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_CFB, eccParms.Symmetric.Mode, "The EK's symmetric mode must be CFB.");
@@ -135,7 +128,7 @@ internal sealed class TpmInHouseSimulatorEndorsementKeyTemplateTests
             Assert.IsTrue(PolicyA.AsSpan().SequenceEqual(publicArea.AuthPolicy.AsReadOnlySpan()), "authPolicy must equal the published PolicyA digest.");
 
             Assert.IsNotNull(publicArea.Parameters.RsaDetail, "The RSA EK must carry RSA parameters.");
-            TpmsRsaParms rsaParms = publicArea.Parameters.RsaDetail!.Value;
+            TpmsRsaParms rsaParms = publicArea.Parameters.RsaDetail.Value;
             Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_AES, rsaParms.Symmetric.Algorithm, "The RSA EK's symmetric algorithm must be AES.");
             Assert.AreEqual((ushort)128, rsaParms.Symmetric.KeyBits, "The RSA EK's symmetric key size must be 128 bits.");
             Assert.AreEqual(TpmAlgIdConstants.TPM_ALG_CFB, rsaParms.Symmetric.Mode, "The RSA EK's symmetric mode must be CFB.");

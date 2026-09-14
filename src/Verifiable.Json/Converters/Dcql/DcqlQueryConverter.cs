@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Dcql;
 
 namespace Verifiable.Json.Converters.Dcql;
@@ -41,7 +38,7 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
             }
 
             string propertyName = reader.GetString()!;
-            reader.Read();
+            _ = reader.Read();
 
             switch(propertyName)
             {
@@ -112,7 +109,7 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
             throw new JsonException($"Expected StartArray but got {reader.TokenType}.");
         }
 
-        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        var typeInfo = options.GetTypeInfo<T>();
         var list = new List<T>();
 
         while(reader.Read())
@@ -139,7 +136,7 @@ public sealed class DcqlQueryConverter: JsonConverter<DcqlQuery>
     /// </summary>
     private static void WriteArray<T>(Utf8JsonWriter writer, IReadOnlyList<T> items, JsonSerializerOptions options)
     {
-        var typeInfo = (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T));
+        var typeInfo = options.GetTypeInfo<T>();
 
         writer.WriteStartArray();
         foreach(var item in items)

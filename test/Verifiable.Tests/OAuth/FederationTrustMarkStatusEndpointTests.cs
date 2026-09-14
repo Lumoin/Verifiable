@@ -2,7 +2,6 @@ using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Net.Http;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;

@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
@@ -35,7 +34,7 @@ public class VerificationMethodReferenceConverterFactory: JsonConverterFactory
     /// <summary>
     /// Initializes the factory with the default <see cref="VerificationMethodConverter"/>.
     /// </summary>
-    public VerificationMethodReferenceConverterFactory(): this(new VerificationMethodConverter()) { }
+    public VerificationMethodReferenceConverterFactory() : this(new VerificationMethodConverter()) { }
 
     /// <summary>
     /// Initializes the factory with a specific <see cref="VerificationMethodConverter"/>.
@@ -124,7 +123,7 @@ public class VerificationMethodReferenceConverter<T>: JsonConverter<T> where T :
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if(reader.TokenType != JsonTokenType.String && reader.TokenType != JsonTokenType.StartObject)
+        if(reader.TokenType is not JsonTokenType.String and not JsonTokenType.StartObject)
         {
             throw new JsonException($"Expected string or object for verification method reference, but got {reader.TokenType}.");
         }
@@ -134,7 +133,7 @@ public class VerificationMethodReferenceConverter<T>: JsonConverter<T> where T :
             return CreateFromReferenceId(reader.GetString() ?? string.Empty);
         }
 
-        var embedded = VmConverter.Read(ref reader, typeof(VerificationMethod), options)!;
+        var embedded = VmConverter.Read(ref reader, typeof(VerificationMethod), options);
         return CreateFromEmbedded(embedded);
     }
 

@@ -1,24 +1,16 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
-using System.Text;
-using Verifiable.Core;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.JCose.Eudi;
 using Verifiable.Json;
-using Verifiable.Json.Sd;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
-using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop;
-using Verifiable.OAuth.Siop.Wallet;
 using Verifiable.OAuth.Siop.Server.States;
+using Verifiable.OAuth.Siop.Wallet;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -96,7 +88,7 @@ internal sealed class SiopCombinedResponseFlowTests
                 rpKeys, SiopNonce, RelyingPartyClientId, AllowedSiopAlgorithms,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-            Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+            _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
             //=== Step 2: the wallet mints BOTH artifacts for this one transaction. ===
             var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
@@ -126,7 +118,7 @@ internal sealed class SiopCombinedResponseFlowTests
                     [AuthorizationResponseParameters.VpToken] = vpToken,
                     [OAuthRequestParameterNames.State] = requestHandle
                 },
-                new ExchangeContext(),
+                [],
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //=== Step 4: 200 and the terminal verified state with the expected subject + nonce. ===
@@ -193,7 +185,7 @@ internal sealed class SiopCombinedResponseFlowTests
                     [AuthorizationResponseParameters.VpToken] = staleVpToken,
                     [OAuthRequestParameterNames.State] = requestHandle
                 },
-                new ExchangeContext(),
+                [],
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             //The flow must not succeed; it reaches terminal failure naming the nonce miss. The
@@ -245,7 +237,7 @@ internal sealed class SiopCombinedResponseFlowTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);

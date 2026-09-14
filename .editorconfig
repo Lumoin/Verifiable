@@ -93,7 +93,8 @@ dotnet_style_prefer_simplified_interpolation = true
 dotnet_style_readonly_field = true
 
 # Parameter preferences
-dotnet_code_quality_unused_parameters = all
+# A public parameter is API and delegate/interface shape; only non-public unused parameters are defects.
+dotnet_code_quality_unused_parameters = non_public
 
 # Suppression preferences
 dotnet_remove_unnecessary_suppression_exclusions = none
@@ -137,6 +138,16 @@ dotnet_code_quality.CA1068.api_surface = all
 # Switch expressions are preferred over switch statements (IDE0066); enforced in build via
 # EnforceCodeStyleInBuild together with csharp_prefer_braces below.
 dotnet_diagnostic.IDE0066.severity = warning
+
+# The 11.0 rule set enforces these as warnings; the explicit severity lets the formatter apply their fixers.
+dotnet_diagnostic.IDE0004.severity = warning
+dotnet_diagnostic.IDE0047.severity = warning
+dotnet_diagnostic.IDE0048.severity = warning
+dotnet_diagnostic.IDE0078.severity = warning
+dotnet_diagnostic.IDE0110.severity = warning
+
+# The rule cannot see a parameter a delegate, interface or override dictates; the non-public surface option stays.
+dotnet_diagnostic.IDE0060.severity = suggestion
 
 # Null-checking preferences
 csharp_style_conditional_delegate_call = true
@@ -327,3 +338,83 @@ dotnet_style_operator_placement_when_wrapping = beginning_of_line
 tab_width = 4
 indent_size = 4
 dotnet_style_prefer_collection_expression = true:suggestion
+
+[src/Verifiable.Json/AuthZen/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/Fido2/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/Logout/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/Oid4Vci/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/ProtectedResource/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/SecurityEvents/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/Vcalm/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Json/WebFinger/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/EuTrustedLists/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/EuEArk/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/EuAsic/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/EuEvidenceRecords/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/Fido2Tpm/**.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Microsoft/EncryptedMemoryWindows.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Core/Model/SelectiveDisclosure/GenerateDisclosureSaltDelegate.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/ValidationRules/DidValidationRules.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/test/TreeTraversalNode.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/Jose/JsonWebKeyThumbprintParameterNames.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[test/Verifiable.Tests/PresentationTests.cs]
+# IDE0130: the folder is organizational; the namespace is the public API.
+dotnet_diagnostic.IDE0130.severity = none
+
+[src/Verifiable.Cryptography/Pki/OcspResponses.cs]
+# IDE0078: a relational pattern needs a compile-time constant; System.Numerics.BigInteger has none.
+dotnet_diagnostic.IDE0078.severity = none

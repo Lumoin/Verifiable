@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography.Xml;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -104,7 +100,7 @@ public static class XAdESSignatureFactsDelegates
             }
 
             bool targetResolved = XAdESQualifyingPropertiesDiscovery.TryVerifyTargetBinding(
-                table, discovery.QualifyingProperties, signature!, out XAdESProcessingError _);
+                table, discovery.QualifyingProperties, signature!, out _);
 
             XAdESQualifyingProperties qualifyingProperties = discovery.QualifyingProperties;
             if(!qualifyingProperties.HasSignedProperties)
@@ -114,7 +110,7 @@ public static class XAdESSignatureFactsDelegates
 
             XAdESSignedProperties signedProperties = qualifyingProperties.SignedProperties;
             bool signedPropertiesReferenceBound = XAdESQualifyingPropertiesDiscovery.TryVerifySignedPropertiesReferenceBinding(
-                table, signature!, signedProperties, resolver: null, pool, out XmlReference _, out XAdESProcessingError referenceError);
+                table, signature!, signedProperties, resolver: null, pool, out _, out XAdESProcessingError referenceError);
             bool signedPropertiesReferencePresent = signedPropertiesReferenceBound
                 || referenceError.Failure != XAdESProcessingFailure.SignedPropertiesReferenceNotFound;
 
@@ -265,6 +261,9 @@ public static class XAdESSignatureFactsDelegates
                                 }
 
                                 break;
+
+                            default:
+                                break;
                         }
                     }
                 }
@@ -296,7 +295,7 @@ public static class XAdESSignatureFactsDelegates
                                     return Fail($"CommitmentTypeIndication did not read: {commitmentError.Failure}.");
                                 }
 
-                                commitmentTypeIdentifiers.Add(ToObjectIdentifier(table, commitment.CommitmentTypeId));
+                                commitmentTypeIdentifiers.Add(ToObjectIdentifier(commitment.CommitmentTypeId));
 
                                 break;
 
@@ -308,7 +307,7 @@ public static class XAdESSignatureFactsDelegates
 
                                 using(adoTst)
                                 {
-                                    CopyTimeStampContainer(table, adoTst!.TimeStamp, SignatureTimestampClass.ContentTimestamp, "AllDataObjectsTimeStamp",
+                                    CopyTimeStampContainer(adoTst!.TimeStamp, SignatureTimestampClass.ContentTimestamp, "AllDataObjectsTimeStamp",
                                         ref allDataObjectsTimeStampOrdinal, pool, timestamps, timestampContainers);
                                 }
 
@@ -322,10 +321,13 @@ public static class XAdESSignatureFactsDelegates
 
                                 using(idoTst)
                                 {
-                                    CopyTimeStampContainer(table, idoTst!.TimeStamp, SignatureTimestampClass.ContentTimestamp, "IndividualDataObjectsTimeStamp",
+                                    CopyTimeStampContainer(idoTst!.TimeStamp, SignatureTimestampClass.ContentTimestamp, "IndividualDataObjectsTimeStamp",
                                         ref individualDataObjectsTimeStampOrdinal, pool, timestamps, timestampContainers);
                                 }
 
+                                break;
+
+                            default:
                                 break;
                         }
                     }
@@ -334,7 +336,7 @@ public static class XAdESSignatureFactsDelegates
                 //Letter k) (XA-6.3-t08): computed here, over the read signature, since the bijection needs
                 //ds:SignedInfo membership the crypto-free facts shape never carries -- the RESULT rides as a
                 //fact (XAdESQualifyingPropertiesFacts.IsDataObjectFormatCoverageSatisfied).
-                bool dataObjectFormatCoverageSatisfied = XAdESDataObjectFormatCoverage.TryVerify(table, signature!, dataObjectFormats, out XAdESProcessingError _);
+                bool dataObjectFormatCoverageSatisfied = XAdESDataObjectFormatCoverage.TryVerify(table, signature!, dataObjectFormats, out _);
 
                 int counterSignatureCount = 0;
                 var validationDataCounts = new XAdESValidationDataCounts();
@@ -371,7 +373,7 @@ public static class XAdESSignatureFactsDelegates
 
                                 using(sigTst)
                                 {
-                                    CopyTimeStampContainer(table, sigTst!.TimeStamp, SignatureTimestampClass.SignatureTimestamp, "SignatureTimeStamp",
+                                    CopyTimeStampContainer(sigTst!.TimeStamp, SignatureTimestampClass.SignatureTimestamp, "SignatureTimeStamp",
                                         ref sigTstOrdinal, pool, timestamps, timestampContainers);
                                 }
 
@@ -448,6 +450,9 @@ public static class XAdESSignatureFactsDelegates
                                 }
 
                                 break;
+
+                            default:
+                                break;
                         }
                     }
                 }
@@ -457,12 +462,12 @@ public static class XAdESSignatureFactsDelegates
                 if(qualifyingProperties.HasUnsignedProperties && qualifyingProperties.UnsignedProperties.HasUnsignedSignatureProperties)
                 {
                     XAdESUnsignedSignatureProperties unsignedSignatureProperties = qualifyingProperties.UnsignedProperties.UnsignedSignatureProperties;
-                    if(XAdESValidationDataTrigger.TryDetermine(table, unsignedSignatureProperties, XAdESValidationDataFamily.Certificate, out XAdESValidationDataTriggerResult certTrigger, out XAdESProcessingError _))
+                    if(XAdESValidationDataTrigger.TryDetermine(table, unsignedSignatureProperties, XAdESValidationDataFamily.Certificate, out XAdESValidationDataTriggerResult certTrigger, out _))
                     {
                         certificateValidationDataTriggered = certTrigger.IsTriggered;
                     }
 
-                    if(XAdESValidationDataTrigger.TryDetermine(table, unsignedSignatureProperties, XAdESValidationDataFamily.Revocation, out XAdESValidationDataTriggerResult revTrigger, out XAdESProcessingError _))
+                    if(XAdESValidationDataTrigger.TryDetermine(table, unsignedSignatureProperties, XAdESValidationDataFamily.Revocation, out XAdESValidationDataTriggerResult revTrigger, out _))
                     {
                         revocationValidationDataTriggered = revTrigger.IsTriggered;
                     }
@@ -506,7 +511,7 @@ public static class XAdESSignatureFactsDelegates
             }
             catch
             {
-                Fail("unreachable -- disposal only; the exception below is what actually propagates.");
+                _ = Fail("unreachable -- disposal only; the exception below is what actually propagates.");
 
                 throw;
             }
@@ -543,6 +548,7 @@ public static class XAdESSignatureFactsDelegates
 
     private static string RowName(XAdESUnsignedSignaturePropertyName name) => name switch
     {
+        XAdESUnsignedSignaturePropertyName.Unrecognized => name.ToString(),
         XAdESUnsignedSignaturePropertyName.CounterSignature => XAdESBaselineLevelTable.CounterSignature.Name,
         XAdESUnsignedSignaturePropertyName.SignatureTimeStamp => XAdESBaselineLevelTable.SignatureTimeStamp.Name,
         XAdESUnsignedSignaturePropertyName.CompleteRevocationRefs => XAdESBaselineLevelTable.CompleteRevocationRefs.Name,
@@ -558,7 +564,7 @@ public static class XAdESSignatureFactsDelegates
     private static string Utf8(ReadOnlySpan<byte> value) => Encoding.UTF8.GetString(value);
 
 
-    private static AdESObjectIdentifier ToObjectIdentifier(XmlNodeTable table, XAdESObjectIdentifier identifier)
+    private static AdESObjectIdentifier ToObjectIdentifier(XAdESObjectIdentifier identifier)
     {
         string id = Utf8(identifier.Identifier);
         string? description = identifier.HasDescription ? Utf8(identifier.Description) : null;
@@ -703,7 +709,7 @@ public static class XAdESSignatureFactsDelegates
             }
 
             XAdESSignaturePolicyId policyId = value.SignaturePolicyId!;
-            AdESObjectIdentifier id = ToObjectIdentifier(table, policyId.SigPolicyId);
+            AdESObjectIdentifier id = ToObjectIdentifier(policyId.SigPolicyId);
             string hashUri = Utf8(policyId.SigPolicyHash.DigestMethodAlgorithm);
             PkiDigestAlgorithm? resolved = XmlSignatureWellKnown.DigestAlgorithmFromUri(hashUri);
             AlgorithmIdentifier hashAlgorithm = resolved?.Identifier ?? new AlgorithmIdentifier(hashUri) { Name = hashUri };
@@ -769,7 +775,7 @@ public static class XAdESSignatureFactsDelegates
 
 
     private static void CopyTimeStampContainer(
-        XmlNodeTable table, XAdESTimeStamp timeStamp, SignatureTimestampClass timestampClass, string identifier,
+        XAdESTimeStamp timeStamp, SignatureTimestampClass timestampClass, string identifier,
         ref int ordinal, BaseMemoryPool pool, List<EmbeddedTimestamp> timestamps, List<XAdESTimestampContainerMetadata> containers)
     {
         int tokenCount = 0;
@@ -1103,7 +1109,7 @@ public static class XAdESSignatureFactsDelegates
 
             using(arcTst)
             {
-                CopyTimeStampContainer(table, arcTst!.TimeStamp, SignatureTimestampClass.ArchiveTimestamp, "ArchiveTimeStamp", ref arcTstOrdinal, pool, timestamps, timestampContainers);
+                CopyTimeStampContainer(arcTst!.TimeStamp, SignatureTimestampClass.ArchiveTimestamp, "ArchiveTimeStamp", ref arcTstOrdinal, pool, timestamps, timestampContainers);
             }
 
             failureReason = null;
@@ -1123,7 +1129,7 @@ public static class XAdESSignatureFactsDelegates
 
             using(sigRTst)
             {
-                CopyTimeStampContainer(table, sigRTst!.TimeStamp, SignatureTimestampClass.ValidationDataTimestamp, "SigAndRefsTimeStampV2", ref validationDataTimestampOrdinal, pool, timestamps, timestampContainers);
+                CopyTimeStampContainer(sigRTst!.TimeStamp, SignatureTimestampClass.ValidationDataTimestamp, "SigAndRefsTimeStampV2", ref validationDataTimestampOrdinal, pool, timestamps, timestampContainers);
             }
 
             failureReason = null;
@@ -1143,7 +1149,7 @@ public static class XAdESSignatureFactsDelegates
 
             using(rfsTst)
             {
-                CopyTimeStampContainer(table, rfsTst!.TimeStamp, SignatureTimestampClass.ValidationDataTimestamp, "RefsOnlyTimeStampV2", ref validationDataTimestampOrdinal, pool, timestamps, timestampContainers);
+                CopyTimeStampContainer(rfsTst!.TimeStamp, SignatureTimestampClass.ValidationDataTimestamp, "RefsOnlyTimeStampV2", ref validationDataTimestampOrdinal, pool, timestamps, timestampContainers);
             }
 
             failureReason = null;

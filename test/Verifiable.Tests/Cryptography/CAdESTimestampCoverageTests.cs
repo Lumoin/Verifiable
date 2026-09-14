@@ -1,12 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -165,7 +161,7 @@ internal sealed class CAdESTimestampCoverageTests
 
         using TimestampTokenInfo info = await TimestampTokenInfo.ReadFromTokenAsync(
             archiveTimestamp.Token, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-        bool imprintHolds = await info.VerifyMessageImprintAsync(covered!.AsReadOnlyMemory(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
+        bool imprintHolds = await info.VerifyMessageImprintAsync(covered.AsReadOnlyMemory(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(imprintHolds, "The imprint input of clause 5.5.3 names no field the addition touched, so the token still verifies against the restated octets.");
     }
@@ -193,7 +189,7 @@ internal sealed class CAdESTimestampCoverageTests
             world, withReferences, CAdESSignatureFacts.CertificateAndCrlTimestampAttributeOid, expected, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(covered, "The binding states the clause A.1.5.1 concatenation for a token carried in the certCRLTimestamp attribute.");
-        Assert.AreSequenceEqual(expected, covered!.AsReadOnlySpan().ToArray(),
+        Assert.AreSequenceEqual(expected, covered.AsReadOnlySpan().ToArray(),
             "Clause A.1.5.1: the concatenation is the two reference attributes, each as attrType and attrValues including type and length, in the order the clause lists them.");
     }
 
@@ -221,7 +217,7 @@ internal sealed class CAdESTimestampCoverageTests
             world, withReferences, CAdESSignatureFacts.EscTimestampAttributeOid, expected, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(covered, "The binding states the clause A.1.5.2 concatenation for a token carried in the escTimeStamp attribute.");
-        Assert.AreSequenceEqual(expected, covered!.AsReadOnlySpan().ToArray(),
+        Assert.AreSequenceEqual(expected, covered.AsReadOnlySpan().ToArray(),
             "Clause A.1.5.2: the signature value's octets come first, without the ASN.1 type or length encoding for that value, and the three attributes follow in the order the clause lists them.");
     }
 

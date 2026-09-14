@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Formats.Asn1;
 using Verifiable.BouncyCastle;

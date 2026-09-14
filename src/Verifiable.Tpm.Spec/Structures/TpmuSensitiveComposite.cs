@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm.Spec.Structures;
@@ -197,17 +195,17 @@ public sealed class TpmuSensitiveComposite: IDisposable, IEquatable<TpmuSensitiv
 
         switch(Type)
         {
-            case(TpmAlgIdConstants.TPM_ALG_RSA):
+            case TpmAlgIdConstants.TPM_ALG_RSA:
             {
                 Rsa.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_ECC):
+            case TpmAlgIdConstants.TPM_ALG_ECC:
             {
                 Ecc.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_KEYEDHASH):
+            case TpmAlgIdConstants.TPM_ALG_KEYEDHASH:
             {
                 Bits.WriteTo(ref writer);
                 break;

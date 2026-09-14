@@ -1,6 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
 using Verifiable.Core.Assessment;
 using Verifiable.Tests.Foundation;
@@ -147,9 +145,9 @@ namespace Verifiable.Tests.Assertion
         {
             const int TestClaimCode = 100_001;
             const string TestDescription = "TestDescription";
-            ClaimId.Create(TestClaimCode, TestDescription);
+            _ = ClaimId.Create(TestClaimCode, TestDescription);
 
-            Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
+            _ = Assert.ThrowsExactly<ArgumentException>(() => ClaimId.Create(TestClaimCode, TestDescription));
         }
 
 

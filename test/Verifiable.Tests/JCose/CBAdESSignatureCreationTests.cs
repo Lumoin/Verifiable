@@ -1,16 +1,11 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -1128,7 +1123,7 @@ internal sealed class CBAdESSignatureCreationTests
             WellKnownCoseAlgorithms.Es256,
             new CBAdESCwtClaims(TestClock.CanonicalEpoch),
             x5t: await CreateX5TAsync(TestContext.CancellationToken).ConfigureAwait(false));
-            //sigPId deliberately omitted.
+        //sigPId deliberately omitted.
 
         using var unsignedHeaders = new CBAdESUnsignedHeaders(
         [

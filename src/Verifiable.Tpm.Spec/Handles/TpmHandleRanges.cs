@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tpm.Spec.Handles;
 
 /// <summary>

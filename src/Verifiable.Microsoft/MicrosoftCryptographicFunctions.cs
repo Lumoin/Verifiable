@@ -1,11 +1,8 @@
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
@@ -87,9 +84,9 @@ namespace Verifiable.Microsoft
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(
                     activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
-                activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
-                activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
+                _ = activity.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
+                _ = activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
+                _ = activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
             }
 
             IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
@@ -284,8 +281,8 @@ namespace Verifiable.Microsoft
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
-                activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
             }
 
             EllipticCurveTypes curveType = curve.Oid.FriendlyName!.Equals("secP256k1", StringComparison.Ordinal)
@@ -339,8 +336,8 @@ namespace Verifiable.Microsoft
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
-                activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Curve, MapCurveDisplay(curve));
             }
 
             //ECParameters.D is a byte[]-typed BCL struct field, so importing the raw scalar always
@@ -380,7 +377,7 @@ namespace Verifiable.Microsoft
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
             using(RSA rsa = RSA.Create())
@@ -415,7 +412,7 @@ namespace Verifiable.Microsoft
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
             using(RSA rsa = RSA.Create())

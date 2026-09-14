@@ -10,7 +10,7 @@ namespace Verifiable.Xml;
 /// and returned on <see cref="Dispose"/>. Growth rents a larger buffer, copies and returns the old one.
 /// </summary>
 /// <typeparam name="T">The unmanaged element type; reinterpreted over the rented byte buffer.</typeparam>
-internal sealed class PooledStructList<T>: IDisposable where T: unmanaged
+internal sealed class PooledStructList<T>: IDisposable where T : unmanaged
 {
     /// <summary>The pool the backing buffer is rented from.</summary>
     private MemoryPool<byte> Pool { get; }

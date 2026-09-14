@@ -1,16 +1,10 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.IO;
 using System.Security.Cryptography.Xml;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography.Pki.Xml;
 
@@ -160,6 +154,7 @@ public static class XmlEvidenceRecordXmlBinding
             XmlEvidenceRecordCanonicalizationTarget.ArchiveDataObject => document.DocumentElement,
             XmlEvidenceRecordCanonicalizationTarget.TimeStampElement => FindTimeStampElement(document, context.ChainOrder, context.ArchiveTimeStampOrder),
             XmlEvidenceRecordCanonicalizationTarget.ArchiveTimeStampSequencePrefix => BuildSequencePrefix(document, context.ChainCount),
+            XmlEvidenceRecordCanonicalizationTarget.NotEvaluated => null,
             _ => null
         };
         if(wanted is null)
@@ -346,7 +341,7 @@ public static class XmlEvidenceRecordXmlBinding
                     continue;
                 }
 
-                liftedRoot.SetAttribute(attribute.LocalName, attribute.NamespaceURI, attribute.Value);
+                _ = liftedRoot.SetAttribute(attribute.LocalName, attribute.NamespaceURI, attribute.Value);
             }
         }
 

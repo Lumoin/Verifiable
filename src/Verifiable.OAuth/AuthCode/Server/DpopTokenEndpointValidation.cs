@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using Verifiable.Core;
-using Verifiable.OAuth.AuthCode.Server.States;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.Server.States;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.AuthCode.Server;
 
@@ -54,8 +51,8 @@ internal static class DpopTokenEndpointValidation
         ArgumentNullException.ThrowIfNull(issuerUri);
 
         string? dpopProofString = null;
-        context.IncomingRequest?.Headers.TryGetSingle(
-            WellKnownHttpHeaderNames.DPoP, out dpopProofString);
+        _ = (context.IncomingRequest?.Headers.TryGetSingle(
+            WellKnownHttpHeaderNames.DPoP, out dpopProofString));
 
         if(dpopProofString is null && !dpopRequired)
         {
@@ -159,6 +156,7 @@ internal static class DpopTokenEndpointValidation
 
         ServerHttpResponse? jtiFailure = jtiOutcome switch
         {
+            JtiReplayOutcome.FirstUse => null,
             JtiReplayOutcome.Replayed => ServerHttpResponse.BadRequest(
                 OAuthErrors.InvalidDpopProof,
                 "DPoP proof jti has been seen previously."),
@@ -168,6 +166,7 @@ internal static class DpopTokenEndpointValidation
             JtiReplayOutcome.StoreUnavailable => ServerHttpResponse.ServerError(
                 OAuthErrors.ServerError,
                 "DPoP proof jti replay defense is required by policy but no jti store is configured."),
+
             _ => null
         };
         if(jtiFailure is not null)

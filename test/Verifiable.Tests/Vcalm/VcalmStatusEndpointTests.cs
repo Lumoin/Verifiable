@@ -1,29 +1,24 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.Vcalm;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
-using Verifiable.Server;
+using Verifiable.Vcalm;
 using CoreStatusList = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.Vcalm;
@@ -153,7 +148,7 @@ internal sealed class VcalmStatusEndpointTests
         string verifyBody = "{\"verifiableCredential\":" + securedStatusListJson + "}";
         ServerHttpResponse verifyResponse = await app.DispatchAtEndpointAsync(
             ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
-            new RequestFields(), verifyBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, verifyResponse.StatusCode, verifyResponse.Body);
         using JsonDocument verifyDoc = JsonDocument.Parse(verifyResponse.Body);
@@ -176,7 +171,7 @@ internal sealed class VcalmStatusEndpointTests
 
         //200: the stored status-list credential.
         ServerHttpResponse getResponse = await app.DispatchVcalmStatusListByIdAsync(
-            ctx.Segment, StatusListId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, StatusListId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, getResponse.StatusCode, getResponse.Body);
         using JsonDocument getDoc = JsonDocument.Parse(getResponse.Body);
         Assert.IsTrue(getDoc.RootElement.TryGetProperty(VcalmParameterNames.VerifiableCredential, out _),
@@ -184,7 +179,7 @@ internal sealed class VcalmStatusEndpointTests
 
         //404: an id the store never held.
         ServerHttpResponse notFound = await app.DispatchVcalmStatusListByIdAsync(
-            ctx.Segment, "https://status.example/status-lists/never", new ExchangeContext(),
+            ctx.Segment, "https://status.example/status-lists/never", [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(404, notFound.StatusCode, "An unknown status-list id is 404.");
     }
@@ -262,7 +257,7 @@ internal sealed class VcalmStatusEndpointTests
             new Dictionary<int, byte> { [Index] = 1 },
             issuance,
             TimeProvider.GetUtcNow().UtcDateTime,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         string updatedJson = issuance.SigningDescriptors[0].SerializeCredential(updated);
@@ -277,7 +272,7 @@ internal sealed class VcalmStatusEndpointTests
         string verifyBody = "{\"verifiableCredential\":" + updatedJson + "}";
         ServerHttpResponse verifyResponse = await app.DispatchAtEndpointAsync(
             ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
-            new RequestFields(), verifyBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, verifyResponse.StatusCode, verifyResponse.Body);
         using JsonDocument verifyDoc = JsonDocument.Parse(verifyResponse.Body);
@@ -323,7 +318,7 @@ internal sealed class VcalmStatusEndpointTests
         byte[] bytes = Encoding.UTF8.GetBytes(BuildUpdateStatusBody("urn:uuid:x", 1, status: true));
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
             ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsStatus, "POST",
-            bytes, "text/plain", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            bytes, "text/plain", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "A non-application/json §C.3 body is rejected before parsing (§2.4 content-serialization MUST).");
@@ -514,7 +509,7 @@ internal sealed class VcalmStatusEndpointTests
         VerifierKeyMaterial hostMaterial = app.RegisterClient(ClientId, ClientBaseUri, AllRoleCapabilities);
         RegisteredMaterials.Add(StatusKeyMaterial.Wrapping(hostMaterial));
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         VcalmCredentialIssuance issuance = new()
         {
@@ -631,7 +626,7 @@ internal sealed class VcalmStatusEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateStatusList, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);
 
@@ -644,7 +639,7 @@ internal sealed class VcalmStatusEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCredentialsStatus, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         if(expectedStatus != 0)
         {
@@ -659,7 +654,7 @@ internal sealed class VcalmStatusEndpointTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCredentialsIssue, "POST",
-            new RequestFields(), body, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), body, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
 
@@ -674,7 +669,7 @@ internal sealed class VcalmStatusEndpointTests
 
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
-            new RequestFields(), verifyBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 

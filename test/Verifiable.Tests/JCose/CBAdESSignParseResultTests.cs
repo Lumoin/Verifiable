@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 
@@ -113,7 +111,7 @@ internal sealed class CBAdESSignParseResultTests
     {
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString([0xA0]);
         writer.WriteStartMap(0);
@@ -225,7 +223,7 @@ internal sealed class CBAdESSignParseResultTests
 
         if(tagged)
         {
-            writer.WriteTag(new CborTag((ulong)CoseTags.Sign));
+            writer.WriteTag(new CborTag(CoseTags.Sign));
         }
 
         writer.WriteStartArray(4);

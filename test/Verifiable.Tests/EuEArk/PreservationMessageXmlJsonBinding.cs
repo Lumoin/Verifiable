@@ -1,18 +1,10 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-using Verifiable.Cryptography;
-using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography.Pki.Xml;
 
@@ -244,6 +236,7 @@ public static class PreservationMessageXmlJsonBinding
         PreservationMessageKind.ValidateEvidenceResponse => PreservationWellKnown.ValidateEvidenceOperation + ResponseSuffix,
         PreservationMessageKind.SearchRequest => PreservationWellKnown.SearchOperation,
         PreservationMessageKind.SearchResponse => PreservationWellKnown.SearchOperation + ResponseSuffix,
+        PreservationMessageKind.NotEvaluated => throw new ArgumentOutOfRangeException(nameof(kind), kind, "A message of no kind has no element name."),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "A message of no kind has no element name.")
     };
 
@@ -775,6 +768,7 @@ public static class PreservationMessageXmlJsonBinding
                 };
             }
 
+            case PreservationMessageKind.NotEvaluated:
             default:
                 missing = "a message of no kind has no particles";
 

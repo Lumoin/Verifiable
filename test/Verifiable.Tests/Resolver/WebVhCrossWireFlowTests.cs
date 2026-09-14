@@ -1,16 +1,3 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Diagnostics;
-using System.Linq;
-using System.Net.Http;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -18,21 +5,23 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebVh;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
@@ -148,7 +137,7 @@ internal sealed class WebVhCrossWireFlowTests
         using ActivityListener cryptoListener = new()
         {
             ShouldListenTo = source => source.Name == CryptoActivitySource.Name,
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            Sample = static (ref _) => ActivitySamplingResult.AllData,
             ActivityStopped = activity => cryptoSpanNames.Add(activity.OperationName)
         };
         ActivitySource.AddActivityListener(cryptoListener);
@@ -181,7 +170,7 @@ internal sealed class WebVhCrossWireFlowTests
             $"{log.Did}/whois", whoisContext, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(whoisResult.IsSuccessful, $"The /whois DID URL MUST dereference across the wire. Error: {whoisResult.DereferencingMetadata.Error?.Type}.");
-        Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(whoisResult.ContentStream,
+        _ = Assert.IsInstanceOfType<DataIntegritySecuredPresentation>(whoisResult.ContentStream,
             "A dereferenced whois MUST return the verified secured presentation.");
 
         DataIntegritySecuredPresentation securedPresentation = (DataIntegritySecuredPresentation)whoisResult.ContentStream!;
@@ -290,7 +279,7 @@ internal sealed class WebVhCrossWireFlowTests
     //SecureDefault (which would deny a loopback target before any network contact).
     private static ExchangeContext NewLoopbackContext()
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault with
         {
             BlockPrivateAndLoopback = false
@@ -307,7 +296,7 @@ internal sealed class WebVhCrossWireFlowTests
     {
         OutboundTransportDelegate singleHop = GuardedHttpClientTransport.BuildSingleHopTransport(httpClient);
 
-        OutboundTransportDelegate transport = async (request, context, cancellationToken) =>
+        async ValueTask<OutboundResponse> transport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             //The DID's domain is a registered name (localhost), which the transform maps to a genuine https URL;
             //this transport plays DNS + network by rebasing that URL's authority (host and port; the scheme is
@@ -323,10 +312,10 @@ internal sealed class WebVhCrossWireFlowTests
             OutboundRequest rebasedRequest = request with { Target = rebased.Uri };
 
             return await singleHop(rebasedRequest, context, cancellationToken).ConfigureAwait(false);
-        };
+        }
 
         DidMethodResolverDelegate webVhResolver = WebVhDidResolver.Build(
-            transport,
+transport,
             WebVhLogEntryJson.Parser,
             WebVhLogEntryJson.WitnessFileParser,
             WebVhLogEntryJson.DocumentIdentityReader,
@@ -339,7 +328,7 @@ internal sealed class WebVhCrossWireFlowTests
 
         DidMethodDereferencerDelegate webVhDereferencer = WebVhDidUrlDereferencer.Build(
             webVhResolver,
-            transport,
+transport,
             DeserializePresentation,
             JcsCanonicalizer,
             ProofValueCodecs.DecodeBase58Btc,
@@ -351,7 +340,7 @@ internal sealed class WebVhCrossWireFlowTests
 
         return DidResolverComposition.Build(
             BaseMemoryPool.Shared,
-            transport,
+transport,
             static jsonUtf8 => null,
             static jsonUtf8 => null,
             dereferencerSelector: DidMethodSelectors.FromDereferencers(
@@ -417,7 +406,7 @@ internal sealed class WebVhCrossWireFlowTests
 
             //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
             //this host at all.
-            builder.WebHost.ConfigureKestrel(options =>
+            _ = builder.WebHost.ConfigureKestrel(options =>
                 LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
             WebApplication app = builder.Build();
@@ -467,10 +456,10 @@ internal sealed class WebVhCrossWireFlowTests
         public async Task ProcessRequestAsync(HttpContext context)
         {
             HttpResponse httpResponse = context.Response;
-            string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
+            string path = context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty;
 
-            Interlocked.Increment(ref totalRequests);
-            RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
+            _ = Interlocked.Increment(ref totalRequests);
+            _ = RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
             if(!HttpMethods.IsGet(context.Request.Method))
             {

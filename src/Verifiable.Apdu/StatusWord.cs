@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -34,7 +32,7 @@ namespace Verifiable.Apdu;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("{StatusWordNames.GetName(this),nq}")]
-public readonly struct StatusWord : IEquatable<StatusWord>
+public readonly struct StatusWord: IEquatable<StatusWord>
 {
     /// <summary>Gets the raw 16-bit status word value.</summary>
     public ushort Value { get; }
@@ -249,17 +247,17 @@ public readonly struct StatusWord : IEquatable<StatusWord>
     /// <summary>
     /// Gets a value indicating a warning status word (<c>62xx</c> or <c>63xx</c>).
     /// </summary>
-    public bool IsWarning => Sw1 == 0x62 || Sw1 == 0x63;
+    public bool IsWarning => Sw1 is 0x62 or 0x63;
 
     /// <summary>
     /// Gets a value indicating an error in the execution phase (<c>64xx</c> through <c>66xx</c>).
     /// </summary>
-    public bool IsExecutionError => Sw1 >= 0x64 && Sw1 <= 0x66;
+    public bool IsExecutionError => Sw1 is >= 0x64 and <= 0x66;
 
     /// <summary>
     /// Gets a value indicating a checking error (<c>67xx</c> through <c>6Fxx</c>).
     /// </summary>
-    public bool IsCheckingError => Sw1 >= 0x67 && Sw1 <= 0x6F;
+    public bool IsCheckingError => Sw1 is >= 0x67 and <= 0x6F;
 
 
     /// <inheritdoc/>
@@ -337,7 +335,7 @@ public static class StatusWordNames
         {
             (0x61, _) => $"More data available: {sw2} bytes (0x{value:X4})",
             (0x6C, _) => $"Wrong Le, correct is {sw2} (0x{value:X4})",
-            (0x63, var s) when (s & 0xF0) == 0xC0 => $"Retry counter warning: {s & 0x0F} remaining (0x{value:X4})",
+            (0x63, var s) when(s & 0xF0) == 0xC0 => $"Retry counter warning: {s & 0x0F} remaining (0x{value:X4})",
             (0x62, _) => $"Warning: non-volatile memory unchanged (0x{value:X4})",
             (0x63, _) => $"Warning: non-volatile memory changed (0x{value:X4})",
             (0x64, _) => $"Execution error: non-volatile memory unchanged (0x{value:X4})",

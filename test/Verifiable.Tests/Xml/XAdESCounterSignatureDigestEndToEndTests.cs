@@ -177,7 +177,7 @@ internal sealed class XAdESCounterSignatureDigestEndToEndTests
                     {
                         IReadOnlyList<XAdESRuleViolation> mismatched = await XAdESLevelRules.CheckCounterSignatureDigestAsync(
                             AlgorithmIdentifier.Sha256, expectedDigest, tamperedCandidateOctets!.AsReadOnlySpan().ToArray(), BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
-                        Assert.ContainsSingle(v => v is XAdESCounterSignatureDigestViolation, mismatched);
+                        _ = Assert.ContainsSingle(v => v is XAdESCounterSignatureDigestViolation, mismatched);
                     }
                 }
             }

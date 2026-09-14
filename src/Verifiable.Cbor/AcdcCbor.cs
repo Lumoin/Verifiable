@@ -1,9 +1,7 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Numerics;
 using Lumoin.Veritas.Cbor;
 using Lumoin.Veritas.Cbor.Converters;
+using System.Buffers;
+using System.Numerics;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Cbor;
@@ -41,7 +39,7 @@ public static class AcdcCbor
             throw new CborContentException("An ACDC body MUST be a CBOR map.");
         }
 
-        reader.ReadStartMap();
+        _ = reader.ReadStartMap();
         var root = new MessageFieldMap(StringComparer.Ordinal);
 
         var stack = new Stack<DecodeFrame>();
@@ -61,7 +59,7 @@ public static class AcdcCbor
                     reader.ReadEndArray();
                 }
 
-                stack.Pop();
+                _ = stack.Pop();
                 continue;
             }
 
@@ -84,7 +82,7 @@ public static class AcdcCbor
 
         static DecodeFrame BeginMap(CborReader reader, DecodeFrame parent, string? key)
         {
-            reader.ReadStartMap();
+            _ = reader.ReadStartMap();
             var child = new MessageFieldMap(StringComparer.Ordinal);
             parent.Add(key, child);
 
@@ -93,7 +91,7 @@ public static class AcdcCbor
 
         static DecodeFrame BeginArray(CborReader reader, DecodeFrame parent, string? key)
         {
-            reader.ReadStartArray();
+            _ = reader.ReadStartArray();
             var child = new List<object?>();
             parent.Add(key, child);
 
@@ -117,7 +115,7 @@ public static class AcdcCbor
             _ => throw new CborContentException($"Unsupported CBOR value in an ACDC field map: {reader.PeekState()}.")
         };
 
-        static object Narrow(long value) => value >= int.MinValue && value <= int.MaxValue ? (int)value : value;
+        static object Narrow(long value) => value is >= int.MinValue and <= int.MaxValue ? (int)value : value;
 
         static object? ReadNull(CborReader reader)
         {
@@ -161,7 +159,7 @@ public static class AcdcCbor
                     writer.WriteEndArray();
                 }
 
-                stack.Pop();
+                _ = stack.Pop();
                 continue;
             }
 
@@ -245,7 +243,7 @@ public static class AcdcCbor
     private static void WriteDecimalFraction(CborWriter writer, decimal value)
     {
         Span<int> bits = stackalloc int[4];
-        decimal.GetBits(value, bits);
+        _ = decimal.GetBits(value, bits);
 
         int scale = (bits[3] >> 16) & 0x7F;
         bool isNegative = bits[3] < 0;

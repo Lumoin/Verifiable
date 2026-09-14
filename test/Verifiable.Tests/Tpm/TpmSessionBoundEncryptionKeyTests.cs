@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -11,11 +8,6 @@ using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -696,7 +688,7 @@ internal sealed class TpmSessionBoundEncryptionKeyTests
         IMemoryOwner<byte> frame = pool.Rent(HeaderSize);
         var writer = new TpmWriter(frame.Memory.Span[..HeaderSize]);
         writer.WriteUInt16((ushort)TpmStConstants.TPM_ST_NO_SESSIONS);
-        writer.WriteUInt32((uint)HeaderSize);
+        writer.WriteUInt32(HeaderSize);
         writer.WriteUInt32((uint)responseCode);
 
         return TpmResult<TpmResponse>.Success(new TpmResponse(frame, HeaderSize));

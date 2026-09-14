@@ -1,7 +1,5 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 
@@ -46,15 +44,15 @@ public class DidResolutionResultConverter: JsonConverter<DidResolutionResult>
             if(root.TryGetProperty("didDocument"u8, out JsonElement documentElement)
                 && documentElement.ValueKind != JsonValueKind.Null)
             {
-                didDocument = documentElement.Deserialize((JsonTypeInfo<DidDocument>)options.GetTypeInfo(typeof(DidDocument)));
+                didDocument = documentElement.Deserialize(options.GetTypeInfo<DidDocument>());
             }
 
             DidResolutionMetadata resolutionMetadata = root.TryGetProperty("didResolutionMetadata"u8, out JsonElement resolutionElement)
-                ? resolutionElement.Deserialize((JsonTypeInfo<DidResolutionMetadata>)options.GetTypeInfo(typeof(DidResolutionMetadata))) ?? new DidResolutionMetadata()
+                ? resolutionElement.Deserialize(options.GetTypeInfo<DidResolutionMetadata>()) ?? new DidResolutionMetadata()
                 : new DidResolutionMetadata();
 
             DidDocumentMetadata documentMetadata = root.TryGetProperty("didDocumentMetadata"u8, out JsonElement documentMetadataElement)
-                ? documentMetadataElement.Deserialize((JsonTypeInfo<DidDocumentMetadata>)options.GetTypeInfo(typeof(DidDocumentMetadata))) ?? DidDocumentMetadata.Empty
+                ? documentMetadataElement.Deserialize(options.GetTypeInfo<DidDocumentMetadata>()) ?? DidDocumentMetadata.Empty
                 : DidDocumentMetadata.Empty;
 
             //The envelope carries no Kind discriminator (it is an internal dispatch concern); a
@@ -87,14 +85,14 @@ public class DidResolutionResultConverter: JsonConverter<DidResolutionResult>
         }
         else
         {
-            JsonSerializer.Serialize(writer, value.Document, options.GetTypeInfo(typeof(DidDocument)));
+            JsonSerializer.Serialize(writer, value.Document, options.GetTypeInfo<DidDocument>());
         }
 
         writer.WritePropertyName("didResolutionMetadata"u8);
-        JsonSerializer.Serialize(writer, value.ResolutionMetadata, options.GetTypeInfo(typeof(DidResolutionMetadata)));
+        JsonSerializer.Serialize(writer, value.ResolutionMetadata, options.GetTypeInfo<DidResolutionMetadata>());
 
         writer.WritePropertyName("didDocumentMetadata"u8);
-        JsonSerializer.Serialize(writer, value.DocumentMetadata, options.GetTypeInfo(typeof(DidDocumentMetadata)));
+        JsonSerializer.Serialize(writer, value.DocumentMetadata, options.GetTypeInfo<DidDocumentMetadata>());
 
         writer.WriteEndObject();
     }

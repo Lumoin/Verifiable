@@ -1,11 +1,9 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text.Json;
-using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Web;
-using Verifiable.Cryptography;
+using Verifiable.Core.Model.Credentials;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
@@ -87,7 +85,7 @@ internal sealed class JwsIssuanceFlowTests
     /// Deserializes a JWT header from UTF-8 JSON bytes.
     /// </summary>
     private static JwtHeaderDeserializer HeaderDeserializer => headerBytes =>
-        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions)!;
+        JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(headerBytes, JsonOptions);
 
 
     /// <summary>

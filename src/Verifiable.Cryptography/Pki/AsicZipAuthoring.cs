@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.IO.Compression;
 using System.Text;
 
@@ -191,14 +188,14 @@ public sealed class AsicZipAuthoringException: Exception
 
 
     /// <summary>Initializes a new <see cref="AsicZipAuthoringException"/> with an unclassified fault.</summary>
-    public AsicZipAuthoringException(): this(AsicZipAuthoringFailureKind.NoEntries, "The container could not be written.")
+    public AsicZipAuthoringException() : this(AsicZipAuthoringFailureKind.NoEntries, "The container could not be written.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="AsicZipAuthoringException"/> with an unclassified fault.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public AsicZipAuthoringException(string message): this(AsicZipAuthoringFailureKind.NoEntries, message)
+    public AsicZipAuthoringException(string message) : this(AsicZipAuthoringFailureKind.NoEntries, message)
     {
     }
 
@@ -215,7 +212,7 @@ public sealed class AsicZipAuthoringException: Exception
     /// <summary>Initializes a new <see cref="AsicZipAuthoringException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public AsicZipAuthoringException(AsicZipAuthoringFailureKind failureKind, string message): base(message)
+    public AsicZipAuthoringException(AsicZipAuthoringFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -540,7 +537,7 @@ public static class AsicZipAuthoring
         byte[] octets = Encoding.UTF8.GetBytes(mediaType);
         for(int i = 0; i < octets.Length; ++i)
         {
-            if(octets[i] < SmallestPrintableAscii || octets[i] > LargestPrintableAscii)
+            if(octets[i] is < SmallestPrintableAscii or > LargestPrintableAscii)
             {
                 throw new AsicZipAuthoringException(
                     AsicZipAuthoringFailureKind.MediaTypeRejected,

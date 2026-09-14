@@ -1,12 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Net.Http;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
@@ -103,8 +97,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
         //bytes plus the OP public key alone through the full reception pipeline.
         SecurityEventToken? receivedToken = null;
         HashSet<string> seenJtis = new(StringComparer.Ordinal);
-        IsSecurityEventTokenJtiSeenDelegate isSeen =
-            (jti, _, _) => ValueTask.FromResult(!seenJtis.Add(jti));
+        ValueTask<bool> isSeen(string jti, ExchangeContext _1, CancellationToken _2) => ValueTask.FromResult(!seenJtis.Add(jti));
 
         async Task<MinimalHttpResponse> ReceiverPushHandler(MinimalHttpRequest request, CancellationToken ct)
         {
@@ -117,7 +110,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
             SsfDeliveryDecision decision = await SecurityEventTokenReception.ReceiveAsync(
                 request.Body, opPublic, OpIssuer, ReceiverAudience,
                 SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-                TestSetup.Base64UrlDecoder, isSeen, new ExchangeContext(), Pool, cancellationToken: ct).ConfigureAwait(false);
+                TestSetup.Base64UrlDecoder, isSeen, [], Pool, cancellationToken: ct).ConfigureAwait(false);
 
             if(decision.Outcome is SsfDeliveryOutcome.Accepted or SsfDeliveryOutcome.AcceptedDuplicate)
             {
@@ -139,7 +132,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
 
         using HttpClient transmitterClient = LoopbackTls.CreatePinnedHttpClient(receiver.Certificate);
         op.Server.OAuth().ValidateClientCredentialsAsync = static (_, _, _, _, _) => ValueTask.FromResult(true);
-        op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
+        _ = op.Server.OAuth().UseDefaultGlobalTokenRevocationJsonParsing();
         op.Server.OAuth().RevokeSubjectTokensAsync = async (subId, _, _, ct) =>
         {
             //CAEP 1.0 §3.1 + Interop Profile: a session-revoked event carrying a non-empty
@@ -188,7 +181,7 @@ internal sealed class GlobalLogoutCaepEmitHttpTests
             "POST",
             new RequestFields(),
             SubIdJson,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //§3: revocation initiated → 204; the SET reached and verified at the Receiver.

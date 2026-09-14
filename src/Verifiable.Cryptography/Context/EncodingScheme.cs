@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -237,7 +235,7 @@ public readonly struct EncodingScheme: IEquatable<EncodingScheme>
     public static EncodingScheme Jose { get; } = new EncodingScheme(9);
 
 
-    private static List<EncodingScheme> RegisteredSchemes { get; } = new([Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose, Jose]);
+    private static List<EncodingScheme> RegisteredSchemes { get; } = [Der, Pem, EcCompressed, EcUncompressed, Pkcs1, Pkcs8, Raw, Cbor, Cose, Jose];
 
 
     /// <summary>

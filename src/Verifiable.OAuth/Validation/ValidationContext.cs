@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Verifiable.Core;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Validation;
 

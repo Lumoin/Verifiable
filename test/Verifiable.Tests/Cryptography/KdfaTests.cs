@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Cryptography;
@@ -84,14 +82,14 @@ internal sealed class KdfaTests
     [TestMethod]
     public async Task EmptyLabelIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await Kdfa.DeriveAsync(HashAlgorithmName.SHA256, Key, string.Empty, ContextU, ContextV, 256, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [TestMethod]
     public async Task NonPositiveOutputIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Kdfa.DeriveAsync(HashAlgorithmName.SHA256, Key, "ATH", ContextU, ContextV, 0, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -100,7 +98,7 @@ internal sealed class KdfaTests
     {
         //KDFa performs no sub-octet masking and every TPM use is octet-aligned, so a non-multiple-of-8 bit
         //length is rejected rather than silently masked.
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Kdfa.DeriveAsync(HashAlgorithmName.SHA256, Key, "ATH", ContextU, ContextV, 100, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 }

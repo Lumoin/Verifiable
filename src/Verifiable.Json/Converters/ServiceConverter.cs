@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Did;
@@ -109,8 +107,11 @@ public class ServiceConverter: JsonConverter<Service>
             }
 
             //Derived type: AOT-friendly deserialization. Since CanConvert only
-            //matches typeof(Service), STJ won't re-enter this converter.
+            //matches typeof(Service), STJ won't re-enter this converter. targetType comes from
+            //TypeSelector at runtime, so the generic GetTypeInfo<T>() overload cannot apply.
+#pragma warning disable CA2263 // targetType is a runtime Type, not a compile-time type argument.
             var typeInfo = options.GetTypeInfo(targetType);
+#pragma warning restore CA2263
             return (Service)JsonSerializer.Deserialize(element, typeInfo)!;
         }
     }
@@ -124,10 +125,13 @@ public class ServiceConverter: JsonConverter<Service>
         ArgumentNullException.ThrowIfNull(options);
 
         //Derived type: AOT-friendly serialization. Since CanConvert only matches
-        //typeof(Service), STJ won't re-enter this converter for derived types.
+        //typeof(Service), STJ won't re-enter this converter for derived types. value.GetType() is
+        //a runtime Type, so the generic GetTypeInfo<T>() overload cannot apply.
         if(value.GetType() != typeof(Service))
         {
+#pragma warning disable CA2263 // value.GetType() is a runtime Type, not a compile-time type argument.
             var typeInfo = options.GetTypeInfo(value.GetType());
+#pragma warning restore CA2263
             JsonSerializer.Serialize(writer, value, typeInfo);
             return;
         }
@@ -212,7 +216,7 @@ public class ServiceConverter: JsonConverter<Service>
             else
             {
                 //Unknown property — store in AdditionalData.
-                additionalData ??= new Dictionary<string, object>(StringComparer.Ordinal);
+                additionalData ??= new(StringComparer.Ordinal);
                 var value = JsonElementConversion.Convert(property.Value);
                 if(value is not null)
                 {

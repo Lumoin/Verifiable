@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Verifiable.Json;
@@ -91,7 +89,7 @@ internal static class JsonElementConversion
             Frame frame = stack.Peek();
             if(!frame.TryGetNext(out string? name, out JsonElement value))
             {
-                stack.Pop();
+                _ = stack.Pop();
                 continue;
             }
 

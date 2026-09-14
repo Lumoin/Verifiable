@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -176,7 +173,7 @@ public sealed class VerifySequenceCompleteInput: ITpmCommandInput, IDisposable
             sequenceHandle,
             keyHandle,
             signatureOwner,
-            signatureOwner.Memory.Slice(0, signature.Length),
+            signatureOwner.Memory[..signature.Length],
             signatureScheme,
             schemeHashAlg);
     }

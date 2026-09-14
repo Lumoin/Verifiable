@@ -1,18 +1,9 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
-using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure;
 
@@ -789,9 +780,9 @@ public static class TpmCommandExecutor
             //The most-significant octet of a handle is its TPM_HT handle type.
             byte handleType = handleBytes.Span[0];
             bool isNamedEntity =
-                handleType == (byte)TpmHt.TPM_HT_TRANSIENT
-                || handleType == (byte)TpmHt.TPM_HT_PERSISTENT
-                || handleType == (byte)TpmHt.TPM_HT_NV_INDEX;
+                handleType is ((byte)TpmHt.TPM_HT_TRANSIENT)
+                or ((byte)TpmHt.TPM_HT_PERSISTENT)
+                or ((byte)TpmHt.TPM_HT_NV_INDEX);
 
             ReadOnlyMemory<byte> name;
             if(input.HandleIsSequence(i))
@@ -946,7 +937,7 @@ public static class TpmCommandExecutor
         //output handles, and (for a TPM_ST_SESSIONS response) the 4-byte parameterSize field must all fit within
         //the already-validated responseSize before anything is read from them (Part 1, clause 15.10 response framing).
         bool responseHasSessions = responseTag == (ushort)TpmStConstants.TPM_ST_SESSIONS;
-        long handlesEnd = (long)TpmConstants.HeaderSize + ((long)outHandleCount * sizeof(uint));
+        long handlesEnd = TpmConstants.HeaderSize + ((long)outHandleCount * sizeof(uint));
         long minimumSize = responseHasSessions ? handlesEnd + sizeof(uint) : handlesEnd;
         if(responseSize < minimumSize)
         {

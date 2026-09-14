@@ -116,7 +116,7 @@ internal sealed class MdocCoseKeyConversionTests
     {
         //An unrecognised crv must not fall through to a generic tag — the
         //caller has to know we didn't understand the COSE_Key.
-        Assert.ThrowsExactly<NotSupportedException>(() =>
+        _ = Assert.ThrowsExactly<NotSupportedException>(() =>
             CryptoFormatConversions.DefaultCoseKeyToAlgorithmConverter(
                 kty: 2, curve: 999, purpose: Purpose.Verification));
     }
@@ -129,7 +129,7 @@ internal sealed class MdocCoseKeyConversionTests
         //the delegate cannot reliably pick between Rsa2048 and Rsa4096
         //without inspecting the modulus length. The contract: raise so the
         //caller resolves size from the n parameter downstream.
-        Assert.ThrowsExactly<NotSupportedException>(() =>
+        _ = Assert.ThrowsExactly<NotSupportedException>(() =>
             CryptoFormatConversions.DefaultCoseKeyToAlgorithmConverter(
                 kty: 3, curve: null, purpose: Purpose.Verification));
     }

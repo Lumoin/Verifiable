@@ -1,13 +1,8 @@
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Core;
 
@@ -287,26 +282,26 @@ internal sealed class WellKnownHttpHeaderNamesTests
 
         DidCommTransmitResult result = await message.TransmitAsync(
             DidCommEndpoint,
-            new ExchangeContext(),
+            [],
             DidCommHttpTransport.CreateSendDelegate(Capture),
             CancellationToken.None).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsAccepted, "The canned transport answers 202, so the transmit must be an accepted receipt.");
         Assert.IsNotNull(composed, "The binding must compose an outbound request for the POST.");
 
-        Assert.AreEqual("application/didcomm-encrypted+json", composed!.Headers.ContentType,
+        Assert.AreEqual("application/didcomm-encrypted+json", composed.Headers.ContentType,
             "The header set's ContentType convenience reads WellKnownHttpHeaderNames.ContentType; the SHOULD of RFC 9110 Section 8.3 must be satisfied under that name.");
 
-        Assert.IsTrue(composed!.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? byTableConstant),
+        Assert.IsTrue(composed.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? byTableConstant),
             "The composed Content-Type must be retrievable by the table's own constant.");
 
-        Assert.AreEqual(composed!.Headers.ContentType, byTableConstant,
+        Assert.AreEqual(composed.Headers.ContentType, byTableConstant,
             "The convenience and the table-constant lookup must read one and the same field value.");
 
-        Assert.IsTrue(composed!.Headers.TryGetValue("CONTENT-TYPE", out string? byOtherCasing),
+        Assert.IsTrue(composed.Headers.TryGetValue("CONTENT-TYPE", out string? byOtherCasing),
             "Field names are case-insensitive (RFC 9110 Section 5.1), so the composed Content-Type must be retrievable under any casing.");
 
-        Assert.AreEqual(composed!.Headers.ContentType, byOtherCasing,
+        Assert.AreEqual(composed.Headers.ContentType, byOtherCasing,
             "A differently cased lookup must read the same field value, not a second field.");
     }
 

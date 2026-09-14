@@ -1,13 +1,8 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Operators;
 using Org.BouncyCastle.X509;
+using System.Buffers;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -300,6 +295,7 @@ internal static class X509ChainTestRingRevocation
             {
                 OcspCertificateStatus.Good => CertificateRevocationStatus.Good,
                 OcspCertificateStatus.Revoked => CertificateRevocationStatus.Revoked,
+                OcspCertificateStatus.Unknown => CertificateRevocationStatus.Unknown,
                 _ => CertificateRevocationStatus.Unknown
             },
             ThisUpdate = facts.ThisUpdate,

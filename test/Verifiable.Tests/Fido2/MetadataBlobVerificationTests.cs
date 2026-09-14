@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
@@ -41,7 +40,7 @@ internal sealed class MetadataBlobVerificationTests
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         ((VerifiedMetadataBlobResult)result).Blob.Dispose();
     }
 
@@ -67,7 +66,7 @@ internal sealed class MetadataBlobVerificationTests
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(rootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         ((VerifiedMetadataBlobResult)result).Blob.Dispose();
     }
 
@@ -192,7 +191,7 @@ internal sealed class MetadataBlobVerificationTests
             resolvePreviousSerialNumber: store.ResolveAsync,
             persistVerifiedBlob: store.PersistAsync);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         ((VerifiedMetadataBlobResult)result).Blob.Dispose();
         Assert.HasCount(1, store.Persisted);
         Assert.AreEqual(DefaultTenantId, store.Persisted[0].TenantId);
@@ -216,7 +215,7 @@ internal sealed class MetadataBlobVerificationTests
         MetadataBlobResult result = await VerifyAsync(
             blobBytes, [rootPki], serialNumberPolicy: MetadataBlobSerialNumberPolicy.Required);
 
-        Assert.IsInstanceOfType<MetadataBlobStoreUnavailableResult>(result);
+        _ = Assert.IsInstanceOfType<MetadataBlobStoreUnavailableResult>(result);
         Assert.AreEqual(Fido2MetadataErrors.SerialNumberStoreUnavailable.Code, ((MetadataBlobStoreUnavailableResult)result).Error.Code);
     }
 
@@ -240,7 +239,7 @@ internal sealed class MetadataBlobVerificationTests
             resolvePreviousSerialNumber: ThrowingMetadataBlobSerialNumberResolver.ResolveAsync,
             persistVerifiedBlob: store.PersistAsync);
 
-        Assert.IsInstanceOfType<MetadataBlobStoreUnavailableResult>(result);
+        _ = Assert.IsInstanceOfType<MetadataBlobStoreUnavailableResult>(result);
         Assert.AreEqual(Fido2MetadataErrors.SerialNumberStoreUnavailable.Code, ((MetadataBlobStoreUnavailableResult)result).Error.Code);
         Assert.IsEmpty(store.Persisted);
     }
@@ -266,7 +265,7 @@ internal sealed class MetadataBlobVerificationTests
             resolvePreviousSerialNumber: store.ResolveAsync,
             persistVerifiedBlob: store.PersistAsync);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         ((VerifiedMetadataBlobResult)result).Blob.Dispose();
         Assert.IsEmpty(store.Persisted);
     }
@@ -319,7 +318,7 @@ internal sealed class MetadataBlobVerificationTests
             serialNumberPolicy: MetadataBlobSerialNumberPolicy.Required,
             resolvePreviousSerialNumber: store.ResolveAsync,
             persistVerifiedBlob: store.PersistAsync);
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(allowedResult);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(allowedResult);
         ((VerifiedMetadataBlobResult)allowedResult).Blob.Dispose();
 
         MetadataBlobResult rejectedResult = await VerifyAsync(
@@ -327,7 +326,7 @@ internal sealed class MetadataBlobVerificationTests
             serialNumberPolicy: MetadataBlobSerialNumberPolicy.Required,
             resolvePreviousSerialNumber: store.ResolveAsync,
             persistVerifiedBlob: store.PersistAsync);
-        Assert.IsInstanceOfType<RejectedMetadataBlobResult>(rejectedResult);
+        _ = Assert.IsInstanceOfType<RejectedMetadataBlobResult>(rejectedResult);
         Assert.AreEqual(Fido2MetadataErrors.SerialNumberNotIncreasing.Code, ((RejectedMetadataBlobResult)rejectedResult).Error.Code);
 
         Assert.HasCount(1, store.Persisted);
@@ -351,7 +350,7 @@ internal sealed class MetadataBlobVerificationTests
         MetadataBlobResult result = await VerifyAsync(
             blobBytes, [rootPki], revocationPolicy: MetadataBlobRevocationPolicy.Required);
 
-        Assert.IsInstanceOfType<MetadataBlobStoreUnavailableResult>(result);
+        _ = Assert.IsInstanceOfType<MetadataBlobStoreUnavailableResult>(result);
         Assert.AreEqual(Fido2MetadataErrors.RevocationCheckUnavailable.Code, ((MetadataBlobStoreUnavailableResult)result).Error.Code);
     }
 
@@ -375,7 +374,7 @@ internal sealed class MetadataBlobVerificationTests
             revocationPolicy: MetadataBlobRevocationPolicy.NotChecked,
             checkRevocation: AlwaysRevokedCertificateChecker.CheckAsync);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         var verified = (VerifiedMetadataBlobResult)result;
         Assert.AreEqual(MetadataBlobRevocationPolicy.NotChecked, verified.RevocationPolicy);
         verified.Blob.Dispose();
@@ -405,7 +404,7 @@ internal sealed class MetadataBlobVerificationTests
             revocationPolicy: MetadataBlobRevocationPolicy.Required,
             checkRevocation: checker.CheckAsync);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         var verified = (VerifiedMetadataBlobResult)result;
         Assert.AreEqual(MetadataBlobRevocationPolicy.Required, verified.RevocationPolicy);
         verified.Blob.Dispose();
@@ -513,7 +512,7 @@ internal sealed class MetadataBlobVerificationTests
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         using MetadataBlob blob = ((VerifiedMetadataBlobResult)result).Blob;
 
         Assert.IsFalse(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, unlistedAaguid, out MetadataBlobPayloadEntry? entry));
@@ -665,7 +664,7 @@ internal sealed class MetadataBlobVerificationTests
         using PkiCertificateMemory rootPki = MetadataBlobTestVectors.ToPkiCertificateMemory(fixture.RootCertificate.RawData);
         MetadataBlobResult result = await VerifyAsync(blobBytes, [rootPki]);
 
-        Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
+        _ = Assert.IsInstanceOfType<VerifiedMetadataBlobResult>(result);
         MetadataBlob blob = ((VerifiedMetadataBlobResult)result).Blob;
         Assert.IsTrue(MetadataBlobPayloadQueries.TryFindEntryByAaguid(blob.Payload, aaguid, out MetadataBlobPayloadEntry? entry));
 

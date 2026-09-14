@@ -24,8 +24,7 @@ public static class FederationValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<EntityStatementValidationContext>> EntityStatementRules() =>
-        new List<ClaimDelegate<EntityStatementValidationContext>>
-        {
+        [
             new(FederationValidationChecks.CheckAlgPresent,
                 [WellKnownFederationClaimIds.AlgPresent]),
 
@@ -88,7 +87,7 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckFederationEntityHasNoJwkSetParams,
                 [WellKnownFederationClaimIds.FederationEntityHasNoJwkSetParams]),
-        };
+        ];
 
 
     /// <summary>
@@ -99,8 +98,7 @@ public static class FederationValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<TrustMarkValidationContext>> TrustMarkRules() =>
-        new List<ClaimDelegate<TrustMarkValidationContext>>
-        {
+        [
             new(FederationValidationChecks.CheckTrustMarkSignatureVerifies,
                 [WellKnownFederationClaimIds.TrustMarkSignatureVerifies]),
 
@@ -118,7 +116,7 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckTrustMarkIatInRange,
                 [WellKnownFederationClaimIds.TrustMarkIatInRange]),
-        };
+        ];
 
 
     /// <summary>
@@ -128,8 +126,7 @@ public static class FederationValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<TrustChainValidationContext>> TrustChainRules() =>
-        new List<ClaimDelegate<TrustChainValidationContext>>
-        {
+        [
             new(FederationValidationChecks.CheckChainStartsAtSubject,
                 [WellKnownFederationClaimIds.ChainStartsAtSubject]),
 
@@ -153,5 +150,5 @@ public static class FederationValidationProfiles
 
             new(FederationValidationChecks.CheckChainSatisfiesNamingConstraints,
                 [WellKnownFederationClaimIds.ChainSatisfiesNamingConstraints]),
-        };
+        ];
 }

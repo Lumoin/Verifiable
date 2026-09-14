@@ -1249,7 +1249,7 @@ public static class DidCommEncryptedExtensions
             //PublicKeyMemory takes ownership of the converter's key-material buffer, so disposing it via
             //this using returns the buffer to the pool exactly once — the buffer must NOT also be disposed
             //directly.
-            using PublicKeyMemory senderPublicKey = new PublicKeyMemory(
+            using PublicKeyMemory senderPublicKey = new(
                 senderKeyMaterial.KeyMaterial,
                 TagFor(senderKeyMaterial.Algorithm, senderKeyMaterial.Purpose, senderKeyMaterial.Scheme));
 
@@ -1679,7 +1679,7 @@ public static class DidCommEncryptedExtensions
         string agreementPartyUInfo;
         using(IMemoryOwner<byte> skidOwner = memoryPool.Rent(skidByteCount))
         {
-            Encoding.UTF8.GetBytes(senderKeyId, skidOwner.Memory.Span);
+            _ = Encoding.UTF8.GetBytes(senderKeyId, skidOwner.Memory.Span);
             agreementPartyUInfo = base64UrlEncoder(skidOwner.Memory.Span[..skidByteCount]);
         }
 
@@ -1704,7 +1704,7 @@ public static class DidCommEncryptedExtensions
 
         int byteCount = Encoding.UTF8.GetByteCount(generalJson);
         using IMemoryOwner<byte> jsonOwner = memoryPool.Rent(byteCount);
-        Encoding.UTF8.GetBytes(generalJson, jsonOwner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(generalJson, jsonOwner.Memory.Span);
 
         return DidCommEncryptedMessage.Create(jsonOwner.Memory.Span[..byteCount], BufferTags.Json, memoryPool);
     }
@@ -1919,7 +1919,7 @@ public static class DidCommEncryptedExtensions
             return true;
         }
 
-        if(candidateId.StartsWith('#') && documentDid is not null)
+        if(candidateId.StartsWith('#', StringComparison.Ordinal) && documentDid is not null)
         {
             return string.Equals($"{documentDid}{candidateId}", kid, StringComparison.Ordinal);
         }
@@ -1938,7 +1938,7 @@ public static class DidCommEncryptedExtensions
             return string.Empty;
         }
 
-        return methodId.StartsWith('#') && documentDid is not null
+        return methodId.StartsWith('#', StringComparison.Ordinal) && documentDid is not null
             ? $"{documentDid}{methodId}"
             : methodId;
     }
@@ -2018,12 +2018,12 @@ public static class DidCommEncryptedExtensions
         //DIDs MUST match), else the message MUST be rejected (DIDComm v2.1 §Message Types). For
         //anoncrypt(sign) there is no authcrypt sender to bind against (authcryptSenderDid is null).
         if(authcryptSenderDid is not null
-            && !string.Equals(BaseDidOf(inner.SignerKid!), authcryptSenderDid, StringComparison.Ordinal))
+            && !string.Equals(BaseDidOf(inner.SignerKid), authcryptSenderDid, StringComparison.Ordinal))
         {
             return DidCommEncryptedUnpackResult.Failed(mode, DidCommDecryptionError.SignerSenderMismatch);
         }
 
-        bool isRecipientAddressedInTo = IsRecipientAddressedInTo(inner.Message!, recipientKeyId);
+        bool isRecipientAddressedInTo = IsRecipientAddressedInTo(inner.Message, recipientKeyId);
 
         //The verified inner signature authenticates the sender for both nestings; the non-repudiable
         //identity is the inner signer kid. REUSE the inner UnpackSignedAsync's own identity-bound proof
@@ -2032,7 +2032,7 @@ public static class DidCommEncryptedExtensions
         //from_prior on the inner JWM is surfaced as the rotation outcome so the recipient learns the prior
         //DID (DIDComm v2.1 §DID Rotation), as on the non-nested path.
         return DidCommEncryptedUnpackResult.Unpacked(
-            inner.Message!,
+            inner.Message,
             inner.Verified,
             mode,
             senderKeyId: inner.SignerKid,

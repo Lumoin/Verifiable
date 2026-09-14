@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -358,13 +356,13 @@ public sealed class EvidenceRecord: SensitiveMemory, IEquatable<EvidenceRecord>
         ArgumentNullException.ThrowIfNull(archiveTimeStampChains);
         ArgumentNullException.ThrowIfNull(pool);
 
-        if(digestAlgorithms.Count == 0 || digestAlgorithms.Count > MaximumDigestAlgorithms)
+        if(digestAlgorithms.Count is 0 or > MaximumDigestAlgorithms)
         {
             throw new ArgumentException(
                 $"An EvidenceRecord names between 1 and {MaximumDigestAlgorithms} digest algorithms (RFC 4998 clause 3.1).", nameof(digestAlgorithms));
         }
 
-        if(archiveTimeStampChains.Count == 0 || archiveTimeStampChains.Count > MaximumChains)
+        if(archiveTimeStampChains.Count is 0 or > MaximumChains)
         {
             throw new ArgumentException(
                 $"An EvidenceRecord carries between 1 and {MaximumChains} ArchiveTimeStampChain values (RFC 4998 clause 5.1).", nameof(archiveTimeStampChains));
@@ -711,7 +709,7 @@ public sealed class EvidenceRecord: SensitiveMemory, IEquatable<EvidenceRecord>
                 throw new AsnContentException("A PartialHashtree hash value is a primitive OCTET STRING; an Evidence Record at rest is DER (RFC 4998 clause 5.2).");
             }
 
-            if(hashValue.Length == 0 || hashValue.Length > EvidenceRecordHashTree.MaximumHashValueLength)
+            if(hashValue.Length is 0 or > EvidenceRecordHashTree.MaximumHashValueLength)
             {
                 throw new AsnContentException(
                     $"A PartialHashtree hash value holds between 1 and {EvidenceRecordHashTree.MaximumHashValueLength} octets, the range a digest this library can compute occupies.");

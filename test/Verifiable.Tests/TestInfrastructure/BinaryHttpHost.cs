@@ -1,19 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -109,7 +101,7 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
-        builder.WebHost.ConfigureKestrel(options =>
+        _ = builder.WebHost.ConfigureKestrel(options =>
             LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
@@ -162,7 +154,7 @@ internal sealed class BinaryHttpHost: IAsyncDisposable
             BinaryHttpResponse response = await Handler(
                 new BinaryHttpRequest
                 {
-                    Path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty,
+                    Path = context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty,
                     Method = context.Request.Method,
                     ContentType = context.Request.ContentType,
                     Body = body

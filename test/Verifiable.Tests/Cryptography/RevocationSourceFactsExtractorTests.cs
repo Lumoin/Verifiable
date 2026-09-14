@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Formats.Asn1;
 using System.Security.Cryptography.X509Certificates;
@@ -138,7 +137,7 @@ internal sealed class RevocationSourceFactsExtractorTests
             root.Certificate, root.Key, "Revocation Facts Trailing Leaf", NotBefore, NotAfter, [extension]);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
 
-        Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(certificate), "Trailing content after the AIA sequence, inside extnValue, must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(certificate), "Trailing content after the AIA sequence, inside extnValue, must throw.");
     }
 
 
@@ -155,7 +154,7 @@ internal sealed class RevocationSourceFactsExtractorTests
             root.Certificate, root.Key, "Revocation Facts MisTagged Leaf", NotBefore, NotAfter, [extension]);
         using PkiCertificateMemory certificate = OcspTestFixtures.ToCertificateCarrier(leaf.Certificate);
 
-        Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(certificate), "A mis-tagged AIA extension value must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(certificate), "A mis-tagged AIA extension value must throw.");
     }
 
 
@@ -168,7 +167,7 @@ internal sealed class RevocationSourceFactsExtractorTests
         root.Certificate.RawDataMemory.Span.CopyTo(owner.Memory.Span);
         using var mistagged = new PkiCertificateMemory(owner, PkiCertificateTags.X509Crl);
 
-        Assert.ThrowsExactly<ArgumentException>(() => RevocationSourceFactsExtractor.Extract(mistagged), "A CRL-tagged carrier must be rejected before any parsing.");
+        _ = Assert.ThrowsExactly<ArgumentException>(() => RevocationSourceFactsExtractor.Extract(mistagged), "A CRL-tagged carrier must be rejected before any parsing.");
     }
 
 
@@ -180,13 +179,13 @@ internal sealed class RevocationSourceFactsExtractorTests
         ReadOnlySpan<byte> garbageBytes = [0x01, 0x02, 0x03];
         garbageBytes.CopyTo(garbageOwner.Memory.Span);
         using var garbage = new PkiCertificateMemory(garbageOwner, PkiCertificateTags.X509Certificate);
-        Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(garbage), "Garbage bytes must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(garbage), "Garbage bytes must throw.");
 
         using MintedCertificate root = OcspTestFixtures.MintRootCa("Revocation Facts Trailing DER Root", NotBefore, NotAfter);
         IMemoryOwner<byte> trailingOwner = BaseMemoryPool.Shared.Rent(root.Certificate.RawDataMemory.Length + 1);
         root.Certificate.RawDataMemory.Span.CopyTo(trailingOwner.Memory.Span);
         trailingOwner.Memory.Span[root.Certificate.RawDataMemory.Length] = 0x00;
         using var trailing = new PkiCertificateMemory(trailingOwner, PkiCertificateTags.X509Certificate);
-        Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(trailing), "Trailing data after the Certificate sequence must throw.");
+        _ = Assert.ThrowsExactly<AsnContentException>(() => RevocationSourceFactsExtractor.Extract(trailing), "Trailing data after the Certificate sequence must throw.");
     }
 }

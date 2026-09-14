@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;

@@ -1,7 +1,7 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Formats.Asn1;
-using Lumoin.Veritas.Cbor;
 using System.Text;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
@@ -122,7 +122,7 @@ internal static class Fido2TestVectors
 
         byte[] buffer = new byte[16 + 2 + credentialId.Length + credentialPublicKeyCbor.Length];
 
-        aaguid.TryWriteBytes(buffer.AsSpan(0, 16), bigEndian: true, out _);
+        _ = aaguid.TryWriteBytes(buffer.AsSpan(0, 16), bigEndian: true, out _);
         BinaryPrimitives.WriteUInt16BigEndian(buffer.AsSpan(16, 2), checked((ushort)credentialId.Length));
         credentialId.AsSpan().CopyTo(buffer.AsSpan(18, credentialId.Length));
         credentialPublicKeyCbor.AsSpan().CopyTo(buffer.AsSpan(18 + credentialId.Length));
@@ -302,12 +302,12 @@ internal static class Fido2TestVectors
         var builder = new StringBuilder(depth * 2);
         for(int i = 0; i < depth; i++)
         {
-            builder.Append('[');
+            _ = builder.Append('[');
         }
 
         for(int i = 0; i < depth; i++)
         {
-            builder.Append(']');
+            _ = builder.Append(']');
         }
 
         return builder.ToString();

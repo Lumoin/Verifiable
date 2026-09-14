@@ -1,6 +1,4 @@
-using System;
 using System.Buffers.Binary;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Automata;
 

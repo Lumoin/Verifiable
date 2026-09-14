@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Foundation;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -68,7 +64,7 @@ internal sealed class ScriptedOutboundTransport
 
 
     /// <summary>Creates a transport that answers every URL with <see cref="ScriptedOutboundResponse.Default"/>.</summary>
-    public ScriptedOutboundTransport(): this(new Dictionary<string, ScriptedOutboundResponse>(StringComparer.Ordinal))
+    public ScriptedOutboundTransport() : this(new(StringComparer.Ordinal))
     {
     }
 

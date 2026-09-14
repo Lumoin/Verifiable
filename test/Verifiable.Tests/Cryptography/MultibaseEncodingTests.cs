@@ -1,6 +1,6 @@
+using Lumoin.Base.Libsodium;
 using SimpleBase;
 using System.Buffers;
-using Lumoin.Base.Libsodium;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Libsodium;
@@ -35,7 +35,7 @@ namespace Verifiable.Tests.Cryptography
             var bytes = decodedOwner.Memory.Span;
 
             //Extract key data without codec header for re-encoding.
-            var keyDataOnly = bytes.Slice(2).ToArray();
+            var keyDataOnly = bytes[2..].ToArray();
 
             var multibaseEncodedPublicKey = MultibaseSerializer.Encode(
                 keyDataOnly,
@@ -66,7 +66,7 @@ namespace Verifiable.Tests.Cryptography
                 Base58.Bitcoin.Decode,
                 BaseMemoryPool.Shared);
             var bytes = decodedOwner1.Memory.Span;
-            var keyDataOnly1 = bytes.Slice(2).ToArray();
+            var keyDataOnly1 = bytes[2..].ToArray();
 
             var multibaseEncoded1 = MultibaseSerializer.Encode(
                 keyDataOnly1,
@@ -82,7 +82,7 @@ namespace Verifiable.Tests.Cryptography
                 Base58.Bitcoin.Decode,
                 BaseMemoryPool.Shared);
             var bytes2 = bytes2Owner.Memory.Span;
-            var keyDataOnly2 = bytes2.Slice(2).ToArray();
+            var keyDataOnly2 = bytes2[2..].ToArray();
 
             var multibaseEncoded2 = MultibaseSerializer.Encode(
                 keyDataOnly2,

@@ -92,7 +92,7 @@ internal sealed class AndroidKeyAttestationStatementCborWriterTests
     {
         using PkiCertificateMemory certificate = Fido2AttestationTestVectors.ToPkiCertificateMemory([0x01]);
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AndroidKeyAttestationStatementCborWriter.Write(WellKnownCoseAlgorithms.Es256, ReadOnlySpan<byte>.Empty, [certificate]));
     }
 
@@ -107,7 +107,7 @@ internal sealed class AndroidKeyAttestationStatementCborWriterTests
     {
         byte[] signature = [0x01, 0x02, 0x03];
 
-        Assert.ThrowsExactly<ArgumentNullException>(
+        _ = Assert.ThrowsExactly<ArgumentNullException>(
             () => AndroidKeyAttestationStatementCborWriter.Write(WellKnownCoseAlgorithms.Es256, signature, null!));
     }
 }

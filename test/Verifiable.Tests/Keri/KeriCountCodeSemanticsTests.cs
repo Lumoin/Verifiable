@@ -1,7 +1,4 @@
 using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
-using Lumoin.Base;
 using Verifiable.Cesr;
 using Verifiable.Cesr.Streaming;
 using Verifiable.Keri;
@@ -89,7 +86,7 @@ internal sealed class KeriCountCodeSemanticsTests
     [TestMethod]
     public void RejectsGenusVersionCode()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => KeriCountCodeSemantics.Classify(KeriGenus.GenusCode));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => KeriCountCodeSemantics.Classify(KeriGenus.GenusCode));
     }
 
 
@@ -99,7 +96,7 @@ internal sealed class KeriCountCodeSemanticsTests
     [TestMethod]
     public void RejectsNonCountCode()
     {
-        Assert.ThrowsExactly<CesrFormatException>(() => KeriCountCodeSemantics.Classify("D"));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => KeriCountCodeSemantics.Classify("D"));
     }
 
 

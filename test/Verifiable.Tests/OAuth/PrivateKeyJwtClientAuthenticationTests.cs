@@ -1,5 +1,5 @@
-using System.Text;
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -7,8 +7,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.OAuth.WellKnown;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -130,7 +128,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     public void MissingAudienceIsRejected()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Aud);
+        _ = payload.Remove(WellKnownJwtClaimNames.Aud);
 
         PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
 
@@ -191,7 +189,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     public void MissingJtiIsRejected()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Jti);
+        _ = payload.Remove(WellKnownJwtClaimNames.Jti);
 
         PrivateKeyJwtClientAuthenticationResult result = Validate(payload);
 
@@ -471,13 +469,13 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
     private static string BuildJwksJson(IReadOnlyDictionary<string, string> jwk, string kid)
     {
         StringBuilder sb = new();
-        sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
+        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
         foreach(KeyValuePair<string, string> member in jwk)
         {
-            sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
         }
 
-        sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
+        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
 
         return sb.ToString();
     }
@@ -517,7 +515,7 @@ internal sealed class PrivateKeyJwtClientAuthenticationTests
 
     private static ExchangeContext BuildContext(EndpointServer server)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetServer(server);
 
         return context;

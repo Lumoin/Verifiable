@@ -1,6 +1,4 @@
 using Org.BouncyCastle.Security;
-using System;
-using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -85,8 +83,8 @@ public static class BouncyCastleEntropyFunctions
         {
             CryptoProviderInstrumentation.SetProviderAttributes(
                 activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
-            activity.SetTag(CryptoTelemetry.Purpose,
+            _ = activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
+            _ = activity.SetTag(CryptoTelemetry.Purpose,
                 stamped.TryGet<Purpose>(out Purpose p) ? p.ToString() : string.Empty);
         }
 
@@ -128,8 +126,8 @@ public static class BouncyCastleEntropyFunctions
         if(activity is not null)
         {
             CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-            activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
-            activity.SetTag(CryptoTelemetry.Purpose, stamped.TryGet<Purpose>(out Purpose p) ? p.ToString() : string.Empty);
+            _ = activity.SetTag(CryptoTelemetry.ByteLength, byteLength);
+            _ = activity.SetTag(CryptoTelemetry.Purpose, stamped.TryGet<Purpose>(out Purpose p) ? p.ToString() : string.Empty);
         }
 
         Salt result = Salt.Generate(byteLength, stamped, SecureRandom.NextBytes, EntropyHealthObservation.Unknown, pool, activity);

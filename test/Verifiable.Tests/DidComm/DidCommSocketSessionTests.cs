@@ -1,27 +1,18 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
-using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
 using Verifiable.DidComm.DiscoverFeatures;
 using Verifiable.DidComm.MessagePickup;
 using Verifiable.DidComm.ProblemReports;
 using Verifiable.DidComm.ReturnRoute;
 using Verifiable.DidComm.Transport;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -78,7 +69,7 @@ internal sealed class DidCommSocketSessionTests
     private static DidResolver NestedSignerResolver { get; } = new(DidMethodSelectors.FromResolvers(
         ("did:example", (_, _, _, _) => ValueTask.FromResult(DidResolutionResult.Failure(DidResolutionErrors.NotFound)))));
 
-    private static ExchangeContext UnpackContext { get; } = new();
+    private static ExchangeContext UnpackContext { get; } = [];
 
 
     //Anoncrypts message for recipientKid/recipientPublic through the SAME registry-resolving pack surface
@@ -238,8 +229,8 @@ internal sealed class DidCommSocketSessionTests
         byte[] second = "{\"ciphertext\":\"second\"}"u8.ToArray();
         DidCommMessage plaintext = new() { Id = "one-1", Type = "https://example.com/protocols/lets_do_lunch/1.0/proposal" };
 
-        await session.SendAsync(first, DidCommEncryptedMessage.MediaType, plaintext, default).ConfigureAwait(false);
-        await session.SendAsync(second, DidCommEncryptedMessage.MediaType, plaintext, default).ConfigureAwait(false);
+        _ = await session.SendAsync(first, DidCommEncryptedMessage.MediaType, plaintext, default).ConfigureAwait(false);
+        _ = await session.SendAsync(second, DidCommEncryptedMessage.MediaType, plaintext, default).ConfigureAwait(false);
 
         Assert.HasCount(2, fake.Sent, "Two SendAsync calls MUST produce two independent transmissions — never coalesced into one frame.");
         Assert.IsTrue(fake.Sent[0].Message.AsSpan().SequenceEqual(first), "Each transmitted frame carries EXACTLY one message's bytes, not a batch.");
@@ -328,7 +319,7 @@ internal sealed class DidCommSocketSessionTests
 
         DidCommMessage requestWithoutReturnRoute = new() { Id = "no-return-route-1", Type = WellKnownMessagePickupNames.StatusRequestType };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
             async () => await session.ExchangeAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), requestWithoutReturnRoute, default).ConfigureAwait(false)).ConfigureAwait(false);
         Assert.IsEmpty(fake.Sent, "A rejected exchange MUST NOT contact the transport — the one-way default is preserved for anything outside the return-route exception.");
     }
@@ -351,7 +342,7 @@ internal sealed class DidCommSocketSessionTests
             .WithReturnRoute(WellKnownReturnRouteNames.All);
         Assert.AreEqual(string.Empty, emptyThreadRequest.EffectiveThreadId, "Sanity: an empty Id with no ThreadId yields an empty (not null) EffectiveThreadId.");
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(
             async () => await session.ExchangeAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), emptyThreadRequest, default).ConfigureAwait(false)).ConfigureAwait(false);
         Assert.IsEmpty(fake.Sent);
     }
@@ -399,12 +390,12 @@ internal sealed class DidCommSocketSessionTests
         await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited.HandleAsync, Pool, TimeProvider);
 
         DidCommMessage plaintext = new() { Id = "content-type-1", Type = "https://example.com/protocols/lets_do_lunch/1.0/proposal" };
-        await session.SendAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), "application/my-custom-type", plaintext, default).ConfigureAwait(false);
+        _ = await session.SendAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), "application/my-custom-type", plaintext, default).ConfigureAwait(false);
         Assert.AreEqual("application/my-custom-type", fake.Sent[0].MediaType, "SendAsync forwards EXACTLY the caller's own value — never substitutes or normalizes it.");
 
         DidCommMessage request = MessagePickupExtensions.CreateStatusRequest("content-type-2");
         ValueTask<DidCommExchangeResult> pending = session.ExchangeAsync("{\"ciphertext\":\"y\"}"u8.ToArray(), request, default);
-        await session.AcceptInboundFrameAsync("{\"ciphertext\":\"reply\"}"u8.ToArray(), request.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync("{\"ciphertext\":\"reply\"}"u8.ToArray(), request.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult result = await pending.ConfigureAwait(false);
         Assert.IsNull(fake.Sent[1].MediaType, "ExchangeAsync has no independent media-type input of its own, so it passes null — a decidable 'no media type' rather than an empty string standing in for one — nothing is attached.");
     }
@@ -500,7 +491,7 @@ internal sealed class DidCommSocketSessionTests
 
         //The problem-report route: unreachable for this one code — composing throws before a report could
         //ever be built, because the literal cannot parse into a ProblemCode.
-        Assert.ThrowsExactly<FormatException>(() => ProblemCode.Parse(refusal.ProblemCode!));
+        _ = Assert.ThrowsExactly<FormatException>(() => ProblemCode.Parse(refusal.ProblemCode!));
 
         //The transport-level route: reachable, because it never needs to parse the string at all — the
         //application surfaces it directly, exactly as an HTTP transport would surface a 413.
@@ -542,7 +533,7 @@ internal sealed class DidCommSocketSessionTests
                     Id = "max_receive_bytes",
                     AdditionalFields = new Dictionary<string, object>
                     {
-                        ["max_receive_bytes"] = options.MaxReceiveBytes!.Value.ToString(CultureInfo.InvariantCulture)
+                        ["max_receive_bytes"] = options.MaxReceiveBytes.Value.ToString(CultureInfo.InvariantCulture)
                     }
                 }
             ]
@@ -600,7 +591,7 @@ internal sealed class DidCommSocketSessionTests
 
         DidCommMessage first = MessagePickupExtensions.CreateStatusRequest("latch-1");
         ValueTask<DidCommExchangeResult> pendingFirst = session.ExchangeAsync("{\"ciphertext\":\"1\"}"u8.ToArray(), first, default);
-        await session.AcceptInboundFrameAsync("{\"ciphertext\":\"r1\"}"u8.ToArray(), first.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync("{\"ciphertext\":\"r1\"}"u8.ToArray(), first.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult resultFirst = await pendingFirst.ConfigureAwait(false);
         Assert.IsTrue(session.IsReturnRouteEstablished, "Latches on the FIRST all-bearing message.");
 
@@ -608,7 +599,7 @@ internal sealed class DidCommSocketSessionTests
         //the header is set ONCE per established websocket, not per message as HTTP requires.
         DidCommMessage second = MessagePickupExtensions.CreateStatusRequest("latch-2");
         ValueTask<DidCommExchangeResult> pendingSecond = session.ExchangeAsync("{\"ciphertext\":\"2\"}"u8.ToArray(), second, default);
-        await session.AcceptInboundFrameAsync("{\"ciphertext\":\"r2\"}"u8.ToArray(), second.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync("{\"ciphertext\":\"r2\"}"u8.ToArray(), second.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult resultSecond = await pendingSecond.ConfigureAwait(false);
         Assert.IsTrue(session.IsReturnRouteEstablished, "Stays true — idempotent, not toggled or re-derived.");
     }
@@ -772,7 +763,7 @@ internal sealed class DidCommSocketSessionTests
 
         DidCommMessage deliveryRequest = MessagePickupExtensions.CreateDeliveryRequest("dr-mode2", 10);
         ValueTask<DidCommExchangeResult> deliveryPending = session.ExchangeAsync("{\"ciphertext\":\"dr\"}"u8.ToArray(), deliveryRequest, default);
-        await session.AcceptInboundFrameAsync("{\"ciphertext\":\"delivery\"}"u8.ToArray(), deliveryRequest.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync("{\"ciphertext\":\"delivery\"}"u8.ToArray(), deliveryRequest.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult deliveryResult = await deliveryPending.ConfigureAwait(false);
         Assert.IsTrue(deliveryResult.IsAccepted);
         Assert.IsFalse(session.IsLiveDeliveryEnabled, "Retrieval completes BEFORE Live Mode is ever activated in mode 2.");
@@ -785,12 +776,12 @@ internal sealed class DidCommSocketSessionTests
         DidCommMessage statusBeforeActivationReply = MessagePickupExtensions.CreateStatus(
             "status-reply-before-activation-mode2", new MessagePickupStatus { MessageCount = 0, LiveDelivery = false }, inResponseTo: statusBeforeActivationRequest);
         using DidCommPlaintextMessage packedStatusBeforeActivation = statusBeforeActivationReply.PackPlaintext(DidCommMessageJson.Serializer, Pool);
-        await session.AcceptInboundFrameAsync(packedStatusBeforeActivation.AsReadOnlySpan().ToArray(), statusBeforeActivationRequest.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync(packedStatusBeforeActivation.AsReadOnlySpan().ToArray(), statusBeforeActivationRequest.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult statusBeforeActivationResult = await statusBeforeActivationPending.ConfigureAwait(false);
         Assert.IsTrue(statusBeforeActivationResult.IsAccepted);
         DidCommMessage parsedStatusBeforeActivation = DidCommMessageJson.Parser(statusBeforeActivationResult.ReplyBody.AsReadOnlySpan());
         Assert.IsTrue(parsedStatusBeforeActivation.TryReadStatus(out MessagePickupStatus? statusBeforeActivation));
-        Assert.IsFalse(statusBeforeActivation!.LiveDelivery, "Retrieval completed while the mediator's OWN reported state was still live_delivery: false.");
+        Assert.IsFalse(statusBeforeActivation.LiveDelivery, "Retrieval completed while the mediator's OWN reported state was still live_delivery: false.");
 
         DidCommMessage activate = MessagePickupExtensions.CreateLiveDeliveryChange("ldc-mode2", liveDelivery: true);
         ValueTask<DidCommExchangeResult> activatePending = session.ExchangeAsync("{\"ciphertext\":\"ldc\"}"u8.ToArray(), activate, default);
@@ -798,14 +789,14 @@ internal sealed class DidCommSocketSessionTests
         DidCommMessage statusAfterActivationReply = MessagePickupExtensions.CreateStatus(
             "status-reply-after-activation-mode2", new MessagePickupStatus { MessageCount = 0, LiveDelivery = true }, inResponseTo: activate);
         using DidCommPlaintextMessage packedStatusAfterActivation = statusAfterActivationReply.PackPlaintext(DidCommMessageJson.Serializer, Pool);
-        await session.AcceptInboundFrameAsync(packedStatusAfterActivation.AsReadOnlySpan().ToArray(), activate.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync(packedStatusAfterActivation.AsReadOnlySpan().ToArray(), activate.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult activateResult = await activatePending.ConfigureAwait(false);
 
         Assert.IsTrue(activateResult.IsAccepted);
         Assert.IsTrue(session.IsLiveDeliveryEnabled, "Live Mode activates only AFTER retrieval completed.");
         DidCommMessage parsedStatusAfterActivation = DidCommMessageJson.Parser(activateResult.ReplyBody.AsReadOnlySpan());
         Assert.IsTrue(parsedStatusAfterActivation.TryReadStatus(out MessagePickupStatus? statusAfterActivation));
-        Assert.IsTrue(statusAfterActivation!.LiveDelivery, "The mediator's OWN reported state flips to live_delivery: true only AFTER the activation exchange.");
+        Assert.IsTrue(statusAfterActivation.LiveDelivery, "The mediator's OWN reported state flips to live_delivery: true only AFTER the activation exchange.");
     }
 
 
@@ -823,19 +814,19 @@ internal sealed class DidCommSocketSessionTests
     {
         var fake = new FakeSessionTransport();
         var liveFrames = new List<byte[]>();
-        DidCommSessionInboundDelegate unsolicited = (frame, cancellationToken) =>
+        ValueTask unsolicited(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken)
         {
             liveFrames.Add(frame.ToArray());
 
             return ValueTask.CompletedTask;
-        };
+        }
         await using var session = new DidCommSocketSession(fake.SendAsync, new DidCommSocketSessionOptions(), unsolicited, Pool, TimeProvider);
 
         //Activate Live Mode immediately upon connecting — BEFORE any retrieval (mode 3's defining trait).
         DidCommMessage activate = MessagePickupExtensions.CreateLiveDeliveryChange("ldc-mode3", liveDelivery: true);
         ValueTask<DidCommExchangeResult> activatePending = session.ExchangeAsync("{\"ciphertext\":\"ldc\"}"u8.ToArray(), activate, default);
         session.SetLiveDelivery(true);
-        await session.AcceptInboundFrameAsync("{\"ciphertext\":\"status\"}"u8.ToArray(), activate.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync("{\"ciphertext\":\"status\"}"u8.ToArray(), activate.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult activateResult = await activatePending.ConfigureAwait(false);
         Assert.IsTrue(session.IsLiveDeliveryEnabled, "Live Mode is active BEFORE anything is retrieved.");
 
@@ -848,7 +839,7 @@ internal sealed class DidCommSocketSessionTests
         //waiting — an ordinary correlated exchange over the same already-live session.
         DidCommMessage followUpQuery = MessagePickupExtensions.CreateDeliveryRequest("dr-mode3-followup", 10);
         ValueTask<DidCommExchangeResult> followUpPending = session.ExchangeAsync("{\"ciphertext\":\"dr\"}"u8.ToArray(), followUpQuery, default);
-        await session.AcceptInboundFrameAsync("{\"ciphertext\":\"delivery\"}"u8.ToArray(), followUpQuery.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync("{\"ciphertext\":\"delivery\"}"u8.ToArray(), followUpQuery.EffectiveThreadId, default).ConfigureAwait(false);
         using DidCommExchangeResult followUpResult = await followUpPending.ConfigureAwait(false);
         Assert.IsTrue(followUpResult.IsAccepted, "Mode 3's queue-query-on-live-arrival is expressible as an ordinary correlated exchange over the already-live session.");
     }
@@ -962,9 +953,9 @@ internal sealed class DidCommSocketSessionTests
         byte[] replyA = "{\"ciphertext\":\"a-reply\"}"u8.ToArray();
 
         //Mixed order: B's reply first, then an unrelated unsolicited frame, then A's reply.
-        await session.AcceptInboundFrameAsync(replyB, requestB.EffectiveThreadId, default).ConfigureAwait(false);
-        await session.AcceptInboundFrameAsync(unsolicitedFrame, null, default).ConfigureAwait(false);
-        await session.AcceptInboundFrameAsync(replyA, requestA.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync(replyB, requestB.EffectiveThreadId, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync(unsolicitedFrame, null, default).ConfigureAwait(false);
+        _ = await session.AcceptInboundFrameAsync(replyA, requestA.EffectiveThreadId, default).ConfigureAwait(false);
 
         using DidCommExchangeResult resultA = await pendingA.ConfigureAwait(false);
         using DidCommExchangeResult resultB = await pendingB.ConfigureAwait(false);
@@ -1078,7 +1069,7 @@ internal sealed class DidCommSocketSessionTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsAsync<OperationCanceledException>(
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(
             async () => await session.ExchangeAsync("{\"ciphertext\":\"x\"}"u8.ToArray(), request, cts.Token).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -1173,7 +1164,7 @@ internal sealed class DidCommSocketSessionTests
             completions[index] = Task.Run(async () =>
             {
                 byte[] reply = Encoding.UTF8.GetBytes($"{{\"ciphertext\":\"reply-{index}\"}}");
-                await session.AcceptInboundFrameAsync(reply, requests[index].EffectiveThreadId, default).ConfigureAwait(false);
+                _ = await session.AcceptInboundFrameAsync(reply, requests[index].EffectiveThreadId, default).ConfigureAwait(false);
             }, TestContext.CancellationToken);
         }
 
@@ -1280,8 +1271,8 @@ internal sealed class DidCommSocketSessionTests
                 Assert.IsTrue(exchange.IsCompleted, $"Iteration {iteration}: an exchange racing DisposeAsync MUST terminate, never hang.");
                 if(exchange.IsFaulted)
                 {
-                    Assert.IsInstanceOfType<ObjectDisposedException>(
-                        exchange.Exception!.GetBaseException(),
+                    _ = Assert.IsInstanceOfType<ObjectDisposedException>(
+                        exchange.Exception.GetBaseException(),
                         $"Iteration {iteration}: a faulted exchange is valid ONLY as ObjectDisposedException from the entry check.");
                 }
                 else
@@ -1369,12 +1360,12 @@ internal sealed class DidCommSocketSessionTests
 
         if(isCancellationShape)
         {
-            await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+            _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
                 async () => await session.ExchangeAsync(Encoding.UTF8.GetBytes("{\"ciphertext\":\"request\"}"), request, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
         else
         {
-            await Assert.ThrowsExactlyAsync<WebSocketException>(
+            _ = await Assert.ThrowsExactlyAsync<WebSocketException>(
                 async () => await session.ExchangeAsync(Encoding.UTF8.GetBytes("{\"ciphertext\":\"request\"}"), request, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
@@ -1506,7 +1497,7 @@ internal sealed class DidCommSocketSessionTests
             //Arms the session's internal timeout deterministically by advancing the injected clock past
             //ExchangeTimeout, on its own task, so it races the hammering spinner below through real thread
             //scheduling instead of through proximity to a wall-clock deadline.
-            Task armer = Task.Run(() => fakeClock.Advance(options.ExchangeTimeout!.Value), TestContext.CancellationToken);
+            Task armer = Task.Run(() => fakeClock.Advance(options.ExchangeTimeout.Value), TestContext.CancellationToken);
 
             Task spinner = Task.Run(async () =>
             {
@@ -1663,7 +1654,7 @@ internal sealed class DidCommSocketSessionTests
     [DataRow(-1L)]
     public void MaxReceiveBytesRejectsNonPositiveValues(long nonPositiveBytes)
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new DidCommSocketSessionOptions { MaxReceiveBytes = nonPositiveBytes });
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new DidCommSocketSessionOptions { MaxReceiveBytes = nonPositiveBytes });
     }
 
 
@@ -1682,7 +1673,7 @@ internal sealed class DidCommSocketSessionTests
     {
         TimeSpan negative = TimeSpan.FromMilliseconds(negativeMilliseconds);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new DidCommSocketSessionOptions { ExchangeTimeout = negative });
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new DidCommSocketSessionOptions { ExchangeTimeout = negative });
     }
 
 
@@ -1698,7 +1689,7 @@ internal sealed class DidCommSocketSessionTests
     {
         TimeSpan oversized = TimeSpan.FromDays(60);
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new DidCommSocketSessionOptions { ExchangeTimeout = oversized });
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => _ = new DidCommSocketSessionOptions { ExchangeTimeout = oversized });
     }
 
 
@@ -1859,7 +1850,7 @@ internal sealed class DidCommSocketSessionTests
                 //The mediator never itself holds an outstanding ExchangeAsync in this protocol — every
                 //inbound frame from the wallet dispatches to the mediator's OWN unsolicited handler, which
                 //performs the actual protocol dispatch (decrypt, decide, reply).
-                await session.AcceptInboundFrameAsync(frame, null, cancellationToken).ConfigureAwait(false);
+                _ = await session.AcceptInboundFrameAsync(frame, null, cancellationToken).ConfigureAwait(false);
             }
         }
         catch(OperationCanceledException)
@@ -1888,7 +1879,7 @@ internal sealed class DidCommSocketSessionTests
                 (WebSocketMessageType frameType, byte[] frame) = await connection.ReceiveFrameAsync(cancellationToken).ConfigureAwait(false);
                 observedFrameTypes.Add(frameType);
                 string? correlationThreadId = await TryRecoverThreadIdAsync(frame, walletKid, walletPrivate, cancellationToken).ConfigureAwait(false);
-                await session.AcceptInboundFrameAsync(frame, correlationThreadId, cancellationToken).ConfigureAwait(false);
+                _ = await session.AcceptInboundFrameAsync(frame, correlationThreadId, cancellationToken).ConfigureAwait(false);
             }
         }
         catch(OperationCanceledException)
@@ -1995,7 +1986,7 @@ internal sealed class DidCommSocketSessionTests
             //depends on the immediately preceding decode) to defer without fragmenting it far more than the
             //value justifies. TestContext.CancellationToken still bounds every exchange this delegate's
             //replies unblock, so a fault here fails loud via that cancellation rather than hanging forever.
-            DidCommSessionInboundDelegate mediatorUnsolicited = async (frame, cancellationToken) =>
+            async ValueTask mediatorUnsolicited(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken)
             {
                 byte[] copy = frame.ToArray();
 
@@ -2040,9 +2031,9 @@ internal sealed class DidCommSocketSessionTests
                     using DidCommEncryptedMessage packedReply = await PackAnoncryptAsync(statusReply, WalletKid, walletPublic, cancellationToken).ConfigureAwait(false);
                     byte[] replyBytes = packedReply.AsReadOnlySpan().ToArray();
                     mediatorSentFrames.Add(replyBytes);
-                    await mediatorSession.SendAsync(replyBytes, DidCommEncryptedMessage.MediaType, statusReply, cancellationToken).ConfigureAwait(false);
+                    _ = await mediatorSession.SendAsync(replyBytes, DidCommEncryptedMessage.MediaType, statusReply, cancellationToken).ConfigureAwait(false);
                 }
-            };
+            }
 
             mediatorSession = new DidCommSocketSession(mediatorHost.CreateSendDelegate(), new DidCommSocketSessionOptions(), mediatorUnsolicited, Pool, TimeProvider);
 
@@ -2050,13 +2041,13 @@ internal sealed class DidCommSocketSessionTests
             //thread: rather than asserting here (which would fault this handler's pump task instead of
             //surfacing at the test's own await), a failure completes liveDeliveredSignal with an exception,
             //so it throws at the "await liveDeliveredSignal.Task" below as a clean, direct failure.
-            DidCommSessionInboundDelegate walletUnsolicited = async (frame, cancellationToken) =>
+            async ValueTask walletUnsolicited(ReadOnlyMemory<byte> frame, CancellationToken cancellationToken)
             {
                 byte[] copy = frame.ToArray();
                 DidCommMessageClass classification = DidCommInbound.Classify(null, copy, TestSetup.Base64UrlDecoder, Pool);
                 if(classification != DidCommMessageClass.Anoncrypt)
                 {
-                    liveDeliveredSignal.TrySetException(new InvalidOperationException(
+                    _ = liveDeliveredSignal.TrySetException(new InvalidOperationException(
                         $"The live-delivered push MUST classify via the content-type-absent envelope-shape path, but classified {classification}."));
 
                     return;
@@ -2068,13 +2059,13 @@ internal sealed class DidCommSocketSessionTests
                     TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool, cancellationToken: cancellationToken).ConfigureAwait(false);
                 if(!unpacked.IsUnpacked)
                 {
-                    liveDeliveredSignal.TrySetException(new InvalidOperationException("The wallet MUST decrypt the live-delivered push with project crypto."));
+                    _ = liveDeliveredSignal.TrySetException(new InvalidOperationException("The wallet MUST decrypt the live-delivered push with project crypto."));
 
                     return;
                 }
 
-                liveDeliveredSignal.TrySetResult((unpacked.Message!, copy));
-            };
+                _ = liveDeliveredSignal.TrySetResult((unpacked.Message!, copy));
+            }
 
             var walletSession = new DidCommSocketSession(walletConnection.CreateSendDelegate(), new DidCommSocketSessionOptions(), walletUnsolicited, Pool, TimeProvider);
 

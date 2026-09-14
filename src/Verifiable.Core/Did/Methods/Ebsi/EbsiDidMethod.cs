@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Did.Methods.Ebsi
 {
     public record EbsiDidMethod: GenericDidMethod
@@ -11,7 +9,7 @@ namespace Verifiable.Core.Did.Methods.Ebsi
         public static new string Prefix => "did:ebsi:";
 
 
-        public EbsiDidMethod(string didString): base(didString)
+        public EbsiDidMethod(string didString) : base(didString)
         {
             ArgumentNullException.ThrowIfNull(didString);
             if(!didString.StartsWith(Prefix, StringComparison.Ordinal))

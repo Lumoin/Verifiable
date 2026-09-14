@@ -1,7 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Verifiable.Foundation.Automata;
 
 /// <summary>
@@ -56,7 +52,7 @@ namespace Verifiable.Foundation.Automata;
 /// with deterministic replay by substituting the executor with recorded outputs.
 /// </para>
 /// <para>
-/// The <typeparamref name="TContext"/> parameter threads caller-supplied state
+/// The <c>TContext</c> parameter threads caller-supplied state
 /// through to the action executor without closure capture. This follows the
 /// library convention that static lambdas receive all dependencies as parameters.
 /// Pass a value tuple when multiple values are needed:

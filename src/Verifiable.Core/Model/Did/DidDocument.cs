@@ -1,11 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using Verifiable.Core.Model.Common;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Core.Model.Did
 {
@@ -286,15 +283,15 @@ namespace Verifiable.Core.Model.Did
             //for an extracted predicate, since each conjunct already names its own field.
             return Equals(Id, other.Id)
                 && Equals(Context, other.Context)
-                && (AlsoKnownAs?.SequenceEqual(other.AlsoKnownAs!) ?? other.AlsoKnownAs is null)
-                && (Controller?.SequenceEqual(other.Controller!) ?? other.Controller is null)
-                && (VerificationMethod?.SequenceEqual(other.VerificationMethod!) ?? other.VerificationMethod is null)
-                && (Authentication?.SequenceEqual(other.Authentication!) ?? other.Authentication is null)
-                && (AssertionMethod?.SequenceEqual(other.AssertionMethod!) ?? other.AssertionMethod is null)
-                && (KeyAgreement?.SequenceEqual(other.KeyAgreement!) ?? other.KeyAgreement is null)
-                && (CapabilityInvocation?.SequenceEqual(other.CapabilityInvocation!) ?? other.CapabilityInvocation is null)
-                && (CapabilityDelegation?.SequenceEqual(other.CapabilityDelegation!) ?? other.CapabilityDelegation is null)
-                && (Service?.SequenceEqual(other.Service!) ?? other.Service is null);
+                && (AlsoKnownAs?.SequenceEqual(other.AlsoKnownAs) ?? (other.AlsoKnownAs is null))
+                && (Controller?.SequenceEqual(other.Controller) ?? (other.Controller is null))
+                && (VerificationMethod?.SequenceEqual(other.VerificationMethod) ?? (other.VerificationMethod is null))
+                && (Authentication?.SequenceEqual(other.Authentication) ?? (other.Authentication is null))
+                && (AssertionMethod?.SequenceEqual(other.AssertionMethod) ?? (other.AssertionMethod is null))
+                && (KeyAgreement?.SequenceEqual(other.KeyAgreement) ?? (other.KeyAgreement is null))
+                && (CapabilityInvocation?.SequenceEqual(other.CapabilityInvocation) ?? (other.CapabilityInvocation is null))
+                && (CapabilityDelegation?.SequenceEqual(other.CapabilityDelegation) ?? (other.CapabilityDelegation is null))
+                && (Service?.SequenceEqual(other.Service) ?? (other.Service is null));
         }
 
 

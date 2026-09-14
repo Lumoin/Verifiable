@@ -65,7 +65,7 @@ internal sealed class SamlNameIdSubjectIdentifierTests
     public void RejectsMissingNameId()
     {
         Dictionary<string, object> claim = WellFormedRequiredOnly();
-        claim.Remove(SamlNameIdMemberNames.NameId);
+        _ = claim.Remove(SamlNameIdMemberNames.NameId);
 
         Assert.IsFalse(SamlNameIdSubjectIdentifier.TryParse(claim, out SamlNameIdSubjectIdentifier? identifier));
         Assert.IsNull(identifier);
@@ -77,7 +77,7 @@ internal sealed class SamlNameIdSubjectIdentifierTests
     public void RejectsMissingIssuer()
     {
         Dictionary<string, object> claim = WellFormedRequiredOnly();
-        claim.Remove(SamlNameIdMemberNames.Issuer);
+        _ = claim.Remove(SamlNameIdMemberNames.Issuer);
 
         Assert.IsFalse(SamlNameIdSubjectIdentifier.TryParse(claim, out _));
     }

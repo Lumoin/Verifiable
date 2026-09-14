@@ -1,10 +1,8 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core.Did.Methods.WebVh;
 using Verifiable.Core.Model.Common;
@@ -12,7 +10,6 @@ using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
 
 namespace Verifiable.Tests.Resolver;
@@ -46,7 +43,7 @@ internal static class WebVhTestLog
         Span<byte> multihash = stackalloc byte[2 + 32];
         multihash[0] = 0x12;
         multihash[1] = 0x20;
-        Hash(input, multihash[2..]);
+        _ = Hash(input, multihash[2..]);
 
         return Base58Encoder(multihash);
     }
@@ -378,7 +375,7 @@ internal static class WebVhTestLog
     private static async Task<JsonObject> SignAsync(JsonObject entry, WebVhEntryPlan plan)
     {
         JsonObject document = JsonNode.Parse(entry.ToJsonString())!.AsObject();
-        document.Remove("proof");
+        _ = document.Remove("proof");
 
         JsonObject proofOptions = new()
         {
@@ -415,7 +412,7 @@ internal static class WebVhTestLog
     private static void HashCanonical(string json, Span<byte> destination)
     {
         var canonical = new TaggedMemory<byte>(Jcs.CanonicalizeToUtf8Bytes(json), BufferTags.Json);
-        Hash(canonical.Span, destination);
+        _ = Hash(canonical.Span, destination);
     }
 
 

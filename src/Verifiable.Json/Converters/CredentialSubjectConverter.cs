@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Model.Credentials;
@@ -136,7 +134,7 @@ public class CredentialSubjectConverter: JsonConverter<List<CredentialSubject>>
             }
 
             string? propertyName = reader.GetString();
-            reader.Read();
+            _ = reader.Read();
 
             if(propertyName == "id")
             {

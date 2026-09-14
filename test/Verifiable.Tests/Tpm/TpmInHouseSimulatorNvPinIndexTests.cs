@@ -1,18 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -127,8 +121,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         for(uint attempt = 1; attempt <= PinLimit; attempt++)
         {
@@ -167,8 +161,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         //One failure short of pinLimit, then the correct PIN: a response payload is only ever parsed on
         //success (an error response carries no parameters), so the reset is observed through the SUCCESSFUL
@@ -213,8 +207,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         for(uint expectedPinCount = 1; expectedPinCount <= PinLimit; expectedPinCount++)
         {
@@ -283,7 +277,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadIndexAsync(device, pool, registry, PinFailIndexHandle, CorrectPin).ConfigureAwait(false);
 
@@ -329,8 +323,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> wrongPinWriteResult = await WriteIndexAuthValueAsync(
             device, pool, registry, PinPassIndexHandle, WrongPin).ConfigureAwait(false);
@@ -373,8 +367,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributesWithoutAuthReadWithOwnerRead).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassAttributesWithoutAuthReadWithOwnerRead).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> indexAuthResult = await ReadIndexAsync(device, pool, registry, PinPassIndexHandle, CorrectPin).ConfigureAwait(false);
         Assert.AreEqual(
@@ -406,7 +400,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> provisionResult = await WritePinCounterParametersAsync(
             device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
@@ -448,7 +442,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithoutOwnerWrite).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithoutOwnerWrite).ConfigureAwait(false);
 
         TpmResult<NvWriteResponse> result = await WritePinCounterParametersAsync(
             device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
@@ -475,8 +469,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithOwnerRead).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithOwnerRead).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> seedingFailure = await ReadIndexAsync(device, pool, registry, PinFailIndexHandle, WrongPin).ConfigureAwait(false);
         Assert.AreEqual(HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), seedingFailure.ResponseCode, "authHandle's authorizing session, session 1 of Table 265, is refused with session-encoded TPM_RC_BAD_AUTH: the seeding failure must be a NO_DA-exempt bad-authorization.");
@@ -521,8 +515,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithOwnerRead).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithOwnerRead).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadIndexAsOwnerAsync(device, pool, registry, PinFailIndexHandle, WrongOwnerAuth).ConfigureAwait(false);
 
@@ -545,8 +539,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadIndexAsOwnerAsync(device, pool, registry, PinFailIndexHandle, WrongOwnerAuth).ConfigureAwait(false);
 
@@ -571,8 +565,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
 
         //The simulator's owner authValue is empty by default, so an EMPTY supplied authorization is the
         //genuinely CORRECT owner authorization here.
@@ -597,7 +591,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithOwnerRead).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributesWithOwnerRead).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> result = await ReadIndexAsOwnerAsync(device, pool, registry, PinFailIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
 
@@ -617,8 +611,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, pinLimit: 5).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> undefineResult = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_OWNER, PinFailIndexHandle, WrongOwnerAuth).ConfigureAwait(false);
@@ -644,7 +638,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_PLATFORM, PinFailIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -671,7 +665,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
 
         TpmResult<NvUndefineSpaceResponse> result = await UndefineIndexAsync(
             device, pool, registry, TpmRh.TPM_RH_ENDORSEMENT, PinFailIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -699,8 +693,8 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> exhaustingFailure = await ReadIndexAsync(device, pool, registry, PinFailIndexHandle, WrongPin).ConfigureAwait(false);
         Assert.AreEqual(HmacKeyHarness.SessionEncodedRc(TpmRcConstants.TPM_RC_BAD_AUTH, 0), exhaustingFailure.ResponseCode, "One wrong PIN against pinLimit == 1 must exhaust the throttle.");
@@ -733,7 +727,7 @@ internal sealed class TpmInHouseSimulatorNvPinIndexTests
             device, pool, registry, PinFailIndexHandle, PinFailAttributes).ConfigureAwait(false);
         Assert.IsTrue(genuineRedefineResult.IsSuccess, $"A redefinition after the AUTHENTICATED undefine must succeed: '{genuineRedefineResult.ResponseCode}'.");
 
-        await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
+        _ = await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> freshThrottleResult = await ReadIndexAsync(device, pool, registry, PinFailIndexHandle, CorrectPin).ConfigureAwait(false);
         Assert.IsTrue(freshThrottleResult.IsSuccess, $"The genuinely redefined Index must accept the correct PIN on a fresh throttle: '{freshThrottleResult.ResponseCode}'.");

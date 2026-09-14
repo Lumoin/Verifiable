@@ -40,7 +40,7 @@ public abstract record ClaimContributionTarget;
 /// the resolver call.
 /// </summary>
 [DebuggerDisplay("IdTokenTarget Subject={Issuance.Subject,nq}")]
-public sealed record IdTokenTarget(IssuanceContext Issuance) : ClaimContributionTarget
+public sealed record IdTokenTarget(IssuanceContext Issuance): ClaimContributionTarget
 {
     /// <summary>
     /// The user's OIDC claims as resolved once by the walking site
@@ -60,7 +60,7 @@ public sealed record IdTokenTarget(IssuanceContext Issuance) : ClaimContribution
 /// <see cref="OidcClaims"/>.
 /// </summary>
 [DebuggerDisplay("AccessTokenTarget Subject={Issuance.Subject,nq}")]
-public sealed record AccessTokenTarget(IssuanceContext Issuance) : ClaimContributionTarget;
+public sealed record AccessTokenTarget(IssuanceContext Issuance): ClaimContributionTarget;
 
 
 /// <summary>
@@ -74,7 +74,7 @@ public sealed record UserInfoTarget(
     ClientRecord Registration,
     string Subject,
     string Scope,
-    ExchangeContext Context) : ClaimContributionTarget
+    ExchangeContext Context): ClaimContributionTarget
 {
     /// <summary>
     /// The user's OIDC claims as resolved once by the walking site
@@ -98,4 +98,4 @@ public sealed record IntrospectionTarget(
     string TokenJti,
     string Subject,
     string Scope,
-    ExchangeContext Context) : ClaimContributionTarget;
+    ExchangeContext Context): ClaimContributionTarget;

@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Formats.Asn1;
 using System.Numerics;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography.Context;
 
 namespace Verifiable.Cryptography.Pki;
@@ -1098,7 +1094,7 @@ public static class OcspResponseVerification
             Span<byte> span = owner.Memory.Span[..(fieldWidth * 2)];
             span.Clear();
             r.CopyTo(span[(fieldWidth - r.Length)..fieldWidth]);
-            s.CopyTo(span[(fieldWidth * 2 - s.Length)..]);
+            s.CopyTo(span[((fieldWidth * 2) - s.Length)..]);
 
             return owner;
         }

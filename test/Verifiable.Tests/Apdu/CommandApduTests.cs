@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using Verifiable.Apdu;
 
 namespace Verifiable.Tests.Apdu;

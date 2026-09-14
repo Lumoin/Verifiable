@@ -1,13 +1,8 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Net.Http;
-using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Diagnostics;
@@ -172,7 +167,7 @@ internal sealed class ClientCredentialsGrantTests
     {
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterMachineClient(app);
-        app.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -273,7 +268,7 @@ internal sealed class ClientCredentialsGrantTests
         };
         host.Registrations[segment] = updated;
         host.Registrations[updated.ClientId] = updated;
-        host.Server.UpdateClient(previous, updated, new ExchangeContext());
+        host.Server.UpdateClient(previous, updated, []);
         material.Registration = updated;
 
         //client_secret_post (RFC 6749 §2.3.1): the application owns the secret
@@ -353,7 +348,7 @@ internal sealed class ClientCredentialsGrantTests
         {
             ShouldListenTo = static source =>
                 string.Equals(source.Name, ServerActivitySource.SourceName, StringComparison.Ordinal),
-            Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            Sample = static (ref _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = activity => captured.Add(activity)
         };
         ActivitySource.AddActivityListener(listener);

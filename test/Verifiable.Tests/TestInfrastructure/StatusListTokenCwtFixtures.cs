@@ -1,16 +1,10 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
-using System.Net.Http;
+using System.Buffers;
 using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cbor.StatusList;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 
@@ -85,7 +79,7 @@ internal static class StatusListTokenCwtFixtures
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(StatusListMediaTypes.StatusListCwt));
 
         using HttpResponseMessage response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        _ = response.EnsureSuccessStatusCode();
         string? contentType = response.Content.Headers.ContentType?.ToString();
         byte[] coseSign1Bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
 

@@ -8,7 +8,6 @@ using Verifiable.Core.Model.Mdoc;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.Tests.TestDataProviders;

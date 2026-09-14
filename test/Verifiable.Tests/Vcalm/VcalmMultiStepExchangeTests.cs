@@ -1,26 +1,22 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
-using Verifiable.JsonPointer.Jsonata;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.Server;
-using Verifiable.Vcalm;
-using Verifiable.Vcalm.Exchange;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
+using Verifiable.Vcalm;
+using Verifiable.Vcalm.Exchange;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -83,7 +79,7 @@ internal sealed class VcalmMultiStepExchangeTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private List<VerifierKeyMaterial> RegisteredMaterials { get; } = [];
     private List<IDisposable> OwnedKeys { get; } = [];
@@ -151,7 +147,7 @@ internal sealed class VcalmMultiStepExchangeTests
         //bound to a FRESH challenge.
         string presentMessage1 = await SignPresentationMessageAsync(holder, challenge1, domain1).ConfigureAwait(false);
         ServerHttpResponse advance = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage1, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage1, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, advance.StatusCode, advance.Body);
         string challenge2;
@@ -182,7 +178,7 @@ internal sealed class VcalmMultiStepExchangeTests
         //Step 2 present → verified → complete.
         string presentMessage2 = await SignPresentationMessageAsync(holder, challenge2, domain2).ConfigureAwait(false);
         ServerHttpResponse complete = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage2, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage2, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, complete.StatusCode, complete.Body);
 
@@ -219,13 +215,13 @@ internal sealed class VcalmMultiStepExchangeTests
         (string challenge1, string domain1) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
         string present1 = await SignPresentationMessageAsync(holder, challenge1, domain1).ConfigureAwait(false);
         ServerHttpResponse advance = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present1, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present1, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, advance.StatusCode, advance.Body);
 
         //At step 2, REPLAY step 1's challenge (not the fresh step-2 challenge the engine just bound).
         string replay = await SignPresentationMessageAsync(holder, challenge1, domain1).ConfigureAwait(false);
         ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, replay, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, replay, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, refused.StatusCode, refused.Body);
         using JsonDocument problem = JsonDocument.Parse(refused.Body);
@@ -248,7 +244,11 @@ internal sealed class VcalmMultiStepExchangeTests
     /// §3.6 issuance-in-exchange: a step with issueRequests mints a credential by evaluating its
     /// credentialTemplate through the template seam, signs it via the issuance seam, and offers the
     /// issued credential back over vcapi as a verifiablePresentation — which VERIFIES (the credential
-    /// carries a valid eddsa-jcs-2022 proof under a resolvable did:key issuer).
+    /// carries a valid eddsa-jcs-2022 proof under a resolvable did:key issuer). The template renders
+    /// the <see href="https://www.w3.org/TR/vcalm-1.0/#example-a-basic-workflow">VCALM 1.0 Example 13
+    /// ("A Basic Workflow")</see> <c>{"credential": {...}}</c> wrapper shape: the engine signs the
+    /// unwrapped inner credential, never the wrapper, so the signed and verified body carries the
+    /// credential's own top-level members rather than a single <c>credential</c> member.
     /// </summary>
     [TestMethod]
     public async Task IssueRequestsStepMintsCredentialAndOffersItBack()
@@ -266,7 +266,7 @@ internal sealed class VcalmMultiStepExchangeTests
         string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
 
         ServerHttpResponse offered = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, offered.StatusCode, offered.Body);
         using JsonDocument offeredDoc = JsonDocument.Parse(offered.Body);
@@ -277,12 +277,19 @@ internal sealed class VcalmMultiStepExchangeTests
         Assert.AreEqual(1, credentials.GetArrayLength(), "The offered presentation carries one issued credential.");
         JsonElement issuedCredential = credentials[0];
 
+        //VCALM 1.0 Example 13's { "credential": {...} } wrapper is stripped before signing: the
+        //issued credential carries its OWN top-level members, not a single "credential" member.
+        Assert.IsFalse(issuedCredential.TryGetProperty("credential", out _),
+            "The rendered {\"credential\": {...}} wrapper is stripped before signing (VCALM 1.0 Example 13).");
+        Assert.IsTrue(issuedCredential.TryGetProperty("@context", out _),
+            "The unwrapped inner credential's own @context is signed, not the wrapper's.");
+
         //The issued credential VERIFIES: POST it straight to /credentials/verify on the same tenant.
         string issuedCredentialJson = issuedCredential.GetRawText();
         string verifyBody = "{\"verifiableCredential\":" + issuedCredentialJson + "}";
         ServerHttpResponse verify = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
-            new RequestFields(), verifyBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, verify.StatusCode, verify.Body);
         using JsonDocument verifyDoc = JsonDocument.Parse(verify.Body);
@@ -292,6 +299,38 @@ internal sealed class VcalmMultiStepExchangeTests
         using JsonDocument finalState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);
         Assert.AreEqual("complete", finalState.RootElement.GetProperty(VcalmParameterNames.State).GetString(),
             "The issue step completes the exchange.");
+    }
+
+
+    /// <summary>
+    /// §3.6.1 reserves <c>results</c> for the accumulated <c>variables.results</c> object (see
+    /// <see href="https://www.w3.org/TR/vcalm-1.0/#create-workflow">VCALM 1.0 §3.6.1</see>: "a
+    /// workflow will also reference the reserved <c>results</c> variable"): an issueRequest whose OWN
+    /// per-request variables object redefines <c>results</c> is refused with a
+    /// <c>MALFORMED_VALUE_ERROR</c> rather than composing a template-evaluation document carrying two
+    /// <c>results</c> members.
+    /// </summary>
+    [TestMethod]
+    public async Task IssueRequestVariablesRedefiningReservedResultsIsRefused()
+    {
+        await using TestHostShell app = new(TimeProvider);
+        HolderSigningContext holder = await CreateHolderSigningContextAsync().ConfigureAwait(false);
+        IssuerSigningContext issuer = await CreateIssuerSigningContextAsync().ConfigureAwait(false);
+        string segment = RegisterMultiStep(
+            app, holder, PresentThenIssueWorkflowWithReservedVariablesCollision(issuer.IssuerDid), issuer);
+
+        string exchangeId = await CreateExchangeAndGetIdAsync(app, segment).ConfigureAwait(false);
+        (string challenge, string domain) = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+        string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
+
+        ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
+
+        Assert.AreEqual(400, refused.StatusCode, refused.Body);
+        using JsonDocument problem = JsonDocument.Parse(refused.Body);
+        Assert.AreEqual(VcalmProblemTypes.MalformedValueError,
+            problem.RootElement.GetProperty(VcalmParameterNames.ProblemType).GetString(),
+            "An issueRequest redefining the reserved 'results' member is a MALFORMED_VALUE_ERROR refusal.");
     }
 
 
@@ -310,7 +349,7 @@ internal sealed class VcalmMultiStepExchangeTests
         IssuerSigningContext issuerA = await CreateFreshIssuerSigningContextAsync().ConfigureAwait(false);
         IssuerSigningContext issuerB = await CreateFreshIssuerSigningContextAsync().ConfigureAwait(false);
 
-        (string segmentA, string segmentB) = RegisterTwoTenantExchange(app, holder, issuerA, issuerB);
+        (string segmentA, string segmentB) = RegisterTwoTenantExchange(app, issuerA, issuerB);
 
         string mintedVmA = await RunIssueExchangeAndGetMintedVmAsync(app, segmentA, holder).ConfigureAwait(false);
         string mintedVmB = await RunIssueExchangeAndGetMintedVmAsync(app, segmentB, holder).ConfigureAwait(false);
@@ -348,7 +387,7 @@ internal sealed class VcalmMultiStepExchangeTests
         string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
 
         ServerHttpResponse offered = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, offered.StatusCode, offered.Body);
         using JsonDocument offeredDoc = JsonDocument.Parse(offered.Body);
@@ -402,7 +441,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         //Initiate → the single presentation-requesting step (which names a callback) is reached and
         //fires its callback after staging the presentation request.
-        await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
+        _ = await InitiateAndExtractBindingAsync(app, segment, exchangeId).ConfigureAwait(false);
 
         Assert.HasCount(1, deliveredCallbacks, "§3.6.7: the step's callback fired through the delivery seam.");
         (string url, string body) = deliveredCallbacks[0];
@@ -417,7 +456,7 @@ internal sealed class VcalmMultiStepExchangeTests
         //The §3.6.7 RECEIVING endpoint accepts a well-formed callback body with 200.
         string callbackBody = "{\"event\":{\"data\":{\"exchangeId\":\"" + exchangeId + "\"}}}";
         ServerHttpResponse received = await app.DispatchVcalmCallbackAsync(
-            segment, "urn:callback:abc123", callbackBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "urn:callback:abc123", callbackBody, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, received.StatusCode, "§3.6.7: a well-formed callback body is accepted (200).");
     }
@@ -435,7 +474,7 @@ internal sealed class VcalmMultiStepExchangeTests
         string segment = RegisterMultiStep(app, holder, CallbackWorkflow());
 
         ServerHttpResponse response = await app.DispatchVcalmCallbackAsync(
-            segment, "urn:callback:abc123", "{\"notAnEvent\":true}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "urn:callback:abc123", "{\"notAnEvent\":true}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode, "§3.6.7: a body that is not {event{data{exchangeId}}} is 400.");
     }
@@ -469,7 +508,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         //Initiate the exchange — the walk would loop a→b→a→… forever; the engine bounds it and fails.
         ServerHttpResponse initiate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, initiate.StatusCode, initiate.Body);
 
@@ -519,7 +558,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         //§3.6.5: initiate the exchange — the engine requests the authored step's presentation.
         ServerHttpResponse initiate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, initiate.StatusCode, initiate.Body);
 
@@ -550,7 +589,7 @@ internal sealed class VcalmMultiStepExchangeTests
         //The holder presents against the engine's bound challenge / domain → verifies → completes.
         string presentMessage = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
         ServerHttpResponse complete = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, complete.StatusCode, complete.Body);
 
@@ -582,7 +621,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         //Re-poll with an empty body while ACTIVE → the SAME request comes back, no 500, no state change.
         ServerHttpResponse repoll = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, repoll.StatusCode, repoll.Body);
         string challenge2;
@@ -611,7 +650,7 @@ internal sealed class VcalmMultiStepExchangeTests
         //The holder can still answer the (unchanged) bound challenge → verifies → advances.
         string presentMessage = await SignPresentationMessageAsync(holder, challenge1, domain1).ConfigureAwait(false);
         ServerHttpResponse advance = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, presentMessage, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, presentMessage, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, advance.StatusCode, advance.Body);
         using JsonDocument advanceDoc = JsonDocument.Parse(advance.Body);
@@ -644,7 +683,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
         ServerHttpResponse complete = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, complete.StatusCode, complete.Body);
         using JsonDocument finalState = await GetExchangeStateAsync(app, segment, exchangeId).ConfigureAwait(false);
@@ -674,7 +713,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
         ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, refused.StatusCode, refused.Body);
         using JsonDocument problem = JsonDocument.Parse(refused.Body);
@@ -706,7 +745,7 @@ internal sealed class VcalmMultiStepExchangeTests
 
         string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
         ServerHttpResponse refused = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, refused.StatusCode, refused.Body);
         using JsonDocument problem = JsonDocument.Parse(refused.Body);
@@ -796,10 +835,16 @@ internal sealed class VcalmMultiStepExchangeTests
         CredentialTemplates = [new VcalmCredentialTemplate
         {
             Id = "urn:tmpl-1",
-            TemplateType = VcalmTemplateEvaluatorRegistry.JsonataTemplateType,
+            TemplateType = VcalmTemplateEvaluatorRegistry.LiteralTemplateType,
 
-            //A constant credential body (the minimal engine evaluates literals); the issuer identity is
-            //fixed by the issuance seam's ConfiguredIssuer, so the template carries the matching issuer.
+            //A constant credential body — no variable references, so the literal template type (its
+            //source IS the rendered result, no engine needed) applies. The issuer identity is fixed by
+            //the issuance seam's ConfiguredIssuer, so the template carries the matching issuer.
+            //
+            //Wrapped in a "credential" member, matching VCALM 1.0 Example 13's ("A Basic Workflow")
+            //POST /credentials/issue body shape: the rendered value is the whole request body, not
+            //the bare credential, and VcalmWorkflowStepEngine unwraps the "credential" member before
+            //signing regardless of which evaluator rendered it.
             Template =
                 "{\"credential\":{" +
                     "\"@context\":[\"https://www.w3.org/ns/credentials/v2\"]," +
@@ -807,6 +852,41 @@ internal sealed class VcalmMultiStepExchangeTests
                     "\"issuer\":\"" + issuerDid + "\"," +
                     "\"credentialSubject\":{\"name\":\"Example Holder\"}" +
                 "}}"
+        }]
+    };
+
+
+    //Same present-then-issue shape as PresentThenIssueWorkflow, except the issue step's issueRequest
+    //carries its OWN per-request "results" member — the §3.6.1 name reserved for the accumulated
+    //results the didAuth step already populated — so the template-variables composition refuses
+    //rather than emitting a document with two "results" members.
+    private static VcalmWorkflowConfiguration PresentThenIssueWorkflowWithReservedVariablesCollision(string issuerDid) => new()
+    {
+        InitialStep = "stepOne",
+        Steps = ImmutableDictionary<string, VcalmWorkflowStep>.Empty
+            .SetItem("stepOne", new VcalmWorkflowStep
+            {
+                CreateChallenge = true,
+                VerifiablePresentationRequestJson = DidAuthVprJson,
+                PresentationQueryJson = DidAuthQueryJson,
+                NextStep = "issue"
+            })
+            .SetItem("issue", new VcalmWorkflowStep
+            {
+                IssueRequests =
+                [
+                    new VcalmIssueRequest { CredentialTemplateId = "urn:tmpl-1", VariablesJson = "{\"results\":true}" }
+                ]
+            }),
+        CredentialTemplates = [new VcalmCredentialTemplate
+        {
+            Id = "urn:tmpl-1",
+            TemplateType = VcalmTemplateEvaluatorRegistry.LiteralTemplateType,
+            Template =
+                "{\"@context\":[\"https://www.w3.org/ns/credentials/v2\"]," +
+                "\"type\":[\"VerifiableCredential\"]," +
+                "\"issuer\":\"" + issuerDid + "\"," +
+                "\"credentialSubject\":{\"name\":\"Example Holder\"}}"
         }]
     };
 
@@ -834,7 +914,7 @@ internal sealed class VcalmMultiStepExchangeTests
         VerifierKeyMaterial material = app.RegisterClient(ClientId, ClientBaseUri, Capabilities);
         RegisteredMaterials.Add(material);
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         //§3.6.1 / §3.6.2: the real create-workflow endpoint persists the parser-produced configuration
         //here; the exchange's workflow resolves from the same store, so a workflow AUTHORED through the
@@ -1052,7 +1132,7 @@ internal sealed class VcalmMultiStepExchangeTests
     //per tenant off the dispatcher-stamped context.TenantId; the exchange-flow-id resolution and the
     //identity-based present verification are shared. The holder presents client-side to both tenants.
     private (string SegmentA, string SegmentB) RegisterTwoTenantExchange(
-        TestHostShell app, HolderSigningContext holder, IssuerSigningContext issuerA, IssuerSigningContext issuerB)
+        TestHostShell app, IssuerSigningContext issuerA, IssuerSigningContext issuerB)
     {
         VerifierKeyMaterial materialA = app.RegisterClient(
             "https://multistep-a.client.test", new Uri("https://multistep-a.client.test"), Capabilities);
@@ -1065,17 +1145,21 @@ internal sealed class VcalmMultiStepExchangeTests
         string segmentB = materialB.Registration.TenantId.Value;
 
         VcalmIntegration vcalm = app.Server.Vcalm();
-        vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = vcalm.UseDefaultVcalmJsonParsing(JsonOptions);
 
         Dictionary<string, VcalmCredentialIssuance> issuanceBySegment = new(StringComparer.Ordinal)
         {
             [segmentA] = new VcalmCredentialIssuance
             {
-                ConfiguredIssuer = issuerA.IssuerDid, SigningDescriptors = [issuerA.Descriptor], MemoryPool = Pool
+                ConfiguredIssuer = issuerA.IssuerDid,
+                SigningDescriptors = [issuerA.Descriptor],
+                MemoryPool = Pool
             },
             [segmentB] = new VcalmCredentialIssuance
             {
-                ConfiguredIssuer = issuerB.IssuerDid, SigningDescriptors = [issuerB.Descriptor], MemoryPool = Pool
+                ConfiguredIssuer = issuerB.IssuerDid,
+                SigningDescriptors = [issuerB.Descriptor],
+                MemoryPool = Pool
             }
         };
         Dictionary<string, VcalmWorkflowConfiguration> workflowBySegment = new(StringComparer.Ordinal)
@@ -1120,7 +1204,7 @@ internal sealed class VcalmMultiStepExchangeTests
         string present = await SignPresentationMessageAsync(holder, challenge, domain).ConfigureAwait(false);
 
         ServerHttpResponse offered = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, present, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, present, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, offered.StatusCode, offered.Body);
         using JsonDocument offeredDoc = JsonDocument.Parse(offered.Body);
@@ -1149,7 +1233,7 @@ internal sealed class VcalmMultiStepExchangeTests
         TestHostShell app, string segment, string exchangeId)
     {
         ServerHttpResponse initiate = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "POST", exchangeId, "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "POST", exchangeId, "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, initiate.StatusCode, initiate.Body);
         using JsonDocument requestDoc = JsonDocument.Parse(initiate.Body);
@@ -1189,7 +1273,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateExchange, "POST",
-            new RequestFields(), "{}", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), "{}", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
         using JsonDocument created = JsonDocument.Parse(response.Body);
@@ -1201,7 +1285,7 @@ internal sealed class VcalmMultiStepExchangeTests
     private async Task<JsonDocument> GetExchangeStateAsync(TestHostShell app, string segment, string exchangeId)
     {
         ServerHttpResponse response = await app.DispatchVcalmExchangeByIdAsync(
-            segment, "GET", exchangeId, jsonBody: null, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            segment, "GET", exchangeId, jsonBody: null, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
 
@@ -1215,7 +1299,7 @@ internal sealed class VcalmMultiStepExchangeTests
     {
         ServerHttpResponse response = await app.DispatchAtEndpointAsync(
             segment, WellKnownVcalmEndpointNames.VcalmCreateWorkflow, "POST",
-            new RequestFields(), workflowJson, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), workflowJson, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode, response.Body);
     }

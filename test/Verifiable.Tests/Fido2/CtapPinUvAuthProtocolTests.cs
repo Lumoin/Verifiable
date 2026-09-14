@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -300,12 +298,12 @@ internal sealed class CtapPinUvAuthProtocolTests
     public async Task ProtocolTwoEncryptMatchesKnownAnswerWithFixedRandomIv()
     {
         byte[] fixedIv = Convert.FromHexString(ProtocolTwoFixedIvHex);
-        GenerateNonceDelegate deterministicNonce = (byteLength, tag, pool) =>
+        (Nonce Result, CryptoEvent? Event) deterministicNonce(int byteLength, Tag tag, BaseMemoryPool pool)
         {
             IMemoryOwner<byte> owner = pool.Rent(byteLength);
             fixedIv.AsSpan(0, byteLength).CopyTo(owner.Memory.Span);
             return (new Nonce(owner, tag), null);
-        };
+        }
 
         CtapPinUvAuthProtocol protocol = CreateProtocol(CtapPinUvAuthProtocolId.Two, deterministicNonce);
         byte[] key = [.. Convert.FromHexString(ProtocolTwoHmacKeyHalfHex), .. Convert.FromHexString(ProtocolTwoAesKeyHalfHex)];
@@ -342,7 +340,7 @@ internal sealed class CtapPinUvAuthProtocolTests
         CtapPinUvAuthProtocol protocol = CreateProtocol(CtapPinUvAuthProtocolId.Two);
         byte[] key = [.. Convert.FromHexString(ProtocolTwoHmacKeyHalfHex), .. Convert.FromHexString(ProtocolTwoAesKeyHalfHex)];
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await protocol.DecryptAsync(key, new byte[8], BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 

@@ -1,11 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Linq;
 using System.Numerics;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Automata;
 using Verifiable.Apdu.Bac;
@@ -15,7 +13,6 @@ using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Apdu;
 
@@ -103,11 +100,11 @@ internal sealed class CardSimulatorRsaActiveAuthenticationTests
 
             Assert.IsTrue(authenticated, "The chip's ISO-9796-2 signature over the challenge must recover and verify against its genuine DG15 public key.");
             Assert.Contains(
-                (SignatureProducedEvent e) => e.Algorithm == CryptoAlgorithm.RsaIso9796d2,
+                e => e.Algorithm == CryptoAlgorithm.RsaIso9796d2,
                 observer.Received.OfType<SignatureProducedEvent>(),
                 "The chip's RsaActiveAuthenticationCardResponder.SignChallengeAsync must publish a SignatureProducedEvent to the global stream.");
             Assert.Contains(
-                (VerificationCompletedEvent e) => e.Algorithm == CryptoAlgorithm.RsaIso9796d2 && e.Outcome == VerificationOutcome.Valid,
+                e => e.Algorithm == CryptoAlgorithm.RsaIso9796d2 && e.Outcome == VerificationOutcome.Valid,
                 observer.Received.OfType<VerificationCompletedEvent>(),
                 "The terminal's RSA Active Authentication verify must publish a VerificationCompletedEvent to the global stream.");
         }

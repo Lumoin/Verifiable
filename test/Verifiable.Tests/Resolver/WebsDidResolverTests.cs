@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Cesr;
 using Verifiable.DidWebs;
 
 namespace Verifiable.Tests.Resolver;
@@ -74,7 +72,7 @@ internal sealed class WebsDidResolverTests
     [DataRow("did:webs:example.com:a%2Fb:" + Aid)]           //Segment carrying an encoded path separator.
     public void RejectsIpHostAndUnsafePathSegment(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
     }
 
 
@@ -90,7 +88,7 @@ internal sealed class WebsDidResolverTests
     [DataRow("did:webs:example.com:DA_52v7lAkIJVUuruh40GvMsY3_K7J4-ZdVo7NoD2xzm")]            //A 44-char CESR primitive whose code is a verification key, not a digest.
     public void RejectsMalformedAid(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
     }
 
 
@@ -98,7 +96,7 @@ internal sealed class WebsDidResolverTests
     [TestMethod]
     public void RejectsIdentifierWithoutHost()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve($"did:webs:{Aid}"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve($"did:webs:{Aid}"));
     }
 
 
@@ -109,7 +107,7 @@ internal sealed class WebsDidResolverTests
     [DataRow("did:webplus:example.com:" + Aid)]
     public void RejectsNonWebsIdentifier(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
     }
 
 
@@ -119,7 +117,7 @@ internal sealed class WebsDidResolverTests
     [DataRow("   ")]
     public void RejectsEmptyIdentifier(string did)
     {
-        Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => WebsDidResolver.Resolve(did));
     }
 
 

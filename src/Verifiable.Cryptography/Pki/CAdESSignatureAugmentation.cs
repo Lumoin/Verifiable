@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -95,14 +91,14 @@ public sealed class CAdESAugmentationException: Exception
 
 
     /// <summary>Initializes a new <see cref="CAdESAugmentationException"/> with an unclassified malformed input.</summary>
-    public CAdESAugmentationException(): this(CAdESAugmentationFailureKind.SignedDataMalformed, "The CAdES signature could not be augmented.")
+    public CAdESAugmentationException() : this(CAdESAugmentationFailureKind.SignedDataMalformed, "The CAdES signature could not be augmented.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="CAdESAugmentationException"/> with an unclassified malformed input.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public CAdESAugmentationException(string message): this(CAdESAugmentationFailureKind.SignedDataMalformed, message)
+    public CAdESAugmentationException(string message) : this(CAdESAugmentationFailureKind.SignedDataMalformed, message)
     {
     }
 
@@ -110,7 +106,7 @@ public sealed class CAdESAugmentationException: Exception
     /// <summary>Initializes a new <see cref="CAdESAugmentationException"/> with an unclassified malformed input.</summary>
     /// <param name="message">The message describing the fault.</param>
     /// <param name="innerException">The exception that caused it.</param>
-    public CAdESAugmentationException(string message, Exception innerException): this(CAdESAugmentationFailureKind.SignedDataMalformed, message, innerException)
+    public CAdESAugmentationException(string message, Exception innerException) : this(CAdESAugmentationFailureKind.SignedDataMalformed, message, innerException)
     {
     }
 
@@ -118,7 +114,7 @@ public sealed class CAdESAugmentationException: Exception
     /// <summary>Initializes a new <see cref="CAdESAugmentationException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public CAdESAugmentationException(CAdESAugmentationFailureKind failureKind, string message): base(message)
+    public CAdESAugmentationException(CAdESAugmentationFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -128,7 +124,7 @@ public sealed class CAdESAugmentationException: Exception
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
     /// <param name="innerException">The exception that caused it.</param>
-    public CAdESAugmentationException(CAdESAugmentationFailureKind failureKind, string message, Exception innerException): base(message, innerException)
+    public CAdESAugmentationException(CAdESAugmentationFailureKind failureKind, string message, Exception innerException) : base(message, innerException)
     {
         FailureKind = failureKind;
     }
@@ -759,14 +755,14 @@ public static class CAdESSignatureAugmentation
     /// </summary>
     private static CmsAttribute BuildSignaturePolicyStoreAttribute(CAdESSignaturePolicyStore store, BaseMemoryPool pool)
     {
-        if(store.DocumentSpecificationOid is null == store.DocumentSpecificationUri is null)
+        if((store.DocumentSpecificationOid is null) == (store.DocumentSpecificationUri is null))
         {
             throw new ArgumentException(
                 "A signature-policy-store's spDocSpec is exactly one of an object identifier or a URI (ETSI EN 319 122-1 clause 5.2.9.2).",
                 nameof(store));
         }
 
-        if(store.EncodedDocument is null == store.LocalDocumentUri is null)
+        if((store.EncodedDocument is null) == (store.LocalDocumentUri is null))
         {
             throw new ArgumentException(
                 "A signature-policy-store's spDocument is exactly one of the encoded document or a local URI (ETSI EN 319 122-1 clause 5.2.10).",
@@ -936,6 +932,9 @@ public static class CAdESSignatureAugmentation
         return DetectValidationDataPlacement(signedData) switch
         {
             CAdESValidationDataPlacement.LatestArchiveTimestampToken => PlaceInLatestArchiveTimestamp(signedData, signerIndex, material, pool),
+
+            //An undetermined placement and a root placement both place the material in the root SignedData.
+            CAdESValidationDataPlacement.NotDetermined or CAdESValidationDataPlacement.RootSignedData => PlaceInRootSignedData(signedData, material, pool),
             _ => PlaceInRootSignedData(signedData, material, pool)
         };
     }

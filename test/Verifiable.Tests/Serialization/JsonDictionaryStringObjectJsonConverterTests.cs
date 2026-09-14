@@ -96,7 +96,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        Assert.IsInstanceOfType<long>(result["iat"]);
+        _ = Assert.IsInstanceOfType<long>(result["iat"]);
         Assert.AreEqual(1700000000L, result["iat"]);
     }
 
@@ -114,7 +114,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        Assert.IsInstanceOfType<decimal>(result["bigNumber"]);
+        _ = Assert.IsInstanceOfType<decimal>(result["bigNumber"]);
         Assert.AreEqual(99999999999999999999999m, result["bigNumber"]);
     }
 
@@ -132,7 +132,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        Assert.IsInstanceOfType<decimal>(result["price"]);
+        _ = Assert.IsInstanceOfType<decimal>(result["price"]);
         Assert.AreEqual(19.99m, result["price"]);
     }
 
@@ -169,7 +169,7 @@ internal sealed class JsonDictionaryStringObjectJsonConverterTests
         var result = JsonSerializerExtensions.Deserialize<Dictionary<string, object>>(json, options);
 
         Assert.IsNotNull(result);
-        Assert.IsInstanceOfType<DateTime>(result["timestamp"]);
+        _ = Assert.IsInstanceOfType<DateTime>(result["timestamp"]);
         var dateTime = (DateTime)result["timestamp"];
         Assert.AreEqual(2024, dateTime.Year);
         Assert.AreEqual(1, dateTime.Month);

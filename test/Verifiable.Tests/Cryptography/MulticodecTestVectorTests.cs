@@ -1,4 +1,3 @@
-using System.Numerics;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 

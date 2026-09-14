@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Pace;
 using Verifiable.Cryptography;
 

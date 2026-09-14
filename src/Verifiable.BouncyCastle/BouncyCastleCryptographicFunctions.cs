@@ -9,15 +9,12 @@ using Org.BouncyCastle.Crypto.Kems;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Signers;
 using Org.BouncyCastle.Math;
-using System;
 using System.Buffers;
 using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Provider;
@@ -92,12 +89,12 @@ namespace Verifiable.BouncyCastle
                     $"Unsupported hash algorithm: {algorithmName.Name}.", nameof(tag))
             };
 
-            HashFunctionDelegate hashFunction = (source, destination) =>
+            int hashFunction(ReadOnlySpan<byte> source, Span<byte> destination)
             {
                 byte[] output = RunDigest(source, digest);
                 output.AsSpan().CopyTo(destination);
                 return output.Length;
-            };
+            }
 
             ProviderOperation operation = new(nameof(ComputeDigest));
             Tag stamped = CryptoProviderInstrumentation.StampTag(
@@ -109,9 +106,9 @@ namespace Verifiable.BouncyCastle
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(
                     activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
-                activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
-                activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
+                _ = activity.SetTag(CryptoTelemetry.Digest.Algorithm, algorithmName.Name);
+                _ = activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
+                _ = activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
             }
 
             DigestValue result = DigestValue.Compute(
@@ -166,9 +163,9 @@ namespace Verifiable.BouncyCastle
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(
                     activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Digest.Algorithm, nameof(CryptoAlgorithm.Blake3));
-                activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
-                activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
+                _ = activity.SetTag(CryptoTelemetry.Digest.Algorithm, nameof(CryptoAlgorithm.Blake3));
+                _ = activity.SetTag(CryptoTelemetry.Digest.InputLength, input.Length);
+                _ = activity.SetTag(CryptoTelemetry.Digest.OutputLength, outputByteLength);
             }
 
             IMemoryOwner<byte> owner = pool.Rent(outputByteLength, AllocationKind.Pinned);
@@ -224,7 +221,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
             }
 
             //The span ctor copies the scalar into BouncyCastle's own buffer — no naked byte[]
@@ -263,7 +260,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "Ed25519");
             }
 
             var publicKey = new Ed25519PublicKeyParameters(publicKeyMaterial.ToArray(), 0);
@@ -917,8 +914,8 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
-                activity.SetTag(CryptoTelemetry.Signature.Curve, MapEcdsaCurve(curveName));
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Curve, MapEcdsaCurve(curveName));
             }
 
             X9ECParameters curveParams = ECNamedCurveTable.GetByName(curveName);
@@ -944,7 +941,7 @@ namespace Verifiable.BouncyCastle
             byte[] sBytes = s.ToByteArrayUnsigned();
 
             Array.Copy(rBytes, 0, signatureBytes, componentSize - rBytes.Length, rBytes.Length);
-            Array.Copy(sBytes, 0, signatureBytes, componentSize * 2 - sBytes.Length, sBytes.Length);
+            Array.Copy(sBytes, 0, signatureBytes, (componentSize * 2) - sBytes.Length, sBytes.Length);
 
             IMemoryOwner<byte> memoryPooledSignature = signaturePool.Rent(signatureBytes.Length);
             signatureBytes.CopyTo(memoryPooledSignature.Memory.Span);
@@ -975,8 +972,8 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
-                activity.SetTag(CryptoTelemetry.Signature.Curve, MapEcdsaCurve(curveName));
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ECDSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Curve, MapEcdsaCurve(curveName));
             }
 
             X9ECParameters curveParams = ECNamedCurveTable.GetByName(curveName);
@@ -989,7 +986,7 @@ namespace Verifiable.BouncyCastle
 
             //Split the fixed-size IEEE P1363 signature back into r and s components.
             ReadOnlySpan<byte> signatureSpan = signature.Span;
-            byte[] rBytes = signatureSpan.Slice(0, componentSize).ToArray();
+            byte[] rBytes = signatureSpan[..componentSize].ToArray();
             byte[] sBytes = signatureSpan.Slice(componentSize, componentSize).ToArray();
 
             BigInteger r = new(1, rBytes);
@@ -1025,7 +1022,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
             RsaPrivateCrtKeyParameters privateKey = ParseRsaPrivateKey(privateKeyBytes.Span);
@@ -1061,7 +1058,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
             RsaKeyParameters publicKey = ParseRsaPublicKey(publicKeyMaterial.Span);
@@ -1095,7 +1092,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
             RsaPrivateCrtKeyParameters privateKey = ParseRsaPrivateKey(privateKeyBytes.Span);
@@ -1132,7 +1129,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "RSA");
             }
 
             RsaKeyParameters publicKey = ParseRsaPublicKey(publicKeyMaterial.Span);
@@ -1165,7 +1162,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
             }
 
             //MLDsaPrivateKeyParameters exposes no public constructor or span-accepting static factory,
@@ -1216,7 +1213,7 @@ namespace Verifiable.BouncyCastle
             if(activity is not null)
             {
                 CryptoProviderInstrumentation.SetProviderAttributes(activity, ProviderLib, CryptoLib, ProviderCls, operation);
-                activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
+                _ = activity.SetTag(CryptoTelemetry.Signature.Algorithm, "ML-DSA");
             }
 
             var publicKey = MLDsaPublicKeyParameters.FromEncoding(parameters, publicKeyMaterial.ToArray());
@@ -1424,7 +1421,7 @@ namespace Verifiable.BouncyCastle
             byte[] inputArray = data.ToArray();
             digest.BlockUpdate(inputArray, 0, inputArray.Length);
             byte[] output = new byte[digest.GetDigestSize()];
-            digest.DoFinal(output, 0);
+            _ = digest.DoFinal(output, 0);
 
             return output;
         }

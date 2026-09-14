@@ -1,11 +1,9 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using Verifiable.BouncyCastle;
-using Verifiable.Foundation.Automata;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
+using Verifiable.Foundation.Automata;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -15,7 +13,6 @@ using Verifiable.OAuth.Oid4Vp.Server;
 using Verifiable.OAuth.Oid4Vp.Session;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Pkce;
-using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -68,14 +65,14 @@ internal sealed class Oid4VpFlowSessionTests
         (state, stepCount) = await StepAsync(
             state, stepCount, CreateInitiate("session-par-1")).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PkceGeneratedState>(state);
+        _ = Assert.IsInstanceOfType<PkceGeneratedState>(state);
 
         //Step 2 — PAR body composed.
         (state, stepCount) = await StepAsync(
             state, stepCount,
             new ParBodyComposed("client_id=test", TimeProvider.GetUtcNow())).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ParRequestReadyState>(state);
+        _ = Assert.IsInstanceOfType<ParRequestReadyState>(state);
 
         //Step 3 — PAR succeeded. Store the key before referencing it by ID.
         KeyId keyId = StoreDecryptionKey();
@@ -135,7 +132,7 @@ internal sealed class Oid4VpFlowSessionTests
         (state, stepCount) = await StepAsync(
             state, stepCount, new ResponsePosted(compactJwe, TimeProvider.GetUtcNow())).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseReceivedState>(state);
+        _ = Assert.IsInstanceOfType<ResponseReceivedState>(state);
         ResponseReceivedState received = (ResponseReceivedState)state;
         Assert.AreEqual(keyId, received.DecryptionKeyId,
             "DecryptionKeyId must be present in ResponseReceived.");
@@ -375,13 +372,11 @@ internal sealed class Oid4VpFlowSessionTests
         using PublicKeyMemory signingPublicKey = signingKeys.PublicKey;
         using PrivateKeyMemory signingPrivateKey = signingKeys.PrivateKey;
 
-        JwtHeaderSerializer headerSerializer =
-            static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        static ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header,
                 TestSetup.DefaultSerializationOptions);
 
-        JwtPayloadSerializer payloadSerializer =
-            static payload => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        static ReadOnlySpan<byte> payloadSerializer(JwtPayload payload) => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)payload,
                 TestSetup.DefaultSerializationOptions);
 
@@ -403,8 +398,8 @@ internal sealed class Oid4VpFlowSessionTests
         UnsignedJwt unsignedJar = new(header, payload);
         JwsMessage signed = await unsignedJar.SignAsync(
             signingPrivateKey,
-            headerSerializer,
-            payloadSerializer,
+headerSerializer,
+payloadSerializer,
             TestSetup.Base64UrlEncoder,
             Pool,
             cancellationToken).ConfigureAwait(false);
@@ -417,8 +412,7 @@ internal sealed class Oid4VpFlowSessionTests
         PublicKeyMemory encryptionPublicKey,
         CancellationToken cancellationToken)
     {
-        JwtHeaderSerializer headerSerializer =
-            static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
+        static ReadOnlySpan<byte> headerSerializer(JwtHeader header) => JsonSerializerExtensions.SerializeToUtf8Bytes(
                 (Dictionary<string, object>)header,
                 TestSetup.DefaultSerializationOptions);
 
@@ -432,7 +426,7 @@ internal sealed class Oid4VpFlowSessionTests
 
         using JweMessage message = await unencrypted.EncryptAsync(
             encryptionPublicKey,
-            headerSerializer,
+headerSerializer,
             TestSetup.Base64UrlEncoder,
             CryptoFormatConversions.DefaultTagToEpkCrvConverter,
             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementEncryptP256Async,

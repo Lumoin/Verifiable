@@ -233,7 +233,7 @@ internal sealed class DpllSolverTests
     [TestMethod]
     public void NegativeVariableCountThrows()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() =>
             DpllSolver.Solve(Array.Empty<Literal[]>(), -1));
     }
 
@@ -241,7 +241,7 @@ internal sealed class DpllSolverTests
     [TestMethod]
     public void NullClausesThrows()
     {
-        Assert.Throws<ArgumentNullException>(() =>
+        _ = Assert.Throws<ArgumentNullException>(() =>
             DpllSolver.Solve(null!, 1));
     }
 }

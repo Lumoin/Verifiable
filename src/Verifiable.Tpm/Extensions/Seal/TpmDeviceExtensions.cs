@@ -1,17 +1,12 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Extensions.Seal;
 
@@ -400,9 +395,9 @@ public static class TpmDeviceExtensions
         BaseMemoryPool pool = device.Pool;
         TpmResponseRegistry registry = CreateUnsealRegistry();
 
-        (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) cloned = sealedBlob.CloneForLoad(pool);
-        using Tpm2bPrivate inPrivate = cloned.InPrivate;
-        using Tpm2bPublic inPublic = cloned.InPublic;
+        (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) = sealedBlob.CloneForLoad(pool);
+        using Tpm2bPrivate inPrivate = InPrivate;
+        using Tpm2bPublic inPublic = InPublic;
         using LoadInput loadInput = new(parentHandle, inPrivate, inPublic);
         using TpmPasswordSession parentSession = TpmPasswordSession.Create(parentAuth.Span, pool);
 
@@ -442,9 +437,9 @@ public static class TpmDeviceExtensions
         BaseMemoryPool pool = device.Pool;
         TpmResponseRegistry registry = CreateUnsealRegistry();
 
-        (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) cloned = sealedBlob.CloneForLoad(pool);
-        using Tpm2bPrivate inPrivate = cloned.InPrivate;
-        using Tpm2bPublic inPublic = cloned.InPublic;
+        (Tpm2bPrivate InPrivate, Tpm2bPublic InPublic) = sealedBlob.CloneForLoad(pool);
+        using Tpm2bPrivate inPrivate = InPrivate;
+        using Tpm2bPublic inPublic = InPublic;
         using LoadInput loadInput = new(parentHandle, inPrivate, inPublic);
         using TpmPasswordSession parentSession = TpmPasswordSession.Create(parentAuth.Span, pool);
 

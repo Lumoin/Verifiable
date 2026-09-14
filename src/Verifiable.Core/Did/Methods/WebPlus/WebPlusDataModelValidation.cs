@@ -1,7 +1,5 @@
-using System;
 using System.Globalization;
 using Verifiable.Core.Model.Did;
-using Verifiable.Foundation;
 
 namespace Verifiable.Core.Did.Methods.WebPlus;
 

@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
@@ -67,7 +63,7 @@ internal sealed class CtapAuthenticatorMakeCredentialClientTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.UnsupportedAlgorithm], transceivePool, Fido2BufferTags.CtapResponseEnvelope));
 
         CtapCommandException exception = await Assert.ThrowsExactlyAsync<CtapCommandException>(
@@ -87,10 +83,10 @@ internal sealed class CtapAuthenticatorMakeCredentialClientTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         CtapMakeCredentialRequest request = CtapMakeCredentialGetAssertionFixtures.BuildMakeCredentialRequest(pool);
 
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> transceiveRequest, BaseMemoryPool transceivePool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, transceivePool, Fido2BufferTags.CtapResponseEnvelope));
 
-        await Assert.ThrowsExactlyAsync<Fido2FormatException>(
+        _ = await Assert.ThrowsExactlyAsync<Fido2FormatException>(
             () => CtapAuthenticatorMakeCredentialClient.MakeCredentialAsync(
                 Transceive, CtapMakeCredentialRequestCborWriter.Write, request, CtapMakeCredentialResponseCborReader.Read, pool, TestContext.CancellationToken).AsTask());
 

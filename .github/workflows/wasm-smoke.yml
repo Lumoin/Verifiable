@@ -1,0 +1,109 @@
+name: Verifiable.Libsodium wasm smoke
+
+# main.yml's whole-solution build never touches this project — it is deliberately outside
+# Verifiable.slnx (see Verifiable.Libsodium.WasmSmoke.csproj). This is the real-browser-wasm
+# execution gate for Verifiable.Libsodium's own seam (CryptoFunctionRegistry/KeyCreationFunctionRegistry
+# dispatch onto LibsodiumCryptographicFunctions/LibsodiumKeyMaterialCreator) atop the Lumoin.Base.Libsodium
+# package's shipped browser-wasm archive: a green dotnet build never proves P/Invoke symbol resolution
+# on browser-wasm, only a real run under Node does.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly: a new .NET 11 SDK may bump the workload's pinned Emscripten past the archive's own
+    # build stamp; this re-runs the smoke against whatever the workload currently pins.
+    - cron: "0 4 * * 1"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/Verifiable.Libsodium/**"
+      - "test/Verifiable.Libsodium.WasmSmoke/**"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
+      - ".github/workflows/wasm-smoke.yml"
+  pull_request:
+    paths:
+      - "src/Verifiable.Libsodium/**"
+      - "test/Verifiable.Libsodium.WasmSmoke/**"
+      - "Directory.Build.props"
+      - "Directory.Packages.props"
+      - "global.json"
+      - ".github/workflows/wasm-smoke.yml"
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+  NUGET_XMLDOC_MODE: skip
+
+  # The smoke project is deliberately outside Verifiable.slnx; every dotnet invocation below runs
+  # from its directory. It builds on the repository's SDK pin (global.json).
+  SMOKE_DIR: test/Verifiable.Libsodium.WasmSmoke
+
+jobs:
+  wasm-smoke:
+    name: libsodium in dotnet.wasm via Verifiable.Libsodium (.NET 11)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c
+      with:
+        disable-sudo: true
+        # Audit rather than block: the wasm-tools workload installs from endpoint sets that shift
+        # between SDK releases. Tighten to block with an explicit allowlist when this leg stops
+        # being experimental (.NET 11 GA).
+        egress-policy: audit
+
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+    # The SDK and the wasm-tools workload are installed into a runner-writable directory: the
+    # runner's default /usr/share/dotnet needs sudo for workload installs, and harden-runner runs
+    # with sudo disabled. Set via GITHUB_ENV in a step because the runner context does not exist
+    # in workflow-level env — a workflow that references it there fails to parse and never runs
+    # at all (schedule, push, pull_request and dispatch alike).
+    - name: Point the .NET install at a runner-writable directory
+      run: |
+        echo "DOTNET_INSTALL_DIR=$RUNNER_TEMP/dotnet" >> "$GITHUB_ENV"
+        echo "DOTNET_ROOT=$RUNNER_TEMP/dotnet" >> "$GITHUB_ENV"
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      with:
+        global-json-file: global.json
+
+    # The workload manifests of a release-candidate SDK are prerelease packages themselves.
+    - name: Install the wasm-tools workload
+      working-directory: ${{ env.SMOKE_DIR }}
+      run: dotnet workload install wasm-tools --include-previews
+
+    # No Emscripten build step: Lumoin.Base.Libsodium ships its own browser-wasm libsodium.a inside
+    # the package (runtimes/browser-wasm/native), linked in by its buildTransitive targets. A pin
+    # mismatch between that archive and this workflow's wasm-tools workload surfaces as build
+    # warning LUMOIN0001, naming both versions. LUMOIN0001 is raised by an MSBuild <Warning> task,
+    # which $(TreatWarningsAsErrors) (a Roslyn/compiler property) does not promote, so
+    # MSBuildTreatWarningsAsErrors (the MSBuild-engine property) is set here to make a pin mismatch
+    # fail this job instead of scrolling past in the log.
+    - name: Publish the smoke app
+      working-directory: ${{ env.SMOKE_DIR }}
+      run: dotnet publish -c Release -p:MSBuildTreatWarningsAsErrors=true
+
+    - name: Run the smoke under the workload's Node
+      working-directory: ${{ env.SMOKE_DIR }}
+      run: |
+        set -euo pipefail
+        app="bin/Release/net11.0/publish/wwwroot/main.mjs"
+        if [ ! -f "$app" ]; then
+          echo "published app not found at $app"
+          find bin -name main.mjs
+          exit 1
+        fi
+        node="$(ls -d "$DOTNET_ROOT"/packs/Microsoft.NET.Runtime.Emscripten.*.Node.linux-x64/*/tools/bin/node | head -n 1)"
+        "$node" --version
+        # .NET 11's wasm runtime uses the exnref exception-handling proposal; the workload's
+        # Node needs the flag until exnref is on by default in its V8.
+        "$node" --experimental-wasm-exnref "$app"

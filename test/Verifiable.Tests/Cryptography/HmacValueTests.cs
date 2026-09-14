@@ -62,7 +62,7 @@ internal sealed class HmacValueTests
     [TestMethod]
     public void NullEqualsNullViaOperator()
     {
-        Assert.IsTrue((HmacValue?)null == (HmacValue?)null);
+        Assert.IsTrue(null == (HmacValue?)null);
     }
 
 

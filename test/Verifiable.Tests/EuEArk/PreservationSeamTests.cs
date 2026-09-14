@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -518,7 +513,7 @@ internal sealed class PreservationSeamTests
     [TestMethod]
     public async Task AStandInServiceAnswersThroughTheOperationSeams()
     {
-        PreservePreservationObjectDelegate preserve = static (context, pool, cancellationToken) =>
+        static ValueTask<PreservationOperationResult<PreservePreservationObjectResponse>> preserve(PreservationOperationContext<PreservePreservationObjectRequest> context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
         {
             PreservationMessageStatus status = PreservationMessageBounds.State(context.Request, context.Limits);
             if(status != PreservationMessageStatus.WithinBounds)
@@ -536,9 +531,9 @@ internal sealed class PreservationSeamTests
             };
 
             return ValueTask.FromResult(PreservationOperationResult<PreservePreservationObjectResponse>.Succeeded(response));
-        };
+        }
 
-        SearchDelegate search = static (context, pool, cancellationToken) =>
+        static ValueTask<PreservationOperationResult<SearchResponse>> search(PreservationOperationContext<SearchRequest> context, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(PreservationOperationResult<SearchResponse>.Failed(
                 PreservationOperationOutcome.NotSupported,
                 "this service publishes no query language"));
@@ -589,7 +584,7 @@ internal sealed class PreservationSeamTests
     [TestMethod]
     public async Task TheSerialisationSeamsCarryTheirContextsAndRefusalsAsStatuses()
     {
-        EncodePreservationMessageDelegate encode = static (context, pool, cancellationToken) =>
+        static ValueTask<PreservationMessageEncodeResult> encode(PreservationMessageEncodeContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default)
         {
             bool carriesMarkup = context.Message is PreservePreservationObjectRequest request
                 && request.PreservationObjects.Any(preservationObject => preservationObject.ContentForm == PreservationContentForm.XmlData);
@@ -600,7 +595,7 @@ internal sealed class PreservationSeamTests
                     "the JSON binding carries no markup alternative"))
                 : ValueTask.FromResult(PreservationMessageEncodeResult.Encoded(
                     PooledMemory.FromBytes("<PreservePO/>"u8, pool, PreservationTags.OpaqueElement)));
-        };
+        }
 
         using PreservePreservationObjectRequest markup = new()
         {
@@ -628,7 +623,7 @@ internal sealed class PreservationSeamTests
         Assert.IsTrue(written.IsEncoded);
         Assert.IsNotNull(written.Document);
 
-        ParsePreservationMessageDelegate parse = static (context, pool, cancellationToken) =>
+        static ValueTask<PreservationMessageParseResult> parse(PreservationMessageParseContext context, BaseMemoryPool pool, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(context.ExpectedKind == PreservationMessageKind.SearchRequest
                 ? PreservationMessageParseResult.Valid(new SearchRequest { Filter = "poid=1" })
                 : PreservationMessageParseResult.Failed(PreservationMessageParseStatus.UnexpectedMessage, "the octets are a search request"));

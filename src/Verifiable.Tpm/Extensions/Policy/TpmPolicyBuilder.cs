@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Extensions.Policy;
 
 /// <summary>

@@ -80,7 +80,7 @@ internal sealed class SiopRequestSerializerTests
 
         string marker = "client_metadata=";
         int start = query.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-        int end = query.IndexOf('&', start);
+        int end = query.IndexOf('&', start, StringComparison.Ordinal);
         string encoded = end < 0 ? query[start..] : query[start..end];
         string json = Uri.UnescapeDataString(encoded);
 

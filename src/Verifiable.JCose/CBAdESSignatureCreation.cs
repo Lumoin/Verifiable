@@ -52,7 +52,7 @@ public abstract class CBAdESSigningPayloadInput
 /// Sig_structure covers.
 /// </summary>
 [DebuggerDisplay("CBAdESAttachedPayloadInput: {Payload.Length} bytes")]
-public sealed class CBAdESAttachedPayloadInput : CBAdESSigningPayloadInput
+public sealed class CBAdESAttachedPayloadInput: CBAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadInput"/>.</summary>
     /// <param name="payload">
@@ -78,7 +78,7 @@ public sealed class CBAdESAttachedPayloadInput : CBAdESSigningPayloadInput
 /// detached payload — CB-5.2.8-04).
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedExternalPayloadInput: {Payload.Length} bytes")]
-public sealed class CBAdESDetachedExternalPayloadInput : CBAdESSigningPayloadInput
+public sealed class CBAdESDetachedExternalPayloadInput: CBAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedExternalPayloadInput"/>.</summary>
     /// <param name="payload">
@@ -110,7 +110,7 @@ public sealed class CBAdESDetachedExternalPayloadInput : CBAdESSigningPayloadInp
 /// resolving this arm.
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedSigDPayloadInput: {MechanismIdentifier}, {References.Count} reference(s)")]
-public sealed class CBAdESDetachedSigDPayloadInput : CBAdESSigningPayloadInput
+public sealed class CBAdESDetachedSigDPayloadInput: CBAdESSigningPayloadInput
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedSigDPayloadInput"/>.</summary>
     /// <param name="mechanismIdentifier">
@@ -690,18 +690,18 @@ public static class CBAdESSignatureCreation
         CBAdESUnknownDetachedObjectMechanismDelegate? unknownHandler,
         BaseMemoryPool rentPool,
         CancellationToken token) => input switch
-    {
-        CBAdESAttachedPayloadInput attached =>
-            ValueTask.FromResult(new PayloadResolution(null, attached.Payload, null)),
+        {
+            CBAdESAttachedPayloadInput attached =>
+                ValueTask.FromResult(new PayloadResolution(null, attached.Payload, null)),
 
-        CBAdESDetachedExternalPayloadInput external =>
-            ValueTask.FromResult(new PayloadResolution(null, external.Payload, null)),
+            CBAdESDetachedExternalPayloadInput external =>
+                ValueTask.FromResult(new PayloadResolution(null, external.Payload, null)),
 
-        CBAdESDetachedSigDPayloadInput sigD =>
-            ResolveSigDPayloadAsync(sigD, dereferenceDelegate, context, unknownHandler, rentPool, token),
+            CBAdESDetachedSigDPayloadInput sigD =>
+                ResolveSigDPayloadAsync(sigD, dereferenceDelegate, context, unknownHandler, rentPool, token),
 
-        _ => throw new NotSupportedException($"Unrecognized {nameof(CBAdESSigningPayloadInput)} kind '{input.GetType().Name}'.")
-    };
+            _ => throw new NotSupportedException($"Unrecognized {nameof(CBAdESSigningPayloadInput)} kind '{input.GetType().Name}'.")
+        };
 
 
     /// <summary>

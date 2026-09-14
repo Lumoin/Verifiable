@@ -1,9 +1,7 @@
-using System;
 using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
-using Verifiable.Foundation;
 
 namespace Verifiable.Json.Converters;
 
@@ -31,31 +29,31 @@ internal static class DidContentStreamJson
             }
             case DidDocument document:
             {
-                JsonSerializer.Serialize(writer, document, options.GetTypeInfo(typeof(DidDocument)));
+                JsonSerializer.Serialize(writer, document, options.GetTypeInfo<DidDocument>());
 
                 break;
             }
             case DataIntegritySecuredPresentation securedPresentation:
             {
-                JsonSerializer.Serialize(writer, securedPresentation, options.GetTypeInfo(typeof(DataIntegritySecuredPresentation)));
+                JsonSerializer.Serialize(writer, securedPresentation, options.GetTypeInfo<DataIntegritySecuredPresentation>());
 
                 break;
             }
             case VerifiablePresentation presentation:
             {
-                JsonSerializer.Serialize(writer, presentation, options.GetTypeInfo(typeof(VerifiablePresentation)));
+                JsonSerializer.Serialize(writer, presentation, options.GetTypeInfo<VerifiablePresentation>());
 
                 break;
             }
             case VerificationMethod verificationMethod:
             {
-                JsonSerializer.Serialize(writer, verificationMethod, options.GetTypeInfo(typeof(VerificationMethod)));
+                JsonSerializer.Serialize(writer, verificationMethod, options.GetTypeInfo<VerificationMethod>());
 
                 break;
             }
             case Service service:
             {
-                JsonSerializer.Serialize(writer, service, options.GetTypeInfo(typeof(Service)));
+                JsonSerializer.Serialize(writer, service, options.GetTypeInfo<Service>());
 
                 break;
             }

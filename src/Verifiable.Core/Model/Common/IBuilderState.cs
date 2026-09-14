@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core.Model.Did;
 
 namespace Verifiable.Core.Model.Common
 {

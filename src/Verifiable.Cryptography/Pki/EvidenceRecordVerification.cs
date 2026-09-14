@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -99,14 +97,14 @@ public sealed class EvidenceRecordCreationException: Exception
 
 
     /// <summary>Initializes a new <see cref="EvidenceRecordCreationException"/> with an unclassified fault.</summary>
-    public EvidenceRecordCreationException(): this(EvidenceRecordCreationFailureKind.NoDataObject, "The Evidence Record could not be created.")
+    public EvidenceRecordCreationException() : this(EvidenceRecordCreationFailureKind.NoDataObject, "The Evidence Record could not be created.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="EvidenceRecordCreationException"/> with an unclassified fault.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public EvidenceRecordCreationException(string message): this(EvidenceRecordCreationFailureKind.NoDataObject, message)
+    public EvidenceRecordCreationException(string message) : this(EvidenceRecordCreationFailureKind.NoDataObject, message)
     {
     }
 
@@ -123,7 +121,7 @@ public sealed class EvidenceRecordCreationException: Exception
     /// <summary>Initializes a new <see cref="EvidenceRecordCreationException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public EvidenceRecordCreationException(EvidenceRecordCreationFailureKind failureKind, string message): base(message)
+    public EvidenceRecordCreationException(EvidenceRecordCreationFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }

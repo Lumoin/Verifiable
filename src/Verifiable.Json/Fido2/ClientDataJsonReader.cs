@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Fido2;
 
@@ -132,7 +130,7 @@ public static class ClientDataJsonReader
             }
             else if(string.Equals(memberName, CrossOriginMember, StringComparison.Ordinal))
             {
-                if(reader.TokenType != JsonTokenType.True && reader.TokenType != JsonTokenType.False)
+                if(reader.TokenType is not JsonTokenType.True and not JsonTokenType.False)
                 {
                     throw new Fido2FormatException("The clientDataJSON member 'crossOrigin' MUST be a boolean.");
                 }

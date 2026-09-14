@@ -1,4 +1,3 @@
-using System;
 using Verifiable.OAuth.Server;
 
 namespace Verifiable.Json;

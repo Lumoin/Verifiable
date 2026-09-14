@@ -1,9 +1,6 @@
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Oid4Vci.Wallet;
 
@@ -780,9 +777,9 @@ public sealed class Oid4VciWalletClient
     private static string BuildDeferredRequestBody(string transactionId)
     {
         StringBuilder builder = new();
-        builder.Append('{');
-        builder.Append('"').Append(Oid4VciCredentialParameterNames.TransactionId).Append("\":\"");
-        builder.Append(transactionId).Append("\"}");
+        _ = builder.Append('{');
+        _ = builder.Append('"').Append(Oid4VciCredentialParameterNames.TransactionId).Append("\":\"");
+        _ = builder.Append(transactionId).Append("\"}");
 
         return builder.ToString();
     }
@@ -800,20 +797,20 @@ public sealed class Oid4VciWalletClient
         string? eventDescription)
     {
         StringBuilder builder = new();
-        builder.Append('{');
-        builder.Append('"').Append(Oid4VciCredentialParameterNames.NotificationId).Append("\":\"");
-        builder.Append(notificationId).Append("\",\"");
-        builder.Append(Oid4VciCredentialParameterNames.Event).Append("\":\"");
-        builder.Append(notificationEvent).Append('"');
+        _ = builder.Append('{');
+        _ = builder.Append('"').Append(Oid4VciCredentialParameterNames.NotificationId).Append("\":\"");
+        _ = builder.Append(notificationId).Append("\",\"");
+        _ = builder.Append(Oid4VciCredentialParameterNames.Event).Append("\":\"");
+        _ = builder.Append(notificationEvent).Append('"');
 
         if(!string.IsNullOrEmpty(eventDescription))
         {
-            builder.Append(",\"").Append(Oid4VciCredentialParameterNames.EventDescription).Append("\":\"");
+            _ = builder.Append(",\"").Append(Oid4VciCredentialParameterNames.EventDescription).Append("\":\"");
             JsonAppender.AppendEscapedString(builder, eventDescription);
-            builder.Append('"');
+            _ = builder.Append('"');
         }
 
-        builder.Append('}');
+        _ = builder.Append('}');
 
         return builder.ToString();
     }
@@ -867,34 +864,34 @@ public sealed class Oid4VciWalletClient
         CredentialResponseEncryption? responseEncryption)
     {
         StringBuilder builder = new();
-        builder.Append('{');
-        builder.Append('"').Append(Oid4VciCredentialParameterNames.CredentialConfigurationId).Append("\":\"");
-        builder.Append(credentialConfigurationId).Append("\",");
-        builder.Append('"').Append(Oid4VciCredentialParameterNames.Proofs).Append("\":{\"");
-        builder.Append(Oid4VciCredentialParameterNames.JwtProofType).Append("\":[\"");
-        builder.Append(proofJwt).Append("\"]}");
+        _ = builder.Append('{');
+        _ = builder.Append('"').Append(Oid4VciCredentialParameterNames.CredentialConfigurationId).Append("\":\"");
+        _ = builder.Append(credentialConfigurationId).Append("\",");
+        _ = builder.Append('"').Append(Oid4VciCredentialParameterNames.Proofs).Append("\":{\"");
+        _ = builder.Append(Oid4VciCredentialParameterNames.JwtProofType).Append("\":[\"");
+        _ = builder.Append(proofJwt).Append("\"]}");
 
         if(responseEncryption is { Jwk: { } jwk, Enc: { } enc })
         {
-            builder.Append(",\"").Append(Oid4VciCredentialParameterNames.CredentialResponseEncryption);
-            builder.Append("\":{\"").Append(Oid4VciCredentialParameterNames.Jwk).Append("\":{");
+            _ = builder.Append(",\"").Append(Oid4VciCredentialParameterNames.CredentialResponseEncryption);
+            _ = builder.Append("\":{\"").Append(Oid4VciCredentialParameterNames.Jwk).Append("\":{");
             bool first = true;
             foreach(KeyValuePair<string, object> member in jwk)
             {
                 if(!first)
                 {
-                    builder.Append(',');
+                    _ = builder.Append(',');
                 }
 
-                builder.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append('"');
+                _ = builder.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append('"');
                 first = false;
             }
 
-            builder.Append("},\"").Append(Oid4VciCredentialParameterNames.Enc).Append("\":\"");
-            builder.Append(enc).Append("\"}");
+            _ = builder.Append("},\"").Append(Oid4VciCredentialParameterNames.Enc).Append("\":\"");
+            _ = builder.Append(enc).Append("\"}");
         }
 
-        builder.Append('}');
+        _ = builder.Append('}');
 
         return builder.ToString();
     }

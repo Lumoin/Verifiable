@@ -577,7 +577,7 @@ internal sealed class EArkStructuralRuleTests
             "Re-running the fold over the assessment's own claim set contradicts the boolean the assessment stored.");
 
         //And the snapshot is not merely a copy that could be edited in its turn.
-        Assert.Throws<NotSupportedException>(() => assessed.ClaimsResult.Claims.Clear());
+        _ = Assert.Throws<NotSupportedException>(() => assessed.ClaimsResult.Claims.Clear());
         Assert.HasCount(issuedClaimCount, assessed.ClaimsResult.Claims);
     }
 
@@ -647,7 +647,7 @@ internal sealed class EArkStructuralRuleTests
 
             Assert.HasCount(1, claims);
             Assert.AreEqual(rule.ExpectedClaimIds[0].Code, claims[0].Id.Code);
-            Assert.IsInstanceOfType<EArkClaimContext>(claims[0].Context);
+            _ = Assert.IsInstanceOfType<EArkClaimContext>(claims[0].Context);
         }
     }
 

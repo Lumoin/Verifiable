@@ -1,6 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Tests.TestInfrastructure;
 

@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Constants;
 
@@ -186,32 +184,32 @@ public sealed class TpmuAttest: IDisposable
 
         switch(Type)
         {
-            case(TpmStConstants.TPM_ST_ATTEST_QUOTE):
+            case TpmStConstants.TPM_ST_ATTEST_QUOTE:
             {
                 Quote!.WriteTo(ref writer);
                 break;
             }
-            case(TpmStConstants.TPM_ST_ATTEST_CERTIFY):
+            case TpmStConstants.TPM_ST_ATTEST_CERTIFY:
             {
                 Certify!.WriteTo(ref writer);
                 break;
             }
-            case(TpmStConstants.TPM_ST_ATTEST_CREATION):
+            case TpmStConstants.TPM_ST_ATTEST_CREATION:
             {
                 Creation!.WriteTo(ref writer);
                 break;
             }
-            case(TpmStConstants.TPM_ST_ATTEST_TIME):
+            case TpmStConstants.TPM_ST_ATTEST_TIME:
             {
                 Time!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmStConstants.TPM_ST_ATTEST_NV):
+            case TpmStConstants.TPM_ST_ATTEST_NV:
             {
                 Nv!.WriteTo(ref writer);
                 break;
             }
-            case(TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT):
+            case TpmStConstants.TPM_ST_ATTEST_SESSION_AUDIT:
             {
                 SessionAudit!.WriteTo(ref writer);
                 break;

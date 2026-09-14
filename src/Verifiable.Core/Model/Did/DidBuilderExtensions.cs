@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
@@ -275,7 +271,7 @@ public static class DidBuilderExtensions
     {
         return (document, _, _, _) =>
         {
-            document.AddDefaultContext();
+            _ = document.AddDefaultContext();
 
             return ValueTask.FromResult(document);
         };
@@ -308,7 +304,7 @@ public static class DidBuilderExtensions
 
         return (document, _, _, _) =>
         {
-            document.AddContext(context);
+            _ = document.AddContext(context);
 
             return ValueTask.FromResult(document);
         };

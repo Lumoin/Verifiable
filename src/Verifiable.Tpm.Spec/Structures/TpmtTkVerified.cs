@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Algorithms;
@@ -162,7 +161,7 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, HmacLength);
+            return Storage.Memory.Span[..HmacLength];
         }
     }
 
@@ -248,7 +247,7 @@ public sealed class TpmtTkVerified: IDisposable, ITpmWireType
         try
         {
             ReadOnlySpan<byte> source = reader.ReadBytes(hmacSize);
-            source.CopyTo(storage.Memory.Span.Slice(0, hmacSize));
+            source.CopyTo(storage.Memory.Span[..hmacSize]);
 
             return new TpmtTkVerified(tag, hierarchy, metadata, storage, hmacSize);
         }

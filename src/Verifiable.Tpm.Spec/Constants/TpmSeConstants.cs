@@ -10,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// (Part 2: Structures, section "6 Constants", Table 23).
 /// </para>
 /// </remarks>
-public enum TpmSeConstants : byte
+public enum TpmSeConstants: byte
 {
     /// <summary>
     /// (no comment text in extracted table)

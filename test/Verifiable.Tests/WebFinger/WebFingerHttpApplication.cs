@@ -1,20 +1,19 @@
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
-using StringValues = Microsoft.Extensions.Primitives.StringValues;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Server.Pipeline;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.WebFinger;
+using StringValues = Microsoft.Extensions.Primitives.StringValues;
 
 namespace Verifiable.Tests.WebFinger;
 
@@ -75,12 +74,12 @@ internal sealed class WebFingerHttpApplication
     /// </summary>
     public async Task ProcessRequestAsync(HttpContext context)
     {
-        string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
-        string queryString = context.Request.QueryString.HasValue ? context.Request.QueryString.Value! : string.Empty;
+        string path = context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty;
+        string queryString = context.Request.QueryString.HasValue ? context.Request.QueryString.Value : string.Empty;
         RequestLogEntries.Enqueue(path + queryString);
 
         IncomingRequest incomingRequest = BuildIncomingRequest(context.Request);
-        ExchangeContext exchangeContext = new();
+        ExchangeContext exchangeContext = [];
 
         ServerHttpResponse response = await Server.DispatchAsync(
             incomingRequest, exchangeContext, context.RequestAborted).ConfigureAwait(false);
@@ -107,7 +106,7 @@ internal sealed class WebFingerHttpApplication
         RequestHeaders headers = MapHeaders(request.Headers);
 
         return new IncomingRequest(
-            Path: request.Path.HasValue ? request.Path.Value! : string.Empty,
+            Path: request.Path.HasValue ? request.Path.Value : string.Empty,
             Method: request.Method,
             Fields: fields,
             Headers: headers,
@@ -190,10 +189,12 @@ internal sealed class WebFingerHttpApplication
 
             //The WebFinger query endpoint is StatelessFlowKind.Instance: EndpointServer.HandleCoreAsync
             //short-circuits on BuildInputAsync's response before any flow-state or identifier seam is
-            //reached. These three are wired only to satisfy ServerIntegration.Validate() and are never
+            //reached. These five are wired only to satisfy ServerIntegration.Validate() and are never
             //actually invoked by a WebFinger dispatch.
             SaveFlowStateAsync = static (tenantId, key, state, stepCount, ctx, ct) => ValueTask.CompletedTask,
             LoadFlowStateAsync = static (tenantId, key, ctx, ct) => ValueTask.FromResult<(FlowState?, int)>((null, 0)),
+            ClaimFlowStateAsync = static (tenantId, key, expectedStepCount, ctx, ct) => ValueTask.FromResult(true),
+            DeleteFlowStateAsync = static (tenantId, key, ctx, ct) => ValueTask.CompletedTask,
             GenerateIdentifierAsync = static (purpose, ctx, ct) => ValueTask.FromResult(Guid.NewGuid().ToString("N")),
 
             ResolvePolicyAsync = static (reg, ctx, ct) => ValueTask.CompletedTask,
@@ -313,7 +314,7 @@ internal sealed class WebFingerHttpApplication
 
             //A single explicit HTTPS Listen call — no UseUrls, so this is the ONLY endpoint Kestrel
             //binds: there is no plaintext HTTP fallback on this node at all.
-            builder.WebHost.ConfigureKestrel(options =>
+            _ = builder.WebHost.ConfigureKestrel(options =>
                 LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
             WebApplication app = builder.Build();

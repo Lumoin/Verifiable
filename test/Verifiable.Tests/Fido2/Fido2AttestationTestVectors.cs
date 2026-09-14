@@ -1,7 +1,8 @@
+using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using Lumoin.Veritas.Cbor;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
@@ -12,9 +13,8 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Tests.TestDataProviders;
-using Verifiable.Tests.X509;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.X509;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -266,7 +266,7 @@ internal static class Fido2AttestationTestVectors
                 {
                     //Drop the [0] version and [3] extensions fields: their absence is exactly what
                     //makes the rewritten TBSCertificate encode as X.509 version 1.
-                    tbsReader.ReadEncodedValue();
+                    _ = tbsReader.ReadEncodedValue();
                 }
                 else
                 {
@@ -468,7 +468,7 @@ internal static class Fido2AttestationTestVectors
     internal static byte[] EncodeAaguidExtensionValue(Guid aaguid)
     {
         Span<byte> aaguidBytes = stackalloc byte[16];
-        aaguid.TryWriteBytes(aaguidBytes, bigEndian: true, out _);
+        _ = aaguid.TryWriteBytes(aaguidBytes, bigEndian: true, out _);
 
         var writer = new AsnWriter(AsnEncodingRules.DER);
         writer.WriteOctetString(aaguidBytes);

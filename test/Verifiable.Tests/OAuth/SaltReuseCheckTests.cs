@@ -1,6 +1,4 @@
-using Verifiable.Core;
 using Verifiable.Core.Assessment;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Validation;
 
 namespace Verifiable.Tests.OAuth;
@@ -46,7 +44,7 @@ internal sealed class SaltReuseCheckTests
     {
         ValidationContext context = new()
         {
-            Context = new ExchangeContext(),
+            Context = [],
             Now = Now,
             SaltReused = saltReused
         };

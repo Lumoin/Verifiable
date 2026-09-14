@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.StatusList;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Tests.DataIntegrity;

@@ -1,4 +1,3 @@
-using System;
 using Lumoin.Veritas.Cbor;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -54,27 +53,27 @@ public static class CtapMakeCredentialResponseCborReader
 
                 switch(key)
                 {
-                    case(WellKnownCtapMakeCredentialResponseKeys.Fmt):
+                    case WellKnownCtapMakeCredentialResponseKeys.Fmt:
                     {
                         fmt = reader.ReadTextString();
                         break;
                     }
-                    case(WellKnownCtapMakeCredentialResponseKeys.AuthData):
+                    case WellKnownCtapMakeCredentialResponseKeys.AuthData:
                     {
                         authData = reader.ReadByteString();
                         break;
                     }
-                    case(WellKnownCtapMakeCredentialResponseKeys.AttStmt):
+                    case WellKnownCtapMakeCredentialResponseKeys.AttStmt:
                     {
                         attStmt = reader.ReadEncodedValue().ToArray();
                         break;
                     }
-                    case(WellKnownCtapMakeCredentialResponseKeys.EpAtt):
+                    case WellKnownCtapMakeCredentialResponseKeys.EpAtt:
                     {
                         epAtt = reader.ReadBoolean();
                         break;
                     }
-                    case(WellKnownCtapMakeCredentialResponseKeys.LargeBlobKey):
+                    case WellKnownCtapMakeCredentialResponseKeys.LargeBlobKey:
                     {
                         largeBlobKey = reader.ReadByteString();
                         break;

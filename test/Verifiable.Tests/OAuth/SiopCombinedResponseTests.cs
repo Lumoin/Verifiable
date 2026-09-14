@@ -1,19 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
-using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Dcql;
-using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
-using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Wallet;
 using Verifiable.OAuth.Validation;
@@ -197,7 +190,7 @@ internal sealed class SiopCombinedResponseTests
             Assert.AreEqual(RequestNonce, parsed.KbJwtNonce);
             Assert.AreEqual(WrongAudience, parsed.KbJwtAud);
 
-            ExchangeContext exchangeContext = new();
+            ExchangeContext exchangeContext = [];
             ValidationContext validationContext = new()
             {
                 Context = exchangeContext,

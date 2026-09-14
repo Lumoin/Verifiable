@@ -1,9 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
 namespace Verifiable.Cryptography.Pki;
 
 /// <summary>
@@ -57,7 +51,7 @@ public enum TrustedListParseStatus
 /// The outcome of <see cref="ParseTrustedListDelegate"/>. On success it owns a <see cref="TrustedList"/> (and
 /// every certificate that list's tree carries); the caller disposes it. On failure it owns nothing.
 /// </summary>
-public sealed class TrustedListParseResult : IDisposable
+public sealed class TrustedListParseResult: IDisposable
 {
     /// <summary>The parse outcome; <see cref="TrustedListParseStatus.Valid"/> is the only success.</summary>
     public required TrustedListParseStatus Status { get; init; }

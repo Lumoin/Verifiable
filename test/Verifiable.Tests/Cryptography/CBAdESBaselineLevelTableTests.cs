@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -101,7 +98,7 @@ internal sealed class CBAdESBaselineLevelTableTests
             Assert.AreSequenceEqual([expectedCardinality], row.Cardinality!.ValuesAt(level).ToArray(), $"{requirementId} ({row.Name}) cardinality at {level}.");
         }
 
-        Assert.IsInstanceOfType<AdESInternalClauseReference>(row.Reference);
+        _ = Assert.IsInstanceOfType<AdESInternalClauseReference>(row.Reference);
         Assert.AreEqual(expectedReferenceClause, ((AdESInternalClauseReference)row.Reference!).Clause, $"{requirementId} ({row.Name}) References clause.");
     }
 
@@ -140,7 +137,7 @@ internal sealed class CBAdESBaselineLevelTableTests
         }
 
         Assert.AreEqual(AdESTableRowKind.HeaderParameter, alg.Kind);
-        Assert.IsInstanceOfType<AdESInternalClauseReference>(alg.Reference);
+        _ = Assert.IsInstanceOfType<AdESInternalClauseReference>(alg.Reference);
         Assert.AreEqual("5.1.2", ((AdESInternalClauseReference)alg.Reference!).Clause);
     }
 
@@ -422,7 +419,7 @@ internal sealed class CBAdESBaselineLevelTableTests
         {
             foreach(string letter in row.Annotations.RequirementLetters)
             {
-                seenLetters.Add(letter);
+                _ = seenLetters.Add(letter);
             }
         }
 
@@ -481,7 +478,7 @@ internal sealed class CBAdESBaselineLevelTableTests
     {
         Assert.AreEqual(10, CBAdESBaselineLevelTable.Rows.Count(row => row.Kind == AdESTableRowKind.HeaderParameter));
         Assert.AreEqual(13, CBAdESBaselineLevelTable.Rows.Count(row => row.Kind == AdESTableRowKind.Component));
-        Assert.ContainsSingle(row => row.Kind == AdESTableRowKind.Service, CBAdESBaselineLevelTable.Rows);
+        _ = Assert.ContainsSingle(row => row.Kind == AdESTableRowKind.Service, CBAdESBaselineLevelTable.Rows);
         Assert.AreEqual(2, CBAdESBaselineLevelTable.Rows.Count(row => row.Kind == AdESTableRowKind.ServiceProvisionOption));
     }
 

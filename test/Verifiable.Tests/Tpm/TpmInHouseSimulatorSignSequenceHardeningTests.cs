@@ -1,8 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -11,11 +9,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -86,10 +79,10 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_SignSequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(primary.ObjectHandle, out TransientKeyState? maybeStartingKey), "The starting key must be present in the captured post-Start state.");
-        TransientKeyState startingKey = maybeStartingKey!;
+        TransientKeyState startingKey = maybeStartingKey;
 
         TpmiDhObject reloadedHandle = TpmiDhObject.FromValue(ReloadedSigningKeyHandleValue);
         TransientKeyState nameEqualCopyAtANewHandle = startingKey with { Handle = reloadedHandle };
@@ -108,8 +101,8 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_SignSequenceComplete() always yields a transition — either a rejection or a declared signing action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmEccSignSequenceAction>(
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmEccSignSequenceAction>(
             nonNullResult.NextState.NextAction,
             "A key Name-equal to the one that started the sequence, loaded at a DIFFERENT handle, must produce the signing action rather than a TPM_RC_SIGN_CONTEXT_KEY rejection.");
     }
@@ -139,10 +132,10 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_SignSequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(otherKeyPrimary.ObjectHandle, out TransientKeyState? maybeOtherKey), "The other key must be present in the captured post-Start state.");
-        TransientKeyState otherKey = maybeOtherKey!;
+        TransientKeyState otherKey = maybeOtherKey;
 
         TransientKeyState otherKeyAtTheStartingHandle = otherKey with { Handle = startingKeyPrimary.ObjectHandle };
         TpmSimulatorState mutatedState = capturedState with
@@ -156,9 +149,9 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_SignSequenceComplete() always yields a transition — either a rejection or a declared signing action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
-        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        var rejection = (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
         Assert.AreEqual(
             HmacKeyHarness.HandleEncodedRc(TpmRcConstants.TPM_RC_SIGN_CONTEXT_KEY, 1), rejection.ResponseCode,
             "A different key's state installed at the sequence's OWN starting handle must still be refused with TPM_RC_SIGN_CONTEXT_KEY: the gate compares Names, not handles.");
@@ -829,10 +822,10 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
 
         TpmSimulatorState? maybeCapturedState = capture.LastState;
         Assert.IsNotNull(maybeCapturedState, "The simulator's own trace subscription must have observed at least one step by the time TPM2_SignSequenceStart() returns.");
-        TpmSimulatorState capturedState = maybeCapturedState!;
+        TpmSimulatorState capturedState = maybeCapturedState;
 
         Assert.IsTrue(capturedState.TransientObjects.TryGetValue(primary.ObjectHandle, out TransientKeyState? maybeStartingKey), "The starting key must be present in the captured post-Start state.");
-        TransientKeyState startingKey = maybeStartingKey!;
+        TransientKeyState startingKey = maybeStartingKey;
 
         TransientKeyState flippedKey = flipAttributes(startingKey);
         TpmSimulatorState mutatedState = capturedState with
@@ -846,10 +839,10 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
             mutatedState, request, TpmSimulatorStackSymbol.Lifecycle, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "TPM2_SignSequenceComplete() always yields a transition — either a rejection or a declared signing action — never a halt.");
-        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result!;
-        Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
+        TransitionResult<TpmSimulatorState, TpmSimulatorStackSymbol> nonNullResult = result;
+        _ = Assert.IsInstanceOfType<TpmHeaderOnlyResponse>(nonNullResult.NextState.ResponseIntent, "A rejection frames a header-only response.");
 
-        return (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent!;
+        return (TpmHeaderOnlyResponse)nonNullResult.NextState.ResponseIntent;
     }
 
     /// <summary>
@@ -1138,8 +1131,8 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
         length =
             TpmHeader.HeaderSize
             + sizeof(uint)                          //Handle area: keyHandle.
-            + (sizeof(ushort) + sequenceAuth.Length) //auth: TPM2B_AUTH.
-            + (sizeof(ushort) + context.Length);     //context: TPM2B_SIGNATURE_CTX.
+            + sizeof(ushort) + sequenceAuth.Length //auth: TPM2B_AUTH.
+            + sizeof(ushort) + context.Length;     //context: TPM2B_SIGNATURE_CTX.
 
         IMemoryOwner<byte> owner = pool.Rent(length);
         try
@@ -1215,7 +1208,7 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
             var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_SESSIONS, (uint)length, (uint)TpmCcConstants.TPM_CC_SequenceUpdate);
             header.WriteTo(ref writer);
             writer.WriteUInt32(sequenceHandle);
-            writer.WriteUInt32((uint)PasswordSlotSize);
+            writer.WriteUInt32(PasswordSlotSize);
             writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
             writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
             writer.WriteByte((byte)TpmaSession.CONTINUE_SESSION);
@@ -1293,7 +1286,7 @@ internal sealed class TpmInHouseSimulatorSignSequenceHardeningTests
             + (2 * sizeof(uint))                //Handle area: @sequenceHandle then @keyHandle.
             + sizeof(uint)                      //authorizationSize.
             + actualAuthorizationSize            //The framed session slots.
-            + (sizeof(ushort) + buffer.Length); //buffer: TPM2B_MAX_BUFFER.
+            + sizeof(ushort) + buffer.Length; //buffer: TPM2B_MAX_BUFFER.
 
         IMemoryOwner<byte> owner = pool.Rent(length);
         try

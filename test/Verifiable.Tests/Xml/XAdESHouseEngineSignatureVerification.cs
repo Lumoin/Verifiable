@@ -118,7 +118,7 @@ internal static class XAdESHouseEngineSignatureVerification
 
         ECParameters ecParameters = ecdsaPublicKey.ExportParameters(false);
 
-        return EllipticCurveUtilities.Compress(ecParameters.Q.X!, ecParameters.Q.Y!);
+        return EllipticCurveUtilities.Compress(ecParameters.Q.X, ecParameters.Q.Y);
     }
 
 

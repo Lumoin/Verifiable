@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Transport;
@@ -236,7 +233,7 @@ public static class DidCommHttpTransport
         }
 
         //Content-Type is passed through verbatim, whatever the endpoint reported (or none) — no interpretation.
-        response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? replyMediaType);
+        _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? replyMediaType);
 
         //The pooled copy is the LAST operation before minting Accepted, so no throw window opens between
         //renting the lease and the result taking ownership of it.

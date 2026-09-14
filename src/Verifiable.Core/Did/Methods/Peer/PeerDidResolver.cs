@@ -1,13 +1,9 @@
-using System;
 using System.Buffers;
 using System.Buffers.Text;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.Did.Methods.Peer;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;

@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
@@ -40,7 +37,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingSignaturePolicyStoreWithNullContentThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESSignaturePolicyStore(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESSignaturePolicyStore(null!));
     }
 
 
@@ -89,7 +86,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingUnsignedHeaderElementSignaturePolicyStoreWithNullStoreThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESUnsignedHeaderElementSignaturePolicyStore(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESUnsignedHeaderElementSignaturePolicyStore(null!));
     }
 
 
@@ -100,7 +97,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingValidationDataWithNeitherCertificateNorRevocationValuesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESValidationData());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESValidationData());
     }
 
 
@@ -111,7 +108,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingValidationDataWithEmptyCertificateValuesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESValidationData(certificateValues: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESValidationData(certificateValues: []));
     }
 
 
@@ -122,7 +119,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationValuesWithEveryMemberAbsentThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues());
     }
 
 
@@ -133,7 +130,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationValuesWithEmptyCrlValuesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues(crlValues: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues(crlValues: []));
     }
 
 
@@ -144,7 +141,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationValuesWithEmptyOcspValuesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues(ocspValues: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues(ocspValues: []));
     }
 
 
@@ -155,7 +152,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationValuesWithEmptyOtherValuesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues(otherValues: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationValues(otherValues: []));
     }
 
 
@@ -166,7 +163,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingReferencesWithNeitherCertificateNorRevocationReferencesThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESReferences());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESReferences());
     }
 
 
@@ -177,7 +174,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingReferencesWithEmptyCertificateReferencesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESReferences(certificateReferences: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESReferences(certificateReferences: []));
     }
 
 
@@ -188,7 +185,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationReferencesWithEveryMemberAbsentThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences());
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences());
     }
 
 
@@ -199,7 +196,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationReferencesWithEmptyCrlReferencesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences(crlReferences: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences(crlReferences: []));
     }
 
 
@@ -210,7 +207,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationReferencesWithEmptyOcspReferencesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences(ocspReferences: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences(ocspReferences: []));
     }
 
 
@@ -226,7 +223,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingRevocationReferencesWithEmptyOtherReferencesArrayThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences(otherReferences: []));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new CBAdESRevocationReferences(otherReferences: []));
     }
 
 
@@ -241,7 +238,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingCertificateReferenceWithNullThumbprintThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCertificateReference(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCertificateReference(null!));
     }
 
 
@@ -254,7 +251,7 @@ internal sealed class CBAdESUnsignedComponentTests
     {
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "crl reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCrlReference(null!, digest));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCrlReference(null!, digest));
     }
 
 
@@ -267,7 +264,7 @@ internal sealed class CBAdESUnsignedComponentTests
     {
         var hashAlgorithm = new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCrlReference(hashAlgorithm, null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESCrlReference(hashAlgorithm, null!));
     }
 
 
@@ -280,7 +277,7 @@ internal sealed class CBAdESUnsignedComponentTests
     {
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "ocsp reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(null!, digest, CreateOcspIdentifierFixture()));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(null!, digest, CreateOcspIdentifierFixture()));
     }
 
 
@@ -293,7 +290,7 @@ internal sealed class CBAdESUnsignedComponentTests
     {
         var hashAlgorithm = new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(hashAlgorithm, null!, CreateOcspIdentifierFixture()));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(hashAlgorithm, null!, CreateOcspIdentifierFixture()));
     }
 
 
@@ -307,7 +304,7 @@ internal sealed class CBAdESUnsignedComponentTests
         using DigestValue digest = await CreateDigestAsync(WellKnownCoseAlgorithms.Sha256, "ocsp reference digest"u8.ToArray(), TestContext.CancellationToken).ConfigureAwait(false);
         var hashAlgorithm = new AdESDigestAlgorithmIntegerIdentifier(WellKnownCoseAlgorithms.Sha256);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(hashAlgorithm, digest, null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspReference(hashAlgorithm, digest, null!));
     }
 
 
@@ -318,7 +315,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingOcspIdentifierWithNullResponderThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspIdentifier(null!, TestClock.CanonicalEpoch));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESOcspIdentifier(null!, TestClock.CanonicalEpoch));
     }
 
 
@@ -358,7 +355,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingSignatureTimestampWithNullContainerThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESSignatureTimestamp(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESSignatureTimestamp(null!));
     }
 
 
@@ -369,7 +366,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingArchiveTimestampWithNullContainerThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESArchiveTimestamp(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESArchiveTimestamp(null!));
     }
 
 
@@ -380,7 +377,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingSignatureAndReferencesTimestampWithNullContainerThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESSignatureAndReferencesTimestamp(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESSignatureAndReferencesTimestamp(null!));
     }
 
 
@@ -391,7 +388,7 @@ internal sealed class CBAdESUnsignedComponentTests
     [TestMethod]
     public void ConstructingReferencesTimestampWithNullContainerThrows()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESReferencesTimestamp(null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => new CBAdESReferencesTimestamp(null!));
     }
 
 

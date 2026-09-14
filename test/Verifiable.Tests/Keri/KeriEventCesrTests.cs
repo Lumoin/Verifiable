@@ -1,15 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.BouncyCastle;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Keri;
 using Verifiable.Microsoft;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Keri;
@@ -367,7 +364,7 @@ internal sealed class KeriEventCesrTests
     {
         using NativeEvent native = RentNative("-JAA");
 
-        Assert.ThrowsExactly<CesrFormatException>(() => KeriEventCesr.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => KeriEventCesr.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
     }
 
 
@@ -379,7 +376,7 @@ internal sealed class KeriEventCesrTests
     {
         using NativeEvent native = RentNative(InceptionNative + "AAAA");
 
-        Assert.ThrowsExactly<CesrFormatException>(() => KeriEventCesr.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => KeriEventCesr.DecodeFieldMap(native.Memory, BaseMemoryPool.Shared));
     }
 
 
@@ -389,7 +386,7 @@ internal sealed class KeriEventCesrTests
     {
         int length = Encoding.ASCII.GetByteCount(serialization);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.ASCII.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(serialization, owner.Memory.Span);
 
         return new NativeEvent(owner, length);
     }

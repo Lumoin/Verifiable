@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Core.Model.Mdoc;
 
 /// <summary>

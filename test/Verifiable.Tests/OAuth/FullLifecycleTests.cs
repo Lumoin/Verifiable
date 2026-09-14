@@ -4,7 +4,6 @@ using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Verifiable.BouncyCastle;
-using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -14,15 +13,12 @@ using Verifiable.JCose;
 using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Introspection;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vp;
 using Verifiable.OAuth.Oid4Vp.Server;
-using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Wallet;
 using Verifiable.Tests.TestDataProviders;
@@ -157,7 +153,7 @@ internal sealed class FullLifecycleTests
                 [OAuthRequestParameterNames.GrantType] = WellKnownGrantTypes.PreAuthorizedCode,
                 [OAuthRequestParameterNames.PreAuthorizedCode] = scannedCode
             },
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, tokenResponse.StatusCode, tokenResponse.Body);
 
@@ -167,7 +163,7 @@ internal sealed class FullLifecycleTests
         //=== Step 3: the §7 Nonce Endpoint issues the proof challenge. ===
         ServerHttpResponse nonceResponse = await host.DispatchAtEndpointAsync(
             tenant, WellKnownEndpointNames.Oid4VciNonce, "POST",
-            new RequestFields(), new ExchangeContext(),
+            new RequestFields(), [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, nonceResponse.StatusCode, nonceResponse.Body);
 
@@ -294,7 +290,7 @@ internal sealed class FullLifecycleTests
             {
                 [WellKnownHttpHeaderNames.Accept] = [WellKnownMediaTypes.Application.TokenIntrospectionJwt]
             }),
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, introspection.StatusCode, introspection.Body);
@@ -338,7 +334,7 @@ internal sealed class FullLifecycleTests
         state = issuerState;
         string? mintedNonce = null;
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         host.Server.OAuth().ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
             ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
@@ -444,7 +440,7 @@ internal sealed class FullLifecycleTests
             issuer: SdJwtIssuerId,
             verifiableCredentialType: EudiPid.SdJwtVct,
             issuedAt: TimeProvider.GetUtcNow(),
-            holderConfirmation: holderJwk!,
+            holderConfirmation: holderJwk,
             claims:
             [
                 new(EudiPid.SdJwt.GivenName, "Alice"),
@@ -528,7 +524,7 @@ internal sealed class FullLifecycleTests
         Assert.IsNotNull(jwk);
 
         var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            jwk!, Pool, TestSetup.Base64UrlDecoder);
+            jwk, Pool, TestSetup.Base64UrlDecoder);
         Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
         PublicKeyMemory proofKey = new(keyBytes, proofTag);
 
@@ -571,7 +567,7 @@ internal sealed class FullLifecycleTests
         Assert.IsNotNull(enc);
 
         using AeadMessage parsedJwe = JweParsing.ParseCompact(
-            compactJwe, WellKnownJweAlgorithms.EcdhEs, enc!, TestSetup.Base64UrlDecoder, Pool);
+            compactJwe, WellKnownJweAlgorithms.EcdhEs, enc, TestSetup.Base64UrlDecoder, Pool);
         using DecryptedContent decrypted = await parsedJwe.DecryptAsync(
             recipientPrivate,
             BouncyCastleKeyAgreementFunctions.EcdhKeyAgreementDecryptP256Async,
@@ -616,7 +612,7 @@ internal sealed class FullLifecycleTests
                 [WellKnownHttpHeaderNames.Authorization] = ["Bearer " + accessToken]
             }),
             jsonBody,
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 }

@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Cryptography;
@@ -117,7 +115,7 @@ internal sealed class HkdfTests
     [TestMethod]
     public async Task NonPositiveOutputIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Hkdf.ExpandAsync(HashAlgorithmName.SHA256, Convert.FromHexString(TestCase2Prk), ReadOnlyMemory<byte>.Empty, 0,
                 BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -129,7 +127,7 @@ internal sealed class HkdfTests
     [TestMethod]
     public async Task OutputLongerThanTwoHundredFiftyFiveHashLensIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Hkdf.ExpandAsync(HashAlgorithmName.SHA256, Convert.FromHexString(TestCase2Prk), ReadOnlyMemory<byte>.Empty, (255 * 32) + 1,
                 BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }

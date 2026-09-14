@@ -108,7 +108,7 @@ internal sealed class AndroidKeyAttestationEdgeCaseTests
             trustAnchors: null,
             omitRequireTeeEnforcedAuthorizations: true);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
     }
 
 

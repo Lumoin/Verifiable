@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Fido2;
 

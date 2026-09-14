@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.JCose;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;

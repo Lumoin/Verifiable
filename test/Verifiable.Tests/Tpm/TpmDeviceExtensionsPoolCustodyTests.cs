@@ -1,9 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Counter;
@@ -18,10 +17,6 @@ using Verifiable.Tpm.Extensions.Seal;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -368,7 +363,7 @@ internal sealed class TpmDeviceExtensionsPoolCustodyTests
             if(commandCode == (uint)TpmCcConstants.TPM_CC_GetCapability)
             {
                 uint capability = BinaryPrimitives.ReadUInt32BigEndian(span[10..14]);
-                if(capability == (uint)TpmCapConstants.TPM_CAP_ALGS || capability == (uint)TpmCapConstants.TPM_CAP_PCRS)
+                if(capability is (uint)TpmCapConstants.TPM_CAP_ALGS or (uint)TpmCapConstants.TPM_CAP_PCRS)
                 {
                     return ValueTask.FromResult(EmptyCapabilityListResponse(pool, capability));
                 }

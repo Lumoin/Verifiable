@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Spec.Structures;
@@ -127,7 +125,7 @@ public sealed class Tpm2bSensitiveCreate: IDisposable
     /// Gets the serialized size of this structure.
     /// </summary>
     public int SerializedSize => sizeof(ushort) + Sensitive.SerializedSize;
-    
+
 
     /// <summary>
     /// Writes this structure to a TPM writer.

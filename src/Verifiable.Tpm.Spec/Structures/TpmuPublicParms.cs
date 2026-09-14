@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Constants;
 
@@ -179,37 +178,37 @@ public readonly struct TpmuPublicParms: IEquatable<TpmuPublicParms>
     {
         switch(Type)
         {
-            case(TpmAlgIdConstants.TPM_ALG_RSA):
+            case TpmAlgIdConstants.TPM_ALG_RSA:
             {
                 RsaDetail!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_ECC):
+            case TpmAlgIdConstants.TPM_ALG_ECC:
             {
                 EccDetail!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_MLDSA):
+            case TpmAlgIdConstants.TPM_ALG_MLDSA:
             {
                 MlDsaDetail!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_HASH_MLDSA):
+            case TpmAlgIdConstants.TPM_ALG_HASH_MLDSA:
             {
                 HashMlDsaDetail!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_MLKEM):
+            case TpmAlgIdConstants.TPM_ALG_MLKEM:
             {
                 MlKemDetail!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_KEYEDHASH):
+            case TpmAlgIdConstants.TPM_ALG_KEYEDHASH:
             {
                 KeyedHashDetail!.Value.WriteTo(ref writer);
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_SYMCIPHER):
+            case TpmAlgIdConstants.TPM_ALG_SYMCIPHER:
             {
                 SymDetail!.Value.WriteTo(ref writer);
                 break;

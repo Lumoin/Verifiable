@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet.States;
 

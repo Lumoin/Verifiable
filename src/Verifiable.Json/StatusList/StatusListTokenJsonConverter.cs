@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.StatusList;
@@ -85,7 +84,7 @@ public sealed class StatusListTokenJsonConverter: JsonConverter<StatusListToken>
                 }
 
                 string propertyName = reader.GetString()!;
-                reader.Read();
+                _ = reader.Read();
 
                 switch(propertyName)
                 {

@@ -53,7 +53,6 @@ env:
     Verifiable.Foundation
     Verifiable.JCose
     Verifiable.Json
-    Verifiable.JsonPointer
     Verifiable.Keri
     Verifiable.Libsodium
     Verifiable.Microsoft
@@ -207,7 +206,7 @@ jobs:
     # The test executable has no file extension on Linux/macOS, so the same
     # dotnet-coverage command (which finds the binary by name) works on every OS.
     - name: Test
-      run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net10.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
+      run: dotnet tool run dotnet-coverage collect --output '${{ github.workspace }}/reports/coverage.cobertura.xml' --output-format cobertura '${{ github.workspace }}/test/${{ env.VERIFIABLE_TESTS }}/bin/${{ env.BUILD_CONFIGURATION }}/net11.0/${{ env.VERIFIABLE_TESTS }}' --report-trx --report-trx-filename testresults.trx --results-directory '${{ github.workspace }}/reports'
       timeout-minutes: 15
 
     # Mutation testing (Stryker.NET) is disabled in CI for two reasons:
@@ -504,7 +503,7 @@ jobs:
           Windows-ARM64) rid=win-arm64 ;;
           *) echo "Unsupported host ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
         esac
-        bin="src/Verifiable/bin/${BUILD_CONFIGURATION}/net10.0/${rid}/publish/Verifiable"
+        bin="src/Verifiable/bin/${BUILD_CONFIGURATION}/net11.0/${rid}/publish/Verifiable"
         if [ -f "${bin}.exe" ]; then bin="${bin}.exe"; fi
         echo "Running native AOT binary: ${bin}"
         out="$("${bin}" did create 42 conformance-check)"
@@ -528,7 +527,7 @@ jobs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: cli-binaries-${{ matrix.os }}
-        path: src/Verifiable/bin/Release/net10.0/*/publish/Verifiable*
+        path: src/Verifiable/bin/Release/net11.0/*/publish/Verifiable*
         retention-days: 30
 
   pack-cli-pointer:

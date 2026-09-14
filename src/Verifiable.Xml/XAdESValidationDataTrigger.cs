@@ -169,6 +169,9 @@ public static class XAdESValidationDataTrigger
                         && HasNonEmptyMatchingChild(table, entry.ElementIndex, matchingChildLocalName)
                         ? hasNonEmptyAnyValidationDataChild = true
                         : false,
+
+                //An entry the classifier recognized as none of the three signals raises nothing.
+                TriggerSignal.None => false,
                 _ => false
             };
         }

@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -245,7 +242,7 @@ internal sealed class MlDsaCmsVerificationTests
         foreach(CmsSignedAttribute attribute in reference.SignedAttributes)
         {
             Assert.IsTrue(other.TryGetSignedAttribute(attribute.AttributeType, out CmsSignedAttribute? match), $"The managed backend must surface the signed attribute {attribute.AttributeType}.");
-            Assert.IsTrue(attribute.AsReadOnlySpan().SequenceEqual(match!.AsReadOnlySpan()), $"The signed attribute {attribute.AttributeType} must have the same value under the managed backend.");
+            Assert.IsTrue(attribute.AsReadOnlySpan().SequenceEqual(match.AsReadOnlySpan()), $"The signed attribute {attribute.AttributeType} must have the same value under the managed backend.");
         }
     }
 

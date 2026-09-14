@@ -1,22 +1,17 @@
-using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.DidComm;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.DidComm;
@@ -43,7 +38,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private static JwtHeaderSerializer HeaderSerializer { get; } =
         static header => JsonSerializerExtensions.SerializeToUtf8Bytes(
@@ -158,7 +153,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
         string protectedEncoded = wire["protected"]!.GetValue<string>();
         byte[] headerBytes = Base64Url.DecodeFromChars(protectedEncoded);
         JsonObject header = JsonNode.Parse(headerBytes)!.AsObject();
-        header.Remove(memberName);
+        _ = header.Remove(memberName);
 
         byte[] newHeaderBytes = Encoding.UTF8.GetBytes(header.ToJsonString());
         wire["protected"] = Base64Url.EncodeToString(newHeaderBytes);
@@ -279,7 +274,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
         Assert.IsTrue(resolution.IsSuccessful, $"'{did}' MUST resolve.");
         Assert.IsNotNull(resolution.Document);
 
-        return resolution.Document!;
+        return resolution.Document;
     }
 
 
@@ -291,7 +286,7 @@ internal sealed class DidCommEncryptedHeaderPolicyTests
         VerificationMethod method = methods[0];
         Assert.IsNotNull(method.Id);
 
-        string kid = method.Id!.StartsWith('#') ? did + method.Id : method.Id;
+        string kid = method.Id.StartsWith('#', StringComparison.Ordinal) ? did + method.Id : method.Id;
 
         return (kid, method);
     }

@@ -1,19 +1,14 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tests.X509;
@@ -80,7 +75,7 @@ internal sealed class JAdESLifecycleFlowTests
     [TestMethod]
     public async Task LifecycleFlowCreatesBBAugmentsThroughBTBLTBLTAWithLevelAwareValidationAtEachStage()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory publicKey = keyPair.PublicKey;
@@ -118,7 +113,7 @@ internal sealed class JAdESLifecycleFlowTests
         {
             Assert.IsTrue(btResult.IsValid, "The intermediate B-T signature must validate at level B-T: its sigTst imprint binds the base64url-encoded JWS Signature Value.");
             Assert.HasCount(1, btResult.Verified!.Value.Value.UnsignedHeaders!, "Only the sigTst element has been added at this point.");
-            Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(btResult.Verified.Value.Value.UnsignedHeaders![0]);
+            _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementSignatureTimestamp>(btResult.Verified.Value.Value.UnsignedHeaders![0]);
         }
 
         byte[] bltWireCopy = await JAdESSignatureAugmentation.AddValidationDataAsync(
@@ -158,7 +153,7 @@ internal sealed class JAdESLifecycleFlowTests
         {
             Assert.IsTrue(bltaResult.IsValid, "The final B-LTA signature must validate at the declared level B-LTA: sigTst, anyValData, and the arcTst prefix-bound imprint all check out.");
             Assert.HasCount(3, bltaResult.Verified!.Value.Value.UnsignedHeaders!, "sigTst, anyValData, arcTst, in that order.");
-            Assert.IsInstanceOfType<JAdESUnsignedHeaderElementArchiveTimestamp>(bltaResult.Verified.Value.Value.UnsignedHeaders![2]);
+            _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementArchiveTimestamp>(bltaResult.Verified.Value.Value.UnsignedHeaders![2]);
             Assert.AreEqual(AdESBaselineLevel.BLTA, bltaResult.Level, "A level-aware success result carries the level it was checked against.");
         }
     }
@@ -182,7 +177,7 @@ internal sealed class JAdESLifecycleFlowTests
     [TestMethod]
     public async Task LifecycleFlowWithTwoSignatureTimestampsFailsClosedWithSecondInstanceOrdinalWhenTheSecondTokenIsTamperedOnTheWire()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory publicKey = keyPair.PublicKey;
@@ -330,10 +325,10 @@ internal sealed class JAdESLifecycleFlowTests
     [TestMethod]
     public async Task LifecycleFlowInBase64UrlModeReachesBLTAAndValidatesAtEachLevelRelyingOnEmbeddedCertificates()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
 
-        (byte[] btWireCopy, byte[] bltaWireCopy, PublicKeyMemory publicKey, PrivateKeyMemory privateKey, byte[] _) =
+        (byte[] btWireCopy, byte[] bltaWireCopy, PublicKeyMemory publicKey, PrivateKeyMemory privateKey, _) =
             await BuildBase64UrlModeBaselineAsync(tsa, signingCertificate, TestContext.CancellationToken).ConfigureAwait(false);
         using PublicKeyMemory ownedPublicKey = publicKey;
         using PrivateKeyMemory ownedPrivateKey = privateKey;
@@ -355,7 +350,7 @@ internal sealed class JAdESLifecycleFlowTests
         {
             Assert.IsTrue(bltaResult.IsValid, "The full base64url-mode B-B -> B-T -> B-LTA ladder must validate at B-LTA.");
             Assert.HasCount(3, bltaResult.Verified!.Value.Value.UnsignedHeaders!, "cSig (the bootstrap element), sigTst, then arcTst.");
-            Assert.IsInstanceOfType<JAdESUnsignedHeaderElementArchiveTimestamp>(bltaResult.Verified.Value.Value.UnsignedHeaders![2]);
+            _ = Assert.IsInstanceOfType<JAdESUnsignedHeaderElementArchiveTimestamp>(bltaResult.Verified.Value.Value.UnsignedHeaders![2]);
         }
     }
 
@@ -373,7 +368,7 @@ internal sealed class JAdESLifecycleFlowTests
     [TestMethod]
     public async Task LifecycleFlowInBase64UrlModeFailsClosedWhenArcTstTextIsSwappedForAnAttackerChosenTstContainer()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
 
         (byte[] btWireCopy, byte[] bltaWireCopy, PublicKeyMemory publicKey, PrivateKeyMemory privateKey, byte[] _) =
@@ -519,7 +514,7 @@ internal sealed class JAdESLifecycleFlowTests
     [TestMethod]
     public async Task LifecycleFlowResolvesCertificateReferenceAgainstArchiveTimestampTokenEmbeddedCertificate()
     {
-        using TsaFixture tsa = TsaFixture.Create(TestContext.CancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using PublicKeyMemory publicKey = keyPair.PublicKey;
         using PrivateKeyMemory privateKey = keyPair.PrivateKey;
@@ -576,7 +571,7 @@ internal sealed class JAdESLifecycleFlowTests
             "every caller disposes that return value via its own 'using' declaration.")]
     private static async ValueTask<(byte[] FinalWireCopy, PublicKeyMemory PublicKey, PrivateKeyMemory PrivateKey, byte[] FirstArchiveTimestampTokenBytes)> BuildRenewedArchiveTimestampBaselineWithFirstTokenAsync(CancellationToken cancellationToken)
     {
-        using TsaFixture tsa = TsaFixture.Create(cancellationToken);
+        using TsaFixture tsa = TsaFixture.Create();
         using PkiCertificateMemory signingCertificate = tsa.SignerCertificate();
         var keyPair = TestKeyMaterialProvider.CreateP256KeyMaterial();
         PublicKeyMemory publicKey = keyPair.PublicKey;
@@ -900,11 +895,11 @@ internal sealed class JAdESLifecycleFlowTests
         int index = wireText.IndexOf(originalCompact, StringComparison.Ordinal);
         Assert.IsGreaterThanOrEqualTo(0, index, "The countersignature's own compact wire text must be found verbatim in the JSON document.");
 
-        int lastDot = originalCompact.LastIndexOf('.');
+        int lastDot = originalCompact.LastIndexOf('.', StringComparison.Ordinal);
         char[] chars = originalCompact.ToCharArray();
         int flipIndex = lastDot + 1;
         chars[flipIndex] = chars[flipIndex] == 'A' ? 'B' : 'A';
-        string tamperedCompact = new string(chars);
+        string tamperedCompact = new(chars);
 
         string tamperedText = string.Concat(wireText.AsSpan(0, index), tamperedCompact, wireText.AsSpan(index + originalCompact.Length));
 
@@ -966,7 +961,7 @@ internal sealed class JAdESLifecycleFlowTests
     /// generation and validation agree on what is being hashed.
     /// </summary>
     private static JAdESBase64UrlPayloadImprintSource Base64UrlPayloadSource(byte[] payloadBytes) =>
-        new JAdESBase64UrlPayloadImprintSource(Encoding.ASCII.GetBytes(TestSetup.Base64UrlEncoder(payloadBytes)));
+        new(Encoding.ASCII.GetBytes(TestSetup.Base64UrlEncoder(payloadBytes)));
 
 
     /// <summary>
@@ -1084,7 +1079,7 @@ internal sealed class JAdESLifecycleFlowTests
         }
 
 
-        public static TsaFixture Create(CancellationToken cancellationToken)
+        public static TsaFixture Create()
         {
             var timeProvider = new FakeTimeProvider(TestClock.CanonicalEpoch);
             X509ChainTestRingNode root = X509ChainTestRing.CreateRootCa(timeProvider);

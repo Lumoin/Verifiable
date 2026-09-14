@@ -1,10 +1,5 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 using Verifiable.Core;
 using Verifiable.Server.Routing;
@@ -217,6 +212,8 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
                     BuildResponse = candidate.BuildResponse,
                     ExtractCorrelationKey = candidate.ExtractCorrelationKey,
                     DiscoveryMetadataKey = candidate.DiscoveryMetadataKey,
+                    HandleNotFoundError = candidate.HandleNotFoundError,
+                    HandleNotFoundErrorDescription = candidate.HandleNotFoundErrorDescription,
                     ResolvedUri = uri
                 });
             }
@@ -303,10 +300,7 @@ public sealed class EndpointChain: IReadOnlyList<ServerEndpoint>
             //assertion below can verify at most one endpoint matched; in
             //release builds the loop short-circuits at the first match and
             //the assertion is compiled out.
-            if(firstMatch is null)
-            {
-                firstMatch = new MatchedEndpoint(endpoint, payload);
-            }
+            firstMatch ??= new MatchedEndpoint(endpoint, payload);
 
             matchCount++;
         }

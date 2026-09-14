@@ -1,5 +1,6 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cbor;
@@ -9,17 +10,13 @@ using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
+using Verifiable.Tests.TestInfrastructure;
+using Verifiable.Tests.Tpm;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.Tpm;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -152,7 +149,7 @@ internal sealed class TpmAttestationCapstoneTests
 
                 AttestationResult result = await verify(request, TestContext.CancellationToken).ConfigureAwait(false);
 
-                Assert.IsInstanceOfType<CertifiedAttestationResult>(result, $"Expected a certified result; got {result}.");
+                _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result, $"Expected a certified result; got {result}.");
                 Assert.AreEqual(AttestationType.AttestationCa, ((CertifiedAttestationResult)result).Type);
             }
             finally

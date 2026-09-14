@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using Verifiable.JCose;
 
 namespace Verifiable.Core.StatusList;

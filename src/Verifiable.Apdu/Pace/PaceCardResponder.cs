@@ -1,10 +1,7 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -272,7 +269,7 @@ public static class PaceCardResponder
     {
         //The MRZ information is the PACE access secret.
         using IMemoryOwner<byte> mrzBytes = pool.Rent(Encoding.ASCII.GetByteCount(mrzInformation), AllocationKind.Pinned);
-        Encoding.ASCII.GetBytes(mrzInformation, mrzBytes.Memory.Span);
+        _ = Encoding.ASCII.GetBytes(mrzInformation, mrzBytes.Memory.Span);
 
         using DigestValue passwordSeed = await ComputeSha1Async(mrzBytes.Memory, pool, cancellationToken).ConfigureAwait(false);
 
@@ -339,7 +336,7 @@ public static class PaceCardResponder
     /// <summary>
     /// Resolves a registered symmetric delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

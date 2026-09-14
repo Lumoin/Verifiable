@@ -1,8 +1,5 @@
-using System;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.DidComm.ProblemReports;
 using Verifiable.DidComm.ReturnRoute;
 using Verifiable.DidComm.Routing;
@@ -236,7 +233,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     /// <param name="isEnabled">The new Live Mode state.</param>
     public void SetLiveDelivery(bool isEnabled)
     {
-        Interlocked.Exchange(ref isLiveDeliveryEnabledFlag, isEnabled ? 1 : 0);
+        _ = Interlocked.Exchange(ref isLiveDeliveryEnabledFlag, isEnabled ? 1 : 0);
     }
 
 
@@ -251,7 +248,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
     /// </summary>
     public void MarkReturnRouteEstablished()
     {
-        Interlocked.CompareExchange(ref isReturnRouteEstablishedFlag, 1, 0);
+        _ = Interlocked.CompareExchange(ref isReturnRouteEstablishedFlag, 1, 0);
     }
 
 
@@ -369,7 +366,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             //succeeds, any later frame for this thread id finds the registration gone (or settled) and is
             //dispatched unsolicited, never claimed for a caller that has already given up.
             bool isSelfSettled = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
-            PendingExchanges.TryRemove(ownRegistration);
+            _ = PendingExchanges.TryRemove(ownRegistration);
 
             return isSelfSettled
                 ? DidCommExchangeResult.TransportFailed()
@@ -412,7 +409,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             //nothing else will ever observe or dispose it. Settling first (a no-op when already settled)
             //guarantees completion.Task is complete, so awaiting and disposing it here returns that lease
             //exactly once before the exception propagates.
-            completion.TrySetResult(DidCommExchangeResult.TransportFailed());
+            _ = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
             (await completion.Task.ConfigureAwait(false)).Dispose();
 
             throw;
@@ -423,12 +420,12 @@ public sealed class DidCommSocketSession: IAsyncDisposable
             //leaves the registration observably settled: a frame arriving in the removal window then fails
             //its TrySetResult and falls through to unsolicited dispatch instead of being claimed for a
             //caller that is no longer listening. A no-op whenever the exchange already holds a result.
-            completion.TrySetResult(DidCommExchangeResult.TransportFailed());
+            _ = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
 
             //Value-comparing: removes ONLY this call's own registration. A plain TryRemove(threadId, out _)
             //could instead delete a NEWER registration that reused the same thread id after this one already
             //completed and was replaced.
-            PendingExchanges.TryRemove(ownRegistration);
+            _ = PendingExchanges.TryRemove(ownRegistration);
         }
     }
 
@@ -464,7 +461,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
                 //`completion` (a no-op when a genuine correlated reply already won the race) and rethrow.
                 //ExchangeAsync's own catch block is the one place that observes and disposes the settled
                 //result on this path.
-                completion.TrySetResult(DidCommExchangeResult.TransportFailed());
+                _ = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
 
                 throw;
             }
@@ -479,7 +476,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
         }
         catch(OperationCanceledException)
         {
-            completion.TrySetResult(DidCommExchangeResult.TransportFailed());
+            _ = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
 
             if(cancellationToken.IsCancellationRequested)
             {
@@ -629,7 +626,7 @@ public sealed class DidCommSocketSession: IAsyncDisposable
         {
             if(PendingExchanges.TryRemove(threadId, out TaskCompletionSource<DidCommExchangeResult>? completion))
             {
-                completion.TrySetResult(DidCommExchangeResult.TransportFailed());
+                _ = completion.TrySetResult(DidCommExchangeResult.TransportFailed());
             }
         }
 

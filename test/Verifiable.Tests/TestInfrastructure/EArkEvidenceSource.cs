@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 using Microsoft.Extensions.Time.Testing;
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
+using System.Xml.Linq;
 using Verifiable.Core.Assessment.EArchiving;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -162,6 +157,7 @@ internal static class EArkEvidenceSource
         EArkEvidenceKind.SignedDataObject => EArkEvidenceWellKnown.PackageEvidenceEntryName("provenance.p7s"),
         EArkEvidenceKind.Container => EArkEvidenceWellKnown.PackageEvidenceEntryName("provenance.asice"),
         EArkEvidenceKind.EvidenceRecord => EArkEvidenceWellKnown.PackageEvidenceEntryName("provenance.ers"),
+        EArkEvidenceKind.NotEvaluated => throw new ArgumentOutOfRangeException(nameof(kind), kind, "An artifact of no kind sits nowhere."),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "An artifact of no kind sits nowhere.")
     };
 

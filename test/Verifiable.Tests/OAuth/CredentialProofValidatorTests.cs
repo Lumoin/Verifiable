@@ -1,6 +1,4 @@
-using System.Buffers;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -197,8 +195,8 @@ internal sealed class CredentialProofValidatorTests
         string proof = await MintAsync(holderPrivate, holderPublic).ConfigureAwait(false);
 
         //Flip a middle character of the signature segment — stays base64url-valid, verifies false.
-        int signatureStart = proof.LastIndexOf('.') + 1;
-        int tamperIndex = signatureStart + (proof.Length - signatureStart) / 2;
+        int signatureStart = proof.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((proof.Length - signatureStart) / 2);
         char tampered = proof[tamperIndex] == 'A' ? 'B' : 'A';
         string tamperedProof = string.Concat(
             proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));
@@ -358,7 +356,7 @@ internal sealed class CredentialProofValidatorTests
                 isProofSigningAlgAcceptable: static _ => true,
                 resolveProofKey: null,
                 x509Verification: null,
-                new ExchangeContext(),
+                [],
                 TestSetup.Base64UrlEncoder,
                 TestSetup.Base64UrlDecoder,
                 TimeProvider,
@@ -431,7 +429,7 @@ internal sealed class CredentialProofValidatorTests
         tamperHeader?.Invoke(header);
         tamperPayload?.Invoke(payload);
 
-        UnsignedJwt unsigned = new(new JwtHeader(header), new JwtPayload(payload));
+        UnsignedJwt unsigned = new(new(header), new(payload));
         using JwsMessage jws = await unsigned.SignAsync(
             holderPrivate, HeaderSerializer, PayloadSerializer,
             TestSetup.Base64UrlEncoder, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -460,7 +458,7 @@ internal sealed class CredentialProofValidatorTests
             isAlgAcceptable,
             resolveProofKey: null,
             x509Verification: null,
-            new ExchangeContext(),
+            [],
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

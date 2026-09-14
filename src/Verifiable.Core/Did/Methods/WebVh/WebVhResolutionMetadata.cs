@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Core.Did.Methods.WebVh;

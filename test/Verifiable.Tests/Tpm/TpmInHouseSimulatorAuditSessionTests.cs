@@ -1,10 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -13,11 +10,6 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -59,7 +51,7 @@ internal sealed class TpmInHouseSimulatorAuditSessionTests
     /// as a <c>UINT16</c> (TPM 2.0 Library Part 3, clause 16.1, Table 75) — the <c>parameters</c> term of equation
     /// 15's cpHash, laid out here by the same writer the command input uses rather than read back from any state.
     /// </summary>
-    private static byte[] GetRandomParameters { get; } = [(byte)(RandomDrawLength >> 8), (byte)(RandomDrawLength & 0xFF)];
+    private static byte[] GetRandomParameters { get; } = [(RandomDrawLength >> 8), (RandomDrawLength & 0xFF)];
 
     /// <summary>
     /// The <c>TPMT_PUBLIC_PARMS</c> a <c>TPM2_TestParms()</c> case carries: RSA-2048 with RSASSA over SHA-256 and

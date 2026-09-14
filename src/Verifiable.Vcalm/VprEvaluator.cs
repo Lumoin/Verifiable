@@ -1,11 +1,9 @@
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Common;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Lumoin.Veritas.JsonPointer;
 using JsonPointerType = Lumoin.Veritas.JsonPointer.JsonPointer;
 
 namespace Verifiable.Vcalm;
@@ -463,7 +461,7 @@ public static class VprEvaluator
         {
             if(entry.IsIri)
             {
-                contexts.Add(entry.Iri!);
+                _ = contexts.Add(entry.Iri!);
             }
         }
 

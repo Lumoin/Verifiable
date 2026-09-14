@@ -1,12 +1,9 @@
-using System.Net.Http;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.OAuth;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -220,7 +217,7 @@ internal static class AuthCodeFlowDriver
             pinnedBrowserClient, scope, additionalParFields, cancellationToken).ConfigureAwait(false);
 
         AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
-            registration, flowId, new ExchangeContext(), clientAssertionOptions, cancellationToken)
+            registration, flowId, [], clientAssertionOptions, cancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
             $"Token exchange must succeed over the real wire. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
@@ -263,7 +260,7 @@ internal static class AuthCodeFlowDriver
         ArgumentNullException.ThrowIfNull(request);
 
         AuthCodeFlowEndpointResult refreshResult = await client.AuthCode.RefreshAsync(
-            registration, request, new ExchangeContext(), clientAssertionOptions, cancellationToken)
+            registration, request, [], clientAssertionOptions, cancellationToken)
             .ConfigureAwait(false);
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, refreshResult.Outcome,
             $"Refresh must succeed over the real wire. ErrorCode={refreshResult.ErrorCode} ErrorDescription={refreshResult.ErrorDescription}");

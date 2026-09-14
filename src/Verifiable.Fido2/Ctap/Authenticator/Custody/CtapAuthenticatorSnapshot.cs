@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;

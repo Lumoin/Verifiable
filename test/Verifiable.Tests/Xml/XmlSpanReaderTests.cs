@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Xml;
 
@@ -473,12 +472,12 @@ internal sealed class XmlSpanReaderTests
             var builder = new StringBuilder();
             for(int i = 0; i < depthCount; ++i)
             {
-                builder.Append("<e>");
+                _ = builder.Append("<e>");
             }
 
             for(int i = 0; i < depthCount; ++i)
             {
-                builder.Append("</e>");
+                _ = builder.Append("</e>");
             }
 
             return Encoding.UTF8.GetBytes(builder.ToString());

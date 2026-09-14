@@ -1,8 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.IO.Compression;
 
 namespace Verifiable.Core.StatusList;
@@ -137,7 +135,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         ArgumentNullException.ThrowIfNull(pool);
 
         int bits = (int)bitSize;
-        int byteCount = (capacity * bits + 7) / 8;
+        int byteCount = ((capacity * bits) + 7) / 8;
         IMemoryOwner<byte> owner = pool.Rent(byteCount);
 
         //Zero out for clean initial state.
@@ -398,7 +396,7 @@ public sealed class StatusList: IDisposable, IEquatable<StatusList>
         }
     }
 
-    
+
     /// <summary>
     /// Gets the underlying data as a read-only span without copying.
     /// </summary>

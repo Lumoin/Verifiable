@@ -3,7 +3,6 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;

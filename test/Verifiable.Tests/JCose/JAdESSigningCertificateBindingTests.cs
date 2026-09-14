@@ -1,14 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text.Json;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -74,9 +70,9 @@ internal sealed class JAdESSigningCertificateBindingTests
 
         Assert.IsTrue(result.IsValid, result.Failure?.Message);
         Assert.IsNotNull(result.Verified);
-        Assert.IsTrue(result.Verified!.Value.IsIdentityBound, "The certificate-accepting overload must mint Bound, not Asserted.");
+        Assert.IsTrue(result.Verified.Value.IsIdentityBound, "The certificate-accepting overload must mint Bound, not Asserted.");
         Assert.IsTrue(result.Verified.Value.Provenance is BoundProvenance, "The minted provenance must be a BoundProvenance instance.");
-        var bound = (BoundProvenance)result.Verified.Value.Provenance!;
+        var bound = (BoundProvenance)result.Verified.Value.Provenance;
         Assert.AreEqual(ResolutionSource.CertificateDigest, bound.Source);
         Assert.AreEqual(VerificationRelationship.SignerCertificate, bound.Relationship);
         Assert.AreEqual(expectedKeyId, bound.Identity?.Value);
@@ -125,7 +121,7 @@ internal sealed class JAdESSigningCertificateBindingTests
 
         Assert.IsFalse(result.IsValid, "The digest commitment mismatch must refuse the whole validation, never silently mint an unbound label.");
         Assert.IsNull(result.Verified);
-        Assert.IsInstanceOfType<JAdESSigningCertificateBindingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<JAdESSigningCertificateBindingFailure>(result.Failure);
         Assert.IsNotNull(result.Headers, "The decoded facts must still be reachable through Headers even on a binding refusal.");
     }
 
@@ -168,7 +164,7 @@ internal sealed class JAdESSigningCertificateBindingTests
 
         Assert.IsTrue(result.IsValid, result.Failure?.Message);
         Assert.IsNotNull(result.Verified);
-        Assert.IsFalse(result.Verified!.Value.IsIdentityBound, "The bare-key overload must never bind -- it is the honest BYOK primitive.");
+        Assert.IsFalse(result.Verified.Value.IsIdentityBound, "The bare-key overload must never bind -- it is the honest BYOK primitive.");
         Assert.IsTrue(result.Verified.Value.Provenance is AssertedProvenance, "The bare-key overload's provenance must be an AssertedProvenance label.");
     }
 

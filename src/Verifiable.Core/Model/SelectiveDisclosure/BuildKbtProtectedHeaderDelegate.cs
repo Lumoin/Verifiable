@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.JCose;
 
 namespace Verifiable.Core.Model.SelectiveDisclosure;

@@ -853,8 +853,8 @@ namespace Verifiable.JCose
             //decoder is base58-only.
             IMemoryOwner<byte> prefixedBytes = multibasePrefix switch
             {
-                var p when p.Equals(MultibaseAlgorithms.Base58Btc) => multibaseDecoder(multibaseKey.AsSpan(1), memoryPool),
-                var p when p.Equals(MultibaseAlgorithms.Base64Url) => DecodeBase64UrlPayload(multibaseKey.AsSpan(1), memoryPool),
+                var p when p == MultibaseAlgorithms.Base58Btc => multibaseDecoder(multibaseKey.AsSpan(1), memoryPool),
+                var p when p == MultibaseAlgorithms.Base64Url => DecodeBase64UrlPayload(multibaseKey.AsSpan(1), memoryPool),
                 _ => throw new ArgumentException(
                     $"Multibase key must start with '{MultibaseAlgorithms.Base58Btc}' (base58btc) or '{MultibaseAlgorithms.Base64Url}' (base64url).",
                     nameof(multibaseKey))

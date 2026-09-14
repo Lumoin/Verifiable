@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 
 namespace Verifiable.Tests.JCose;
@@ -356,7 +354,7 @@ internal sealed class CBAdESMessageImprintTests
             signatureValue: [0x03],
             uHeadersEncodedArray: null);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             CBAdESMessageImprints.TryBuildArchiveTimestampGenerationMessageImprintInput(coseSign1WithSignerHeader, BaseMemoryPool.Shared, out _));
 
         CBAdESArchiveTimestampImprintContext coseSignWithoutSignerHeader = BuildArcTstContext(
@@ -368,7 +366,7 @@ internal sealed class CBAdESMessageImprintTests
             signatureValue: [0x03],
             uHeadersEncodedArray: null);
 
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             CBAdESMessageImprints.TryBuildArchiveTimestampGenerationMessageImprintInput(coseSignWithoutSignerHeader, BaseMemoryPool.Shared, out _));
     }
 
@@ -642,7 +640,7 @@ internal sealed class CBAdESMessageImprintTests
 
             Assert.AreEqual((byte)(validationBytes[0] + 2), generationBytes[0], "The array-length header must differ by exactly the two excluded elements.");
             Assert.IsTrue(
-                validationBytes[1..].SequenceEqual(generationBytes.Slice(1, validationBytes.Length - 1)),
+                validationBytes[1..].SequenceEqual(generationBytes[1..validationBytes.Length]),
                 "Every element up to the excluded suffix must be byte-identical between generation and validation.");
 
             byte[] expectedSuffix = [.. EncodeCanonicalByteString(item2), .. EncodeCanonicalByteString(item3)];

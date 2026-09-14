@@ -1,6 +1,3 @@
-using System;
-using Verifiable.Tpm.Spec;
-
 namespace Verifiable.Tests.Tpm;
 
 /// <summary>

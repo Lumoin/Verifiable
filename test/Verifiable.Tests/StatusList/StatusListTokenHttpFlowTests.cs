@@ -1,22 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.StatusList;
 using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -86,13 +79,13 @@ internal sealed class StatusListTokenHttpFlowTests
             GuardedHttpClientTransport.BuildSingleHopTransport(httpClient));
         ExchangeContext context = TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy);
 
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
             ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(issuerPublic));
         ResolveVerifiedStatusListTokenDelegate resolveVerified = StatusListTokenResolvers.BuildResolving(
             transport, context, resolveIssuerKey, TestSetup.Base64UrlDecoder, JwtPartJson.Default, BaseMemoryPool.Shared, Clock);
 
         var fetchedTokens = new List<StatusListToken>();
-        ResolveVerifiedStatusListTokenDelegate resolve = async (context, cancellationToken) =>
+        async ValueTask<ResolvedStatusListToken?> resolve(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             ResolvedStatusListToken? resolved = await resolveVerified(context, cancellationToken).ConfigureAwait(false);
             if(resolved is not null)
@@ -101,7 +94,7 @@ internal sealed class StatusListTokenHttpFlowTests
             }
 
             return resolved;
-        };
+        }
 
         try
         {
@@ -171,7 +164,7 @@ internal sealed class StatusListTokenHttpFlowTests
 
             //fetched is disposed by this method's own finally block below, so the resolution does not
             //own it — CheckAsync's own disposal of a not-owned resolution is a no-op.
-            ResolveVerifiedStatusListTokenDelegate resolve = (_, _) => ValueTask.FromResult<ResolvedStatusListToken?>(
+            ValueTask<ResolvedStatusListToken?> resolve(StatusListResolutionContext _1, CancellationToken _2 = default) => ValueTask.FromResult<ResolvedStatusListToken?>(
                 new ResolvedStatusListToken { Token = fetched, ResolvedAt = Clock.GetUtcNow(), IsTokenOwned = false });
 
             CredentialStatusOutcome revoked = await CredentialStatusGate.CheckAsync(

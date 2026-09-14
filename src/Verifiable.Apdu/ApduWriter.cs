@@ -1,4 +1,3 @@
-using System;
 using System.Buffers.Binary;
 
 namespace Verifiable.Apdu;
@@ -31,12 +30,12 @@ public ref struct ApduWriter
     /// <summary>
     /// Gets the number of bytes written so far.
     /// </summary>
-    public int Written => written;
+    public readonly int Written => written;
 
     /// <summary>
     /// Gets the number of bytes remaining in the buffer.
     /// </summary>
-    public int Remaining => remaining.Length;
+    public readonly int Remaining => remaining.Length;
 
     /// <summary>
     /// Writes a single byte.

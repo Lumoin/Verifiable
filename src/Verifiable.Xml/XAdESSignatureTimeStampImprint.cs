@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Base;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -82,7 +82,7 @@ public static class XAdESSignatureTimeStampImprint
             //tag parameter of its own); every sibling imprint engine's PUBLIC result carries
             //BufferTags.XmlDigestInput instead, so this single-step engine retags to match rather than leaking
             //the intermediate tag — the one-element copy is negligible against a SignatureValue's own size.
-            imprintInput = PooledMemory.FromBytes(canonicalOctets!.AsReadOnlySpan(), pool, BufferTags.XmlDigestInput);
+            imprintInput = PooledMemory.FromBytes(canonicalOctets.AsReadOnlySpan(), pool, BufferTags.XmlDigestInput);
             error = default;
 
             return true;

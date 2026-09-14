@@ -1,7 +1,6 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -54,7 +53,7 @@ internal sealed class Oid4VciNonceEndpointTests
             WellKnownEndpointNames.Oid4VciNonce,
             "POST",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, response.StatusCode, response.Body);
@@ -87,7 +86,7 @@ internal sealed class Oid4VciNonceEndpointTests
             WellKnownEndpointNames.Oid4VciNonce,
             "POST",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,

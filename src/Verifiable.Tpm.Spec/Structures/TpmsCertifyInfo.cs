@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 
 namespace Verifiable.Tpm.Spec.Structures;

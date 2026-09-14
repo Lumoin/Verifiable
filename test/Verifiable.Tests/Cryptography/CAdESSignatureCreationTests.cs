@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -248,7 +244,7 @@ internal sealed class CAdESSignatureCreationTests
         var md5 = new PkiDigestAlgorithm(new AlgorithmIdentifier("1.2.840.113549.2.5"), CryptoTags.Sha256Digest, 16);
         using var certificate = MintP256Certificate();
 
-        await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, null, md5, SigningTime, algorithmConstraints: null,
@@ -270,7 +266,7 @@ internal sealed class CAdESSignatureCreationTests
     {
         using var certificate = MintP256Certificate();
 
-        await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, null, new PkiDigestAlgorithm(AlgorithmIdentifier.Sha1, CryptoTags.Sha256Digest, 20), SigningTime,
@@ -292,7 +288,7 @@ internal sealed class CAdESSignatureCreationTests
             Entries = [new AlgorithmReliabilityEntry(AlgorithmIdentifier.Sha256, null, TrustedUntil: SigningTime.AddDays(-1))]
         };
 
-        await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, null, PkiDigestAlgorithm.Sha256, SigningTime, constraints,
@@ -328,7 +324,7 @@ internal sealed class CAdESSignatureCreationTests
         using(ed25519Keys.PublicKey)
         using(ed25519Keys.PrivateKey)
         {
-            await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<NotSupportedException>(async () =>
             {
                 using CmsSignedData _ = await CAdESSignatureCreation.SignAsync(
                     certificate, ed25519Keys.PrivateKey, Content, null, SigningTime, additionalCertificates: null,
@@ -364,7 +360,7 @@ internal sealed class CAdESSignatureCreationTests
             using CmsVerifiedContent verified = await verify(signedData, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
             Assert.IsTrue(verified.TryGetSignedAttribute(CAdESSignatureFacts.SigningCertificateV2AttributeOid, out CmsSignedAttribute? attribute));
 
-            var reader = new AsnReader(attribute!.AsReadOnlyMemory(), AsnEncodingRules.DER);
+            var reader = new AsnReader(attribute.AsReadOnlyMemory(), AsnEncodingRules.DER);
             AsnReader signingCertificate = reader.ReadSequence();
             AsnReader certs = signingCertificate.ReadSequence();
             AsnReader essCertId = certs.ReadSequence();
@@ -406,7 +402,7 @@ internal sealed class CAdESSignatureCreationTests
             Assert.IsFalse(withoutVerified.TryGetSignedAttribute(CmsAlgorithmProtectionOid, out _), "Opting out must not add the attribute.");
             Assert.IsTrue(withVerified.TryGetSignedAttribute(CmsAlgorithmProtectionOid, out CmsSignedAttribute? attribute), "Opting in must add the attribute.");
 
-            var reader = new AsnReader(attribute!.AsReadOnlyMemory(), AsnEncodingRules.DER);
+            var reader = new AsnReader(attribute.AsReadOnlyMemory(), AsnEncodingRules.DER);
             AsnReader protection = reader.ReadSequence();
             AsnReader digestAlgorithm = protection.ReadSequence();
             Assert.AreEqual(WellKnownOids.Sha256, digestAlgorithm.ReadObjectIdentifier(), "digestAlgorithm must name the digest this signer used.");
@@ -463,14 +459,14 @@ internal sealed class CAdESSignatureCreationTests
     {
         using var certificate = MintP256Certificate();
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, null, null, PkiDigestAlgorithm.Sha256, SigningTime, null, null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
         byte[] digestBytes = new byte[32];
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             using CAdESSignaturePreparation _ = await CAdESSignatureCreation.PrepareAsync(
                 certificate, Content, digestBytes, PkiDigestAlgorithm.Sha256, SigningTime, null, null, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
@@ -561,7 +557,7 @@ internal sealed class CAdESSignatureCreationTests
 
             Assert.IsTrue(facts.TryGetAttribute(CAdESSignatureFacts.MessageDigestAttributeOid, out SignatureAttributeFacts? messageDigest),
                 "Table 1: message-digest shall be present.");
-            Assert.AreEqual(SignatureAttributeScope.Signed, messageDigest!.Scope, "message-digest is a signed attribute (clause 5.1.2).");
+            Assert.AreEqual(SignatureAttributeScope.Signed, messageDigest.Scope, "message-digest is a signed attribute (clause 5.1.2).");
             Assert.IsTrue(messageDigest.IsWellFormed, "The binding must be able to decode the attribute it just produced.");
 
             Assert.AreEqual(SigningTime, facts.ClaimedSigningTime, "Table 1: signing-time shall be present and carry the caller's instant.");

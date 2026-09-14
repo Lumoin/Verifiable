@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -17,7 +16,6 @@ using Verifiable.Json.Sd;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Oid4Vp;
-using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
@@ -92,7 +90,7 @@ internal sealed class MultiHostHttpLifecycleTests
         //deployment gets its own host, state, key material, and Kestrel port.
         using VerifierKeyMaterial verifierKeys = app.RegisterClient(
             VerifierClientId, VerifierBaseUri, VerifierCapabilities);
-        app.AddHost(IssuerHostName);
+        _ = app.AddHost(IssuerHostName);
         using VerifierKeyMaterial issuerMaterial = app.RegisterDpopClientOnHost(
             IssuerHostName, IssuerClientId, IssuerClientBaseUri,
             PolicyProfile.Rfc6749WithPkce, IssuerCapabilities);
@@ -212,7 +210,7 @@ internal sealed class MultiHostHttpLifecycleTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -226,7 +224,7 @@ internal sealed class MultiHostHttpLifecycleTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "The wallet must reach ResponseSent after the HTTP direct_post.");
         PresentationVerifiedState verified =
             (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -253,7 +251,7 @@ internal sealed class MultiHostHttpLifecycleTests
         WireIssuerSeamsState state = new();
         string? mintedNonce = null;
 
-        integration.UseDefaultCredentialRequestJsonParsing();
+        _ = integration.UseDefaultCredentialRequestJsonParsing();
 
         integration.ValidatePreAuthorizedCodeAsync = (code, txCode, clientId, _, _, _) =>
             ValueTask.FromResult(string.Equals(code, PreAuthorizedCode, StringComparison.Ordinal)
@@ -315,7 +313,7 @@ internal sealed class MultiHostHttpLifecycleTests
             issuer: SdJwtIssuerId,
             verifiableCredentialType: EudiPid.SdJwtVct,
             issuedAt: TimeProvider.GetUtcNow(),
-            holderConfirmation: holderJwk!,
+            holderConfirmation: holderJwk,
             claims:
             [
                 new(EudiPid.SdJwt.GivenName, "Alice"),
@@ -397,7 +395,7 @@ internal sealed class MultiHostHttpLifecycleTests
         Assert.IsNotNull(jwk);
 
         var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            jwk!, Pool, TestSetup.Base64UrlDecoder);
+            jwk, Pool, TestSetup.Base64UrlDecoder);
         Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
         PublicKeyMemory proofKey = new(keyBytes, proofTag);
 

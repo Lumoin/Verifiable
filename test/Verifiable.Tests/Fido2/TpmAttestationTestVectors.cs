@@ -1,14 +1,9 @@
-using System.Buffers;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Tests.X509;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -207,7 +202,7 @@ internal static class TpmAttestationTestVectors
         ArgumentNullException.ThrowIfNull(key);
 
         ECParameters parameters = key.ExportParameters(includePrivateParameters: false);
-        using TpmsEccPoint point = TpmsEccPoint.Create(parameters.Q.X!, parameters.Q.Y!, BaseMemoryPool.Shared);
+        using TpmsEccPoint point = TpmsEccPoint.Create(parameters.Q.X, parameters.Q.Y, BaseMemoryPool.Shared);
 
         const TpmaObject Attributes =
             TpmaObject.FIXED_TPM | TpmaObject.FIXED_PARENT | TpmaObject.SENSITIVE_DATA_ORIGIN
@@ -325,7 +320,7 @@ internal static class TpmAttestationTestVectors
     /// <returns>The marshaled TPMT_SIGNATURE bytes.</returns>
     internal static byte[] BuildEcdsaSignatureBytes(TpmAlgIdConstants hashAlg, ReadOnlySpan<byte> r, ReadOnlySpan<byte> s)
     {
-        byte[] buffer = new byte[sizeof(ushort) + sizeof(ushort) + (sizeof(ushort) + r.Length) + (sizeof(ushort) + s.Length)];
+        byte[] buffer = new byte[sizeof(ushort) + sizeof(ushort) + sizeof(ushort) + r.Length + sizeof(ushort) + s.Length];
         var writer = new TpmWriter(buffer);
         writer.WriteUInt16((ushort)TpmAlgIdConstants.TPM_ALG_ECDSA);
         writer.WriteUInt16((ushort)hashAlg);

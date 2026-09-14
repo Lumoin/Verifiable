@@ -79,8 +79,8 @@ public sealed class MacValue: SensitiveMemory, IEquatable<MacValue>
             && MacLifetime is not null
             && Tag.TryGet(out CryptoAlgorithm algorithm))
         {
-            MacLifetime.SetTag(CryptoTelemetry.BlockCipherMac.Algorithm, algorithm.ToString());
-            MacLifetime.SetTag(CryptoTelemetry.BlockCipherMac.OutputLength, Length);
+            _ = MacLifetime.SetTag(CryptoTelemetry.BlockCipherMac.Algorithm, algorithm.ToString());
+            _ = MacLifetime.SetTag(CryptoTelemetry.BlockCipherMac.OutputLength, Length);
         }
 
         base.Dispose(disposing);

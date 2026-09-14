@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.Core.SecurityEvents;
 
@@ -38,7 +36,7 @@ public static class SsfPollJsonParsing
                 MaxEvents = SsfJsonReadHelpers.ReadOptionalInt(root, SsfPollParameterNames.MaxEvents),
                 ReturnImmediately = SsfJsonReadHelpers.ReadOptionalBool(root, SsfPollParameterNames.ReturnImmediately),
                 Acks = acks ?? [],
-                SetErrors = setErrors ?? new Dictionary<string, SsfSetError>(StringComparer.Ordinal)
+                SetErrors = setErrors ?? new(StringComparer.Ordinal)
             };
         }
         catch(Exception ex) when(SsfJsonReadHelpers.IsParseFailure(ex))
@@ -69,7 +67,7 @@ public static class SsfPollJsonParsing
 
             return new SsfPollResponse
             {
-                Sets = sets ?? new Dictionary<string, string>(StringComparer.Ordinal),
+                Sets = sets ?? new(StringComparer.Ordinal),
                 MoreAvailable = SsfJsonReadHelpers.ReadOptionalBool(root, SsfPollParameterNames.MoreAvailable) ?? false
             };
         }

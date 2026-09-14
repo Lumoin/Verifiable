@@ -343,7 +343,7 @@ public static class StatusListTokenVerification
             JwtPayload payload;
             try
             {
-                payload = new JwtPayload(partDecoder(unverified.Payload.Span));
+                payload = new(partDecoder(unverified.Payload.Span));
             }
             catch(FormatException ex)
             {
@@ -378,6 +378,12 @@ public static class StatusListTokenVerification
                     StatusListTokenClaimsDefect.RequiredClaimMissing => StatusListTokenVerificationFailure.RequiredClaimMissing,
                     StatusListTokenClaimsDefect.ClaimValueInvalid => StatusListTokenVerificationFailure.ClaimValueInvalid,
                     StatusListTokenClaimsDefect.ListUnreadable => StatusListTokenVerificationFailure.ClaimValueInvalid,
+
+                    //None is not reachable here — this branch runs only when !isRead — but is kept
+                    //mapped to the same fallback rather than a throw, matching TryFromPayload's
+                    //defence-in-depth design against escaping as a raw exception.
+                    StatusListTokenClaimsDefect.None => StatusListTokenVerificationFailure.ClaimValueInvalid,
+
                     _ => StatusListTokenVerificationFailure.ClaimValueInvalid
                 };
 

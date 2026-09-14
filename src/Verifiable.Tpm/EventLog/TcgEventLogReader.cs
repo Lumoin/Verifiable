@@ -1,10 +1,8 @@
-using System;
+using Microsoft.Win32.SafeHandles;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using Microsoft.Win32.SafeHandles;
 using Verifiable.Tpm.EventLog;
 
 namespace Verifiable.Tpm.Extensions.EventLog;
@@ -170,7 +168,7 @@ public static partial class TcgEventLogReader
             uint result = Tbsi_Get_TCG_Log(IntPtr.Zero, IntPtr.Zero, ref logSize);
 
             //TBS_E_INSUFFICIENT_BUFFER is expected on first call.
-            if(result != 0 && result != TbsInsufficientBuffer)
+            if(result is not 0 and not TbsInsufficientBuffer)
             {
                 return TpmResult<TcgEventLogData>.TransportError(result);
             }
@@ -268,7 +266,7 @@ public static partial class TcgEventLogReader
                 return TpmResult<TcgEventLogData>.TransportError((uint)LinuxErrno.EIO);
             }
 
-            uint stMode = MemoryMarshal.Read<uint>(statBuf.Slice(StModeOffset));
+            uint stMode = MemoryMarshal.Read<uint>(statBuf[StModeOffset..]);
             if((stMode & S_IFMT) != S_IFREG)
             {
                 //The path resolved to something other than a regular file.
@@ -277,7 +275,7 @@ public static partial class TcgEventLogReader
 
             //Wrap the validated descriptor in SafeFileHandle. SafeFileHandle is cross-platform
             //in .NET and wraps file descriptors on Unix systems.
-            using var safeHandle = new SafeFileHandle((IntPtr)fd, ownsHandle: true);
+            using var safeHandle = new SafeFileHandle(fd, ownsHandle: true);
             ownershipTransferred = true;
 
             using var stream = new FileStream(safeHandle, FileAccess.Read, bufferSize: 0);
@@ -402,13 +400,13 @@ public static partial class TcgEventLogReader
                     }
 
                     IMemoryOwner<byte> newOwner = pool.Rent(newSize);
-                    buffer.Slice(0, totalRead).CopyTo(newOwner.Memory);
+                    buffer[..totalRead].CopyTo(newOwner.Memory);
                     memoryOwner.Dispose();
                     memoryOwner = newOwner;
                     buffer = memoryOwner.Memory;
                 }
 
-                int bytesRead = stream.Read(buffer.Span.Slice(totalRead));
+                int bytesRead = stream.Read(buffer.Span[totalRead..]);
                 if(bytesRead == 0)
                 {
                     break;

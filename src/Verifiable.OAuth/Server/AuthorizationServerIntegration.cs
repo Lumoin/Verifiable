@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Server.Keys;
@@ -22,9 +21,12 @@ namespace Verifiable.OAuth.Server;
 /// are exposed at, and so on.
 /// </para>
 /// <para>
-/// Wire all required delegates at construction time. <see cref="Validate"/> reports
-/// any missing delegate by name in a single error message rather than failing
-/// piecemeal at request time.
+/// The seams are set at construction and altered while serving through the requested,
+/// drained, candidate-validated alteration operation described in
+/// <see href="../../../documents/AuthorizationServerDesign.md#41-live-configuration">Live configuration</see>.
+/// That operation is specified for the following implementation commits; the setters today
+/// provide neither a publication barrier nor validation invalidation. <see cref="Validate"/>
+/// reports missing delegates by name in a single error message.
 /// </para>
 /// </remarks>
 [DebuggerDisplay("AuthorizationServerIntegration Validated={IsValidated}")]
@@ -569,6 +571,15 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     public RevokeTokenDelegate? RevokeTokenAsync { get; set; }
 
     /// <summary>
+    /// Revokes one issued token by its persisted <c>jti</c> for the library-driven revocation
+    /// paths — a valid replay of an already-redeemed authorization code and reuse of a
+    /// rotated-out refresh token. Optional: see <see cref="RevokeIssuedTokenDelegate"/> for the
+    /// documented degradation when this is left unwired. Distinct from
+    /// <see cref="RevokeTokenAsync"/>, which answers the client-driven RFC 7009 request.
+    /// </summary>
+    public RevokeIssuedTokenDelegate? RevokeIssuedTokenAsync { get; set; }
+
+    /// <summary>
     /// Introspects a token at the RFC 7662 introspection endpoint on behalf of an
     /// authenticated protected resource. The endpoint activates only when the
     /// <see cref="WellKnownCapabilityIdentifiers.OAuthTokenIntrospection"/> capability
@@ -935,6 +946,13 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
     /// <summary>
     /// Validates that the required delegates on this group are set.
     /// </summary>
+    /// <remarks>
+    /// The required host seams include <see cref="ServerIntegration.DeleteFlowStateAsync"/>.
+    /// A valid code replay or refresh reuse deletes the claimed live refresh record even when
+    /// <see cref="RevokeIssuedTokenAsync"/> is unavailable, implementing the refresh-token part of
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>'s
+    /// "SHOULD revoke (when possible)" and OAuth 2.1 draft-16 §4.3.1 family revocation.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// Thrown when one or more required delegates are missing.
     /// </exception>
@@ -949,8 +967,8 @@ public sealed class AuthorizationServerIntegration: ServerIntegration
         {
             var sb = new StringBuilder(
                 "AuthorizationServerIntegration is missing required delegates: ");
-            sb.AppendJoin(", ", missing);
-            sb.Append('.');
+            _ = sb.AppendJoin(", ", missing);
+            _ = sb.Append('.');
             throw new InvalidOperationException(sb.ToString());
         }
 

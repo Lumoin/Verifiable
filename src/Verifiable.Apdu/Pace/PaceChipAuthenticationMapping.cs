@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -94,7 +91,7 @@ public static class PaceChipAuthenticationMapping
         ReadOnlySpan<byte> caData = chipAuthenticationData.AsReadOnlySpan();
         int paddedLength = Iso9797Padding.PaddedLength(caData.Length, BlockLength);
         using IMemoryOwner<byte> padded = pool.Rent(paddedLength, AllocationKind.Pinned);
-        Iso9797Padding.Pad(caData, BlockLength, padded.Memory.Span);
+        _ = Iso9797Padding.Pad(caData, BlockLength, padded.Memory.Span);
 
         (Ciphertext encrypted, _) = await encrypt(
             padded.Memory[..paddedLength], encryptionKey.AsReadOnlyMemory(), initialisationVector.Memory[..BlockLength], CryptoTags.Aes128Cbc, pool, null, cancellationToken).ConfigureAwait(false);
@@ -219,7 +216,7 @@ public static class PaceChipAuthenticationMapping
     /// <summary>
     /// Resolves a registered delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

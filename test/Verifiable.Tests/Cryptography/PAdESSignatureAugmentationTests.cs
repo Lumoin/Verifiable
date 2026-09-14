@@ -1,11 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -167,7 +165,7 @@ internal sealed class PAdESSignatureAugmentationTests
 
         var request = new PAdESBLTAugmentationRequest { PriorDocument = unsigned, Anchor = anchor, Certificates = [carrier] };
 
-        Assert.ThrowsExactly<ArgumentException>(() => PAdESSignatureAugmentation.AugmentToBLT(request, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PAdESSignatureAugmentation.AugmentToBLT(request, BaseMemoryPool.Shared));
     }
 
 

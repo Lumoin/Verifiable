@@ -1,6 +1,6 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -598,7 +598,7 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintUnreferencedDisclosure();
 
-        Assert.Throws<FormatException>(
+        _ = Assert.Throws<FormatException>(
             () => SdJwtSerializer.ParseToken(
                 compactSdJwt,
                 TestSetup.Base64UrlDecoder,
@@ -682,7 +682,7 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintSdArrayWithNonStringMember();
 
-        Assert.Throws<FormatException>(
+        _ = Assert.Throws<FormatException>(
             () => SdJwtSerializer.ParseToken(
                 compactSdJwt,
                 TestSetup.Base64UrlDecoder,
@@ -809,7 +809,7 @@ internal sealed class SdTokenPathSelectionTests
     {
         string compactSdJwt = MintRecursiveDisclosureChain(depth: 4000);
 
-        Assert.Throws<FormatException>(
+        _ = Assert.Throws<FormatException>(
             () => SdJwtSerializer.ParseToken(
                 compactSdJwt,
                 TestSetup.Base64UrlDecoder,
@@ -936,7 +936,7 @@ internal sealed class SdTokenPathSelectionTests
         foreach(SdClaimVerificationResult claimResult in result.ClaimResults)
         {
             Assert.IsTrue(claimResult.IsValid, "Every claim the presentation carries must bind to a position in the signed payload.");
-            revealed.Add(claimResult.Path);
+            _ = revealed.Add(claimResult.Path);
         }
 
         Assert.IsTrue(
@@ -1380,7 +1380,7 @@ internal sealed class SdTokenPathSelectionTests
     {
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborOptions.Lax);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
         writer.WriteByteString(UnverifiableCoseProtectedHeader.Span);
         writer.WriteStartMap(1);

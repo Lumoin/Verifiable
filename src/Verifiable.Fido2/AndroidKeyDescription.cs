@@ -209,13 +209,13 @@ public sealed record AndroidKeyDescription(ReadOnlyMemory<byte> AttestationChall
             //verification procedure.
             for(int skippedFieldIndex = 0; skippedFieldIndex < LeadingSkippedFieldCount; skippedFieldIndex++)
             {
-                keyDescriptionReader.ReadEncodedValue();
+                _ = keyDescriptionReader.ReadEncodedValue();
             }
 
             byte[] attestationChallenge = keyDescriptionReader.ReadOctetString();
 
             //uniqueId: read generically by position — not inspected by section 8.4's verification procedure.
-            keyDescriptionReader.ReadEncodedValue();
+            _ = keyDescriptionReader.ReadEncodedValue();
 
             AndroidKeyAuthorizationList softwareEnforced = ReadAuthorizationList(keyDescriptionReader.ReadSequence());
             AndroidKeyAuthorizationList teeEnforced = ReadAuthorizationList(keyDescriptionReader.ReadSequence());
@@ -263,7 +263,7 @@ public sealed record AndroidKeyDescription(ReadOnlyMemory<byte> AttestationChall
                 AsnReader purposeSet = purposeExplicit.ReadSetOf(skipSortOrderValidation: true);
                 while(purposeSet.HasData)
                 {
-                    purposes.Add(checked((int)purposeSet.ReadInteger()));
+                    _ = purposes.Add(checked((int)purposeSet.ReadInteger()));
                 }
 
                 return true;
@@ -283,7 +283,7 @@ public sealed record AndroidKeyDescription(ReadOnlyMemory<byte> AttestationChall
             //only whether the field is present at all.
             static bool AssignAllApplications(AsnReader listReader, ref bool hasAllApplications)
             {
-                listReader.ReadEncodedValue();
+                _ = listReader.ReadEncodedValue();
                 hasAllApplications = true;
 
                 return true;
@@ -294,7 +294,7 @@ public sealed record AndroidKeyDescription(ReadOnlyMemory<byte> AttestationChall
             //never interpreted.
             static bool SkipField(AsnReader listReader)
             {
-                listReader.ReadEncodedValue();
+                _ = listReader.ReadEncodedValue();
 
                 return true;
             }

@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Lds;

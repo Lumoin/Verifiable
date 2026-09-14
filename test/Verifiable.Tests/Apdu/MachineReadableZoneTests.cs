@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Apdu.Bac;
 using Verifiable.Apdu.Mrz;
 

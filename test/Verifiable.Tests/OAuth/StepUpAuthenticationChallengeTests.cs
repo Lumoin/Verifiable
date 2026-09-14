@@ -1,4 +1,3 @@
-using System;
 using Verifiable.OAuth;
 using Verifiable.OAuth.ProtectedResource;
 
@@ -166,7 +165,7 @@ internal sealed class StepUpAuthenticationChallengeTests
     [TestMethod]
     public void NegativeMaxAgeThrows()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
             () => StepUpAuthenticationChallenge.BuildChallenge(
                 WellKnownAuthenticationSchemes.Bearer, maxAgeSeconds: -1));
     }
@@ -176,7 +175,7 @@ internal sealed class StepUpAuthenticationChallengeTests
     [TestMethod]
     public void EmptySchemeThrows()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => StepUpAuthenticationChallenge.BuildChallenge(" "));
     }
 }

@@ -1,9 +1,8 @@
-using System.Linq;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Json;
+using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Builders;
 
@@ -278,7 +277,7 @@ internal sealed class CredentialBuilderTests
     {
         var subject = new CredentialSubjectInput { Id = SubjectDidExample };
 
-        await Assert.ThrowsAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentNullException>(async () =>
             await CredentialBuilder.BuildAsync(null!, subject, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -291,7 +290,7 @@ internal sealed class CredentialBuilderTests
         //The (CredentialSubjectInput) cast selects the single-subject BuildAsync overload: CredentialBuilder
         //also overloads BuildAsync over IEnumerable<CredentialSubjectInput>, and a bare null argument here
         //is ambiguous between the two.
-        await Assert.ThrowsAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentNullException>(async () =>
             await CredentialBuilder.BuildAsync(issuer, (CredentialSubjectInput)null!, TestValidFrom, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
@@ -310,20 +309,20 @@ internal sealed class CredentialBuilderTests
 
 
     [TestMethod]
-    public void BuildWithValidUntilBeforeValidFromThrows()
+    public async Task BuildWithValidUntilBeforeValidFromThrows()
     {
         var issuer = new Issuer { Id = IssuerDidWeb };
         var subject = new CredentialSubjectInput { Id = SubjectDidExample };
         var validFrom = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var validUntil = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        Assert.ThrowsAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsAsync<ArgumentException>(async () =>
             await CredentialBuilder.BuildAsync(
                 issuer,
                 subject,
                 validFrom,
                 validUntil: validUntil,
-                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false));
+                cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
 
@@ -423,7 +422,7 @@ internal sealed class CredentialBuilderTests
             .With((credential, builder, state) =>
             {
                 credential.Name = CustomCredentialName;
-                credential.Description = $"Issued by {state!.Issuer?.Id}";
+                credential.Description = $"Issued by {state.Issuer?.Id}";
 
                 return ValueTask.FromResult(credential);
             });

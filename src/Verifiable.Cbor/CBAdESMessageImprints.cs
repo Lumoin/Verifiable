@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 
@@ -145,7 +143,7 @@ public abstract class CBAdESPayloadImprintSource
 /// and <see cref="PayloadBytes"/> is its content.
 /// </summary>
 [DebuggerDisplay("CBAdESAttachedPayloadImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESAttachedPayloadImprintSource : CBAdESPayloadImprintSource
+public sealed class CBAdESAttachedPayloadImprintSource: CBAdESPayloadImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -172,7 +170,7 @@ public sealed class CBAdESAttachedPayloadImprintSource : CBAdESPayloadImprintSou
 /// closing paragraph).
 /// </summary>
 [DebuggerDisplay("CBAdESDetachedPayloadImprintSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESDetachedPayloadImprintSource : CBAdESPayloadImprintSource
+public sealed class CBAdESDetachedPayloadImprintSource: CBAdESPayloadImprintSource
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedPayloadImprintSource"/>.</summary>
     /// <param name="payloadBytes">
@@ -1059,7 +1057,7 @@ public static class CBAdESMessageImprints
             }
 
             int label = innerReader.ReadInt32();
-            return label == CBAdESUnsignedHeaderElement.SignatureTimestampLabel || label == CBAdESUnsignedHeaderElement.ReferencesLabel;
+            return label is CBAdESUnsignedHeaderElement.SignatureTimestampLabel or CBAdESUnsignedHeaderElement.ReferencesLabel;
         }
     }
 

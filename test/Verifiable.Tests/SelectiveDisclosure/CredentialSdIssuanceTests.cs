@@ -1,5 +1,3 @@
-using System.Buffers;
-using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
@@ -47,7 +45,7 @@ internal sealed class CredentialSdIssuanceTests
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            (CredentialToJsonBytesDelegate)(static (VerifiableCredential c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
+            (CredentialToJsonBytesDelegate)(static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
             SdJwtIssuance.IssueVerboseAsync,
 disclosablePaths,
             TestSalts.DefaultGenerator(),
@@ -72,7 +70,7 @@ disclosablePaths,
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            (CredentialToJsonBytesDelegate)(static (VerifiableCredential c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
+            (CredentialToJsonBytesDelegate)(static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
             SdJwtIssuance.IssueVerboseAsync,
 disclosablePaths,
             TestSalts.DefaultGenerator(),
@@ -97,7 +95,7 @@ disclosablePaths,
         };
 
         SdTokenResult result = await credential.IssueSdJwtAsync(
-            (CredentialToJsonBytesDelegate)(static (VerifiableCredential c) => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
+            (CredentialToJsonBytesDelegate)(static c => JsonSerializerExtensions.SerializeToUtf8Bytes(c, CredentialSecuringMaterial.JsonOptions)),
             SdJwtIssuance.IssueVerboseAsync,
 disclosablePaths,
             TestSalts.DefaultGenerator(),
@@ -142,7 +140,7 @@ disclosablePaths,
             CredentialPath.FromJsonPointer("/issuer/name")
         };
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 
@@ -155,7 +153,7 @@ disclosablePaths,
             CredentialPath.FromJsonPointer("/validFrom")
         };
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 
@@ -168,7 +166,7 @@ disclosablePaths,
             CredentialPath.FromJsonPointer("/type")
         };
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             SdJwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 
@@ -176,7 +174,7 @@ disclosablePaths,
     [TestMethod]
     public void ValidateCredentialPathsRejectsRootPath()
     {
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             SdJwtIssuanceExtensions.ValidateCredentialPaths(new HashSet<CredentialPath> { CredentialPath.Root }));
     }
 
@@ -190,7 +188,7 @@ disclosablePaths,
             CredentialPath.FromJsonPointer("/issuer")
         };
 
-        Assert.Throws<ArgumentException>(() =>
+        _ = Assert.Throws<ArgumentException>(() =>
             SdCwtIssuanceExtensions.ValidateCredentialPaths(disclosablePaths));
     }
 }

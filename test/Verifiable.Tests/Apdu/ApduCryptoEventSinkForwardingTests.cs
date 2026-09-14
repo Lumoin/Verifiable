@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Eac;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
@@ -104,7 +100,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
             BaseMemoryPool.Shared, eventSink: observed.Add, cancellationToken: TestContext.CancellationToken);
 
         Assert.IsGreaterThan(0, signature.AsReadOnlySpan().Length);
-        Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
     }
 
 
@@ -155,7 +151,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
             BaseMemoryPool.Shared, eventSink: observed.Add, cancellationToken: TestContext.CancellationToken);
 
         Assert.IsGreaterThan(0, signature.AsReadOnlySpan().Length);
-        Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
+        _ = Assert.ContainsSingle(observed.OfType<SignatureProducedEvent>());
     }
 
 
@@ -225,7 +221,7 @@ internal sealed class ApduCryptoEventSinkForwardingTests
         }
 
         Assert.Contains(
-            (VerificationCompletedEvent e) => e.Outcome == VerificationOutcome.Valid,
+            e => e.Outcome == VerificationOutcome.Valid,
             observer.Received.OfType<VerificationCompletedEvent>(),
             "CardVerifiableCertificateChain's elliptic-curve verify helper must publish to the global stream by default.");
     }

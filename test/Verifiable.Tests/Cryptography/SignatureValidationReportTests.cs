@@ -1,7 +1,3 @@
-using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -53,13 +49,13 @@ internal sealed class SignatureValidationReportTests
         Assert.IsNotNull(element.SignatureIdentifier, "Clause 4.3.3.1: absent only for FORMAT_FAILURE, which this scenario does not reach.");
 
         AssociatedValidationReportDataElement revocation = element.Status.AssociatedValidationReportData.Single();
-        Assert.IsInstanceOfType<CertificateRevocationReportData>(revocation.Source, "The conclusion's own Table 6 evidence is referenced, not duplicated.");
+        _ = Assert.IsInstanceOfType<CertificateRevocationReportData>(revocation.Source, "The conclusion's own Table 6 evidence is referenced, not duplicated.");
         Assert.IsNotEmpty(revocation.CertificateChain, "Clause 4.3.12.4 projects the chain Table 6 carries alongside the revocation.");
         Assert.AreEqual(scenario.Chain[^1], revocation.TrustAnchor, "Clause 4.3.12.4.1: the trust anchor is the last element of the chain.");
         Assert.IsNotNull(revocation.RevocationStatusInformation, "Clause 4.3.12.6 is present whenever a certificate was found revoked.");
-        Assert.AreEqual(scenario.Chain[0], revocation.RevocationStatusInformation!.RevokedCertificate,
+        Assert.AreEqual(scenario.Chain[0], revocation.RevocationStatusInformation.RevokedCertificate,
             "The signing certificate itself is revoked in this scenario, not the intermediate.");
-        Assert.AreEqual(scenario.CertificationAuthorityRevocationTime, revocation.RevocationStatusInformation!.RevocationTime,
+        Assert.AreEqual(scenario.CertificationAuthorityRevocationTime, revocation.RevocationStatusInformation.RevocationTime,
             "Clause 4.3.12.6.1 item 2) is mandatory: the time of revocation.");
     }
 

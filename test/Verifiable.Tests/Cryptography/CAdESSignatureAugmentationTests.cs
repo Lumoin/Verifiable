@@ -1,13 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -170,9 +166,9 @@ internal sealed class CAdESSignatureAugmentationTests
         using DigestValue wholeFieldDigest = AtsHashIndexV3Oracle.Hash(wholeField, PkiDigestAlgorithm.Sha256);
 
         Assert.IsNotNull(info.MessageImprint, "A token this augmentation attached states a message imprint.");
-        Assert.AreSequenceEqual(expected.AsReadOnlySpan().ToArray(), info.MessageImprint!.AsReadOnlySpan().ToArray(),
+        Assert.AreSequenceEqual(expected.AsReadOnlySpan().ToArray(), info.MessageImprint.AsReadOnlySpan().ToArray(),
             "Clause 5.3: the imprint is the hash of the signature field's value octets.");
-        Assert.IsFalse(wholeFieldDigest.AsReadOnlySpan().SequenceEqual(info.MessageImprint!.AsReadOnlySpan()),
+        Assert.IsFalse(wholeFieldDigest.AsReadOnlySpan().SequenceEqual(info.MessageImprint.AsReadOnlySpan()),
             "The imprint is not the hash of the whole encoded field: that is clause 5.5.3's convention, not clause 5.3's.");
     }
 

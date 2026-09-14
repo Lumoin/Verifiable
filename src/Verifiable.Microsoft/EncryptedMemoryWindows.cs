@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -34,7 +33,7 @@ namespace Verifiable.Security.Windows
         /// <param name="entropy">The entropy to use in encryption decryption actions.</param>
         /// <param name="protectionScope">The data protection scope.</param>
         /// <param name="protectedMemoryPool">The more pool in which to store the encrypted data.</param>
-        public EncryptedMemoryWindows(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, BaseMemoryPool protectedMemoryPool): 
+        public EncryptedMemoryWindows(byte[] sensitiveMemory, byte[] entropy, DataProtectionScope protectionScope, BaseMemoryPool protectedMemoryPool) :
             base(TransformToEncryptedMemory(
                 sensitiveMemory ?? throw new ArgumentNullException(nameof(sensitiveMemory)),
                 entropy ?? throw new ArgumentNullException(nameof(entropy)),
@@ -81,7 +80,7 @@ namespace Verifiable.Security.Windows
             ArgumentNullException.ThrowIfNull(sensitiveMemory);
             ArgumentNullException.ThrowIfNull(entropy);
             ArgumentNullException.ThrowIfNull(protectedMemoryPool);
-            
+
             var encryptedData = ProtectedData.Protect(sensitiveMemory, entropy, protectionScope);
             var bufferedMemory = protectedMemoryPool.Rent(encryptedData.Length);
             encryptedData.CopyTo(bufferedMemory.Memory.Span);

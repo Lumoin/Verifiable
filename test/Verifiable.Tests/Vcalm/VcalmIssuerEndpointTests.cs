@@ -1,29 +1,24 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.Validation;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
-using Verifiable.OAuth;
-using Verifiable.OAuth.Server;
-using Verifiable.Vcalm;
+using Verifiable.Tests.OAuth;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tests.OAuth;
-using Verifiable.Server;
+using Verifiable.Vcalm;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -84,7 +79,7 @@ internal sealed class VcalmIssuerEndpointTests
     private static ProofOptionsSerializeDelegate SerializeProofOptions { get; } =
         ProofOptionsSerializer.Create(JsonOptions);
 
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     //The configured issuer identity the instance secures credentials as, and its signing key. The
     //verification method id and DID are derived from the issuer key in RegisterIssuer.
@@ -163,7 +158,7 @@ internal sealed class VcalmIssuerEndpointTests
             "POST",
             new RequestFields(),
             verifyBody,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, verifyResponse.StatusCode, verifyResponse.Body);
@@ -335,7 +330,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         //The §3.2.2 GET by the credential.id resolves the stored credential — auto-populated key.
         ServerHttpResponse getResponse = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "GET", CredentialDotId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "GET", CredentialDotId, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, getResponse.StatusCode, getResponse.Body);
         Assert.IsTrue(CredentialStore.ContainsKey(CredentialDotId),
@@ -410,7 +405,7 @@ internal sealed class VcalmIssuerEndpointTests
         string verifyBody = "{\"verifiableCredential\":" + securedCredentialJson + "}";
         ServerHttpResponse verifyResponse = await app.DispatchAtEndpointAsync(
             ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsVerify, "POST",
-            new RequestFields(), verifyBody, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new RequestFields(), verifyBody, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, verifyResponse.StatusCode, verifyResponse.Body);
         using JsonDocument verifyDoc = JsonDocument.Parse(verifyResponse.Body);
@@ -537,7 +532,7 @@ internal sealed class VcalmIssuerEndpointTests
 
         //200: the stored credential.
         ServerHttpResponse getResponse = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "GET", CredentialId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "GET", CredentialId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(200, getResponse.StatusCode, getResponse.Body);
         using JsonDocument getDoc = JsonDocument.Parse(getResponse.Body);
         Assert.IsTrue(getDoc.RootElement.TryGetProperty(VcalmParameterNames.VerifiableCredential, out _),
@@ -545,13 +540,13 @@ internal sealed class VcalmIssuerEndpointTests
 
         //404: an id the store never held.
         ServerHttpResponse notFound = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "GET", "urn:uuid:never-issued", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "GET", "urn:uuid:never-issued", [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(404, notFound.StatusCode, "An unknown credential id is 404.");
 
         //410: soft-delete the credential, then GET → Gone.
         CredentialStore[CredentialId] = CredentialStore[CredentialId] with { IsDeleted = true };
         ServerHttpResponse gone = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "GET", CredentialId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "GET", CredentialId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(410, gone.StatusCode, "A soft-deleted credential's tombstone is 410 Gone.");
     }
 
@@ -573,17 +568,17 @@ internal sealed class VcalmIssuerEndpointTests
 
         //202: the soft delete.
         ServerHttpResponse deleteResponse = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "DELETE", CredentialId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "DELETE", CredentialId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(202, deleteResponse.StatusCode, deleteResponse.Body);
 
         //410: the §3.2.2 GET on the soft-deleted credential.
         ServerHttpResponse gone = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "GET", CredentialId, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "GET", CredentialId, [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(410, gone.StatusCode, "After a §3.2.3 delete the §3.2.2 GET is 410 Gone.");
 
         //404: deleting an id the store never held.
         ServerHttpResponse deleteUnknown = await app.DispatchVcalmCredentialByIdAsync(
-            ctx.Segment, "DELETE", "urn:uuid:never-issued", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            ctx.Segment, "DELETE", "urn:uuid:never-issued", [], TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(404, deleteUnknown.StatusCode, "Deleting an unknown credential id is 404.");
     }
 
@@ -601,7 +596,7 @@ internal sealed class VcalmIssuerEndpointTests
         byte[] bytes = Encoding.UTF8.GetBytes("{\"credential\":{}}");
         ServerHttpResponse response = await app.DispatchWithBodyAsync(
             ctx.Segment, WellKnownVcalmEndpointNames.VcalmCredentialsIssue, "POST",
-            bytes, "text/plain", new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            bytes, "text/plain", [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
             "A non-application/json body is rejected before parsing (§2.4 content-serialization MUST).");
@@ -646,7 +641,7 @@ internal sealed class VcalmIssuerEndpointTests
             ClientId, ClientBaseUri, alsoVerifier ? IssuerAndVerifierCapabilities : IssuerCapabilities);
         RegisteredMaterials.Add(IssuerKeyMaterial.Wrapping(hostMaterial));
 
-        app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
+        _ = app.Server.Vcalm().UseDefaultVcalmJsonParsing(JsonOptions);
 
         ImmutableArray<VcalmProofDescriptor>.Builder descriptors = ImmutableArray.CreateBuilder<VcalmProofDescriptor>();
         descriptors.Add(BuildDescriptor(material.SigningPrivateKey, verificationMethodId));
@@ -778,7 +773,7 @@ internal sealed class VcalmIssuerEndpointTests
             "POST",
             new RequestFields(),
             body,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(expectedStatus, response.StatusCode, response.Body);

@@ -34,7 +34,7 @@ internal static class ContextTypeTestHelpers
         T value2,
         Func<T, T, bool> equalsOperator,
         Func<T, T, bool> notEqualsOperator)
-        where T: IEquatable<T>
+        where T : IEquatable<T>
     {
         Assert.IsFalse(value1.Equals(value2), "Equals should return false for different values.");
         Assert.IsFalse(equalsOperator(value1, value2), "== operator should return false for different values.");
@@ -53,7 +53,7 @@ internal static class ContextTypeTestHelpers
         T value,
         Func<T, T, bool> equalsOperator,
         Func<T, T, bool> notEqualsOperator)
-        where T: IEquatable<T>
+        where T : IEquatable<T>
     {
         var duplicate = value;
         Assert.IsTrue(value.Equals(duplicate), "Equals should return true for same value.");
@@ -77,9 +77,9 @@ internal static class ContextTypeTestHelpers
         Func<object, T, bool> objectEqualsType,
         Func<T, object, bool> typeNotEqualsObject,
         Func<object, T, bool> objectNotEqualsType)
-        where T: IEquatable<T>
+        where T : IEquatable<T>
     {
-        object valueAsObject = value!;
+        object valueAsObject = value;
         Assert.IsTrue(value.Equals(valueAsObject), "Equals(object) should return true for boxed same value.");
         Assert.IsTrue(typeEqualsObject(value, valueAsObject), "T == object should return true for same value.");
         Assert.IsTrue(objectEqualsType(valueAsObject, value), "object == T should return true for same value.");
@@ -105,9 +105,9 @@ internal static class ContextTypeTestHelpers
         Func<object, T, bool> objectEqualsType,
         Func<T, object, bool> typeNotEqualsObject,
         Func<object, T, bool> objectNotEqualsType)
-        where T: IEquatable<T>
+        where T : IEquatable<T>
     {
-        object value2AsObject = value2!;
+        object value2AsObject = value2;
         Assert.IsFalse(typeEqualsObject(value1, value2AsObject), "T == object should return false for different values.");
         Assert.IsFalse(objectEqualsType(value2AsObject, value1), "object == T should return false for different values.");
         Assert.IsTrue(typeNotEqualsObject(value1, value2AsObject), "T != object should return true for different values.");
@@ -120,7 +120,7 @@ internal static class ContextTypeTestHelpers
     /// </summary>
     /// <typeparam name="T">The context type being tested.</typeparam>
     /// <param name="value">The value to test.</param>
-    public static void AssertEqualsHandlesNullAndDifferentTypes<T>(T value) where T: IEquatable<T>
+    public static void AssertEqualsHandlesNullAndDifferentTypes<T>(T value) where T : IEquatable<T>
     {
         Assert.IsFalse(value.Equals(null), "Equals(null) should return false.");
         Assert.IsFalse(value.Equals(new object()), "Equals(different type) should return false.");
@@ -132,10 +132,10 @@ internal static class ContextTypeTestHelpers
     /// </summary>
     /// <typeparam name="T">The context type being tested.</typeparam>
     /// <param name="value">The value to test.</param>
-    public static void AssertHashCodeContractForEqualValues<T>(T value) where T: IEquatable<T>
+    public static void AssertHashCodeContractForEqualValues<T>(T value) where T : IEquatable<T>
     {
         var duplicate = value;
-        Assert.AreEqual(value!.GetHashCode(), duplicate!.GetHashCode(), "Equal values must have equal hash codes.");
+        Assert.AreEqual(value.GetHashCode(), duplicate.GetHashCode(), "Equal values must have equal hash codes.");
     }
 
 
@@ -148,9 +148,9 @@ internal static class ContextTypeTestHelpers
     /// <typeparam name="T">The context type being tested.</typeparam>
     /// <param name="value1">First value.</param>
     /// <param name="value2">Second value, must be different from first.</param>
-    public static void AssertHashCodesAreDistinct<T>(T value1, T value2) where T: IEquatable<T>
+    public static void AssertHashCodesAreDistinct<T>(T value1, T value2) where T : IEquatable<T>
     {
-        Assert.AreNotEqual(value1!.GetHashCode(), value2!.GetHashCode(), "Different values should have different hash codes.");
+        Assert.AreNotEqual(value1.GetHashCode(), value2.GetHashCode(), "Different values should have different hash codes.");
     }
 
 

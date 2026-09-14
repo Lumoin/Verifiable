@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Acdc;

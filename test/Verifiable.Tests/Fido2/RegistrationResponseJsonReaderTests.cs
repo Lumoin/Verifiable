@@ -1,5 +1,4 @@
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Json;
 
@@ -99,7 +98,7 @@ internal sealed class RegistrationResponseJsonReaderTests
     {
         string json = """{"id":"AQIDBAUGBwg","rawId":"AQIDBAUGBwg","clientExtensionResults":{},"type":"public-key"}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -109,7 +108,7 @@ internal sealed class RegistrationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"clientExtensionResults\":{},", string.Empty, System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -119,7 +118,7 @@ internal sealed class RegistrationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"type\":\"public-key\"", "\"type\":\"webauthn.create\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -131,7 +130,7 @@ internal sealed class RegistrationResponseJsonReaderTests
             .Replace("\"id\":\"AQIDBAUGBwg\"", "\"id\":\"AQIDBAUGBwg==\"", System.StringComparison.Ordinal)
             .Replace("\"rawId\":\"AQIDBAUGBwg\"", "\"rawId\":\"AQIDBAUGBwg==\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -144,7 +143,7 @@ internal sealed class RegistrationResponseJsonReaderTests
             "\"clientDataJSON\":\"not base64url!!\"",
             System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -154,7 +153,7 @@ internal sealed class RegistrationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"rawId\":\"AQIDBAUGBwg\"", "\"rawId\":\"CQkJ\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -164,7 +163,7 @@ internal sealed class RegistrationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"type\":\"public-key\"", "\"type\":\"public-key\",\"type\":\"public-key\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -174,7 +173,7 @@ internal sealed class RegistrationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument + " garbage";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -182,6 +181,6 @@ internal sealed class RegistrationResponseJsonReaderTests
     [TestMethod]
     public void TopLevelJsonArrayIsRejected()
     {
-        Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes("[1,2,3]"), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => RegistrationResponseJsonReader.Read(Encoding.UTF8.GetBytes("[1,2,3]"), BaseMemoryPool.Shared));
     }
 }

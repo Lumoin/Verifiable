@@ -1,14 +1,9 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
@@ -257,6 +252,17 @@ internal sealed class CBAdESMultiServerWireFlowTests
 
                 case CBAdESUnsignedHeaderElementValidationData:
                     sawValidationData = true;
+                    break;
+
+                case CBAdESUnsignedHeaderElementArchiveTimestamp:
+                case CBAdESUnsignedHeaderElementReferences:
+                case CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case CBAdESUnsignedHeaderElementReferencesTimestamp:
+                case CBAdESUnsignedHeaderElementSignaturePolicyStore:
+                case CBAdESUnsignedHeaderElementFullCounterSignature:
+                case CBAdESUnsignedHeaderElementAbbreviatedCounterSignature:
+                case CBAdESUnsignedHeaderElementCertificateChain:
+                case CBAdESUnsignedHeaderElementUnknown:
                     break;
             }
         }
@@ -653,6 +659,17 @@ internal sealed class CBAdESMultiServerWireFlowTests
 
                 case CBAdESUnsignedHeaderElementArchiveTimestamp:
                     sawArchiveTimestamp = true;
+                    break;
+
+                case CBAdESUnsignedHeaderElementSignatureTimestamp:
+                case CBAdESUnsignedHeaderElementValidationData:
+                case CBAdESUnsignedHeaderElementReferences:
+                case CBAdESUnsignedHeaderElementSignatureAndReferencesTimestamp:
+                case CBAdESUnsignedHeaderElementReferencesTimestamp:
+                case CBAdESUnsignedHeaderElementSignaturePolicyStore:
+                case CBAdESUnsignedHeaderElementFullCounterSignature:
+                case CBAdESUnsignedHeaderElementCertificateChain:
+                case CBAdESUnsignedHeaderElementUnknown:
                     break;
             }
         }

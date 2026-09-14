@@ -1,12 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Net.Http;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Mdoc;
@@ -139,13 +134,13 @@ internal sealed class StatusListTokenSeatFlowTests
 
         Assert.IsNull(refusalDetail,
             "A presentation whose Status List entry reads 0x00 VALID is answered by the Response URI, not refused.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A determinable, valid status leaves the verifier's flow in its verified terminal state.");
 
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
         Assert.IsNotNull(verified.CredentialStatuses,
             "The seat surfaces the outcomes it read when a status resolver is wired.");
-        Assert.IsTrue(verified.CredentialStatuses!.TryGetValue(new CredentialQueryId(DcqlFixtures.PidCredentialId), out CredentialStatusOutcome? outcome),
+        Assert.IsTrue(verified.CredentialStatuses.TryGetValue(new CredentialQueryId(DcqlFixtures.PidCredentialId), out CredentialStatusOutcome? outcome),
             "The surfaced outcomes are keyed by the DCQL credential query identifier.");
         Assert.IsNotNull(outcome);
         Assert.IsTrue(outcome.IsValid, "Section 7.1's 0x00 VALID reads as a valid credential.");
@@ -193,7 +188,7 @@ internal sealed class StatusListTokenSeatFlowTests
         using HttpClient statusHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(statusProvider.Certificate);
         OutboundTransportDelegate transport = GuardedHttpClientTransport.BuildSingleHopTransport(statusHttpClient);
         ExchangeContext context = TestHostShell.ExchangeContextWith(TestHostShell.LoopbackOutboundFetchPolicy);
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (_, _) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext _1, CancellationToken _2) =>
             ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(statusIssuerPublic));
         ResolveVerifiedStatusListTokenDelegate resolve = StatusListTokenResolvers.BuildResolving(
             transport, context, resolveIssuerKey, TestSetup.Base64UrlDecoder, JwtPartJson.Default, metered.Pool, TimeProvider);
@@ -204,7 +199,7 @@ internal sealed class StatusListTokenSeatFlowTests
             app, statusListUri, "nonce-status-wire-pool-balance").ConfigureAwait(false);
 
         Assert.IsNull(refusalDetail, "A determinable, valid status is answered by the Response URI, not refused.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State);
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State);
         Assert.AreEqual(0L, metered.OutstandingCount,
             "The resolver's own pool must carry no outstanding rentals once the gate has released the owned resolution it read.");
     }
@@ -263,7 +258,7 @@ internal sealed class StatusListTokenSeatFlowTests
         Assert.Contains(OAuthErrors.AccessDenied, refusalDetail!, StringComparison.Ordinal,
             "RFC 6749 Section 4.1.2.1's access_denied is the code for a request the relying party denied.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A policy that rejects a not-valid credential status refuses the presentation.");
 
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
@@ -468,7 +463,7 @@ internal sealed class StatusListTokenSeatFlowTests
 
         Assert.IsNull(refusalDetail,
             "Without a freshness policy the token's age is not a reason to refuse the presentation.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "The same Status List Token that step 4.b refuses under a policy is determinable without one.");
 
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -532,7 +527,7 @@ internal sealed class StatusListTokenSeatFlowTests
 
         Assert.IsNull(refusalDetail,
             "A cached-too-long Status List Token is a refresh hint, not a reason to refuse the presentation.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "Step 4.d never turns a determinable status into a refusal.");
 
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -585,7 +580,7 @@ internal sealed class StatusListTokenSeatFlowTests
 
         Assert.IsNull(refusalDetail,
             "A followed redirect ends at a 2xx Status List Token, so the presentation is answered, not refused.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "The Status List Token the redirect pointed at is the one the seat evaluated.");
 
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
@@ -759,7 +754,7 @@ internal sealed class StatusListTokenSeatFlowTests
             DcqlFixtures.PidFamilyNameValueConstraintPrepared("Schmidt"),
             "nonce-status-wire-unverifiable").ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "A presentation that does not satisfy the Authorization Request's DCQL query is refused.");
 
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;
@@ -820,7 +815,7 @@ internal sealed class StatusListTokenSeatFlowTests
         bool isReferencedKeyPresent = false;
         bool isReferencedKeyTheCredentialIssuers = false;
 
-        ResolveStatusListIssuerKeyDelegate resolveIssuerKey = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListIssuerKey?> resolveIssuerKey(StatusListKeyResolutionContext context, CancellationToken cancellationToken)
         {
             keyResolutions++;
             seenStatusListUri = context.StatusListUri;
@@ -830,7 +825,7 @@ internal sealed class StatusListTokenSeatFlowTests
                 && referencedKey.AsReadOnlySpan().SequenceEqual(issuerKey.AsReadOnlySpan());
 
             return ValueTask.FromResult<ResolvedStatusListIssuerKey?>(ResolvedStatusListIssuerKey.Borrowed(statusIssuerPublic));
-        };
+        }
 
         using HttpClient statusHttpClient = LoopbackTls.CreateSingleHopPinnedHttpClient(statusProvider.Certificate);
         using RecordedStatusListResolution resolution = new(
@@ -843,7 +838,7 @@ internal sealed class StatusListTokenSeatFlowTests
             app, serializedSdJwt, holderKey, issuerKey, "nonce-status-wire-referenced-facts").ConfigureAwait(false);
 
         Assert.IsNull(refusalDetail, "The status resolves and reads valid, so the Response URI answers the presentation.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A determinable, valid status leaves the verifier's flow in its verified terminal state.");
 
         Assert.AreEqual(1, keyResolutions, "One presented credential referencing one Status List Token is one key decision.");
@@ -905,14 +900,14 @@ internal sealed class StatusListTokenSeatFlowTests
 
         Assert.IsNull(refusalDetail,
             "A Status List Token the credential's own issuer signed verifies, so the Response URI answers the presentation.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A determinable, valid status leaves the verifier's flow in its verified terminal state.");
 
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
         Assert.IsNotNull(verified.CredentialStatuses, "The seat surfaces the outcome it read.");
-        Assert.IsTrue(verified.CredentialStatuses!.TryGetValue(new CredentialQueryId(DcqlFixtures.PidCredentialId), out CredentialStatusOutcome? outcome),
+        Assert.IsTrue(verified.CredentialStatuses.TryGetValue(new CredentialQueryId(DcqlFixtures.PidCredentialId), out CredentialStatusOutcome? outcome),
             "The surfaced outcomes are keyed by the DCQL credential query identifier.");
-        Assert.IsTrue(outcome!.IsValid, "Section 7.1's 0x00 VALID reads as a valid credential.");
+        Assert.IsTrue(outcome.IsValid, "Section 7.1's 0x00 VALID reads as a valid credential.");
         Assert.AreEqual(1, statusProvider.TotalRequests,
             "The same-key composition removes a key resolution, not the Section 8.1 request for the list itself.");
     }
@@ -1029,7 +1024,7 @@ internal sealed class StatusListTokenSeatFlowTests
         bool isReferencedKeyPresent = false;
         bool isReferencedKeyTheMdocIssuers = false;
 
-        ResolveVerifiedStatusListTokenDelegate resolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> resolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolutions++;
             seenReferenceUri = context.Reference.Uri;
@@ -1039,7 +1034,7 @@ internal sealed class StatusListTokenSeatFlowTests
                 && referencedKey.AsReadOnlySpan().SequenceEqual(mdocIssuerPublic.AsReadOnlySpan());
 
             return resolution.Resolve(context, cancellationToken);
-        };
+        }
 
         await using TestHostShell app = new(
             TimeProvider,
@@ -1063,7 +1058,7 @@ internal sealed class StatusListTokenSeatFlowTests
             "nonce-status-wire-mdoc-context").ConfigureAwait(false);
 
         Assert.IsNull(refusalDetail, "The mdoc's status resolves and reads valid, so the Response URI answers the presentation.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State,
             "A determinable, valid status leaves the verifier's flow in its verified terminal state.");
 
         Assert.AreEqual(1, resolutions, "One presented mdoc referencing one Status List Token is one resolution.");
@@ -1205,7 +1200,7 @@ internal sealed class StatusListTokenSeatFlowTests
         MinimalHttpHost host = await MinimalHttpHost.StartAsync(
             (request, cancellationToken) =>
             {
-                requestCounts.AddOrUpdate(request.Path, 1, static (_, count) => count + 1);
+                _ = requestCounts.AddOrUpdate(request.Path, 1, static (_, count) => count + 1);
 
                 MinimalHttpResponse response = request.Path switch
                 {
@@ -1319,12 +1314,12 @@ internal sealed class StatusListTokenSeatFlowTests
     public async Task AStatusListReferenceWithARelativeUriIsRefusedAsMalformed()
     {
         int resolverCalls = 0;
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate countingResolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListToken?>(null);
-        };
+        }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: countingResolver);
 
@@ -1362,12 +1357,12 @@ internal sealed class StatusListTokenSeatFlowTests
     public async Task AStatusListReferenceWithANegativeIndexIsRefusedAsMalformed()
     {
         int resolverCalls = 0;
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate countingResolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListToken?>(null);
-        };
+        }
 
         await using TestHostShell app = new(TimeProvider, resolveVerifiedStatusListToken: countingResolver);
 
@@ -1408,12 +1403,12 @@ internal sealed class StatusListTokenSeatFlowTests
     public async Task AStatusObjectNamingOnlyAnUnmodelledMechanismIsNotCheckedWhenSurfacingIsChosen()
     {
         int resolverCalls = 0;
-        Verifiable.Core.StatusList.ResolveVerifiedStatusListTokenDelegate countingResolver = (context, cancellationToken) =>
+        ValueTask<ResolvedStatusListToken?> countingResolver(StatusListResolutionContext context, CancellationToken cancellationToken = default)
         {
             resolverCalls++;
 
             return ValueTask.FromResult<ResolvedStatusListToken?>(null);
-        };
+        }
 
         await using TestHostShell app = new(
             TimeProvider,
@@ -1429,7 +1424,7 @@ internal sealed class StatusListTokenSeatFlowTests
             app, rawStatusObject, "nonce-status-unmodelled").ConfigureAwait(false);
 
         Assert.IsNull(refusalDetail, "Surfacing an unevaluable status mechanism completes the presentation instead of refusing it.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State);
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(app.GetFlowState(parHandle).State);
 
         var verified = (PresentationVerifiedState)app.GetFlowState(parHandle).State;
         Assert.IsNull(verified.CredentialStatuses, "A credential with no status_list reference carries no status outcome to surface.");
@@ -1527,7 +1522,7 @@ internal sealed class StatusListTokenSeatFlowTests
 
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -1571,7 +1566,7 @@ internal sealed class StatusListTokenSeatFlowTests
         Assert.Contains(OAuthErrors.InvalidRequest, refusalDetail!, StringComparison.Ordinal,
             "The real-wire refusal body carries RFC 6749 Section 4.1.2.1's invalid_request error code.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(app.GetFlowState(parHandle).State,
             "An undeterminable credential status fails closed, so the verifier refuses the presentation.");
 
         var failed = (VerifierFlowFailedState)app.GetFlowState(parHandle).State;

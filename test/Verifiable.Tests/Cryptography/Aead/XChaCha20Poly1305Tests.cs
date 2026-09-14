@@ -1,4 +1,3 @@
-using System;
 using Verifiable.BouncyCastle;
 
 namespace Verifiable.Tests.Cryptography.Aead;

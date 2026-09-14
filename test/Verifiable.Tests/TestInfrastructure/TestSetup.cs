@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using SimpleBase;
 using System.Buffers;
 using System.Buffers.Text;
@@ -11,8 +12,6 @@ using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -112,7 +111,7 @@ internal static class TestSetup
     /// </summary>
     public static HashFunctionSelector MultihashSha256Selector { get; } = static multihashCode =>
         multihashCode == MultihashHeaders.Sha2Bits256[0]
-            ? (HashFunctionDelegate)System.Security.Cryptography.SHA256.HashData
+            ? System.Security.Cryptography.SHA256.HashData
             : null;
 
 
@@ -215,7 +214,7 @@ internal static class TestSetup
     private static void InitializeCryptoFunctions()
     {
         CryptoFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
             {
                 return (algorithm, purpose) switch
                 {
@@ -244,7 +243,7 @@ internal static class TestSetup
                         $"No signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
             },
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
             {
                 return (algorithm, purpose) switch
                 {
@@ -282,7 +281,7 @@ internal static class TestSetup
         //their own registry, the same way key agreement and AEAD are, because message recovery does not fit
         //the detached signing/verification contract. Only BouncyCastle implements ISO-9796-2.
         RecoverableSignatureFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
             {
                 return (algorithm, purpose) switch
                 {
@@ -291,7 +290,7 @@ internal static class TestSetup
                         $"No recoverable signing function registered for '{algorithm}', '{purpose}' with qualifier '{qualifier}'.")
                 };
             },
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
             {
                 return (algorithm, purpose) switch
                 {
@@ -694,7 +693,7 @@ internal static class TestSetup
     private static void InitializeKeyCreationFunctions()
     {
         KeyCreationFunctionRegistry<CryptoAlgorithm, Purpose>.Initialize(
-            (CryptoAlgorithm algorithm, Purpose purpose, string? qualifier) =>
+            (algorithm, purpose, qualifier) =>
             {
                 return (algorithm, purpose) switch
                 {

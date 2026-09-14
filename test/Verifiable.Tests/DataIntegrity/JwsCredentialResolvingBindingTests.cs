@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Did.Methods;
@@ -30,7 +29,7 @@ internal sealed class JwsCredentialResolvingBindingTests
     private const string IssuerDid = "did:example:issuer";
     private const string SignerKeyId = "did:example:issuer#key-1";
 
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     private const string CredentialJson = /*lang=json,strict*/ """
     {
@@ -147,7 +146,7 @@ internal sealed class JwsCredentialResolvingBindingTests
         //Rebuild the compact JWS with the kid stripped from the (now-mismatching) header segment --
         //gate 1 must refuse before any resolver call, so the resulting invalid signature is irrelevant.
         var headerWithoutKid = new Dictionary<string, object>(jwsMessage.Signatures[0].ProtectedHeader);
-        headerWithoutKid.Remove(WellKnownJwkMemberNames.Kid);
+        _ = headerWithoutKid.Remove(WellKnownJwkMemberNames.Kid);
         string headerSegment = TestSetup.Base64UrlEncoder(HeaderSerializer(headerWithoutKid));
         string payloadSegment = TestSetup.Base64UrlEncoder(jwsMessage.Payload.Span);
         string signatureSegment = TestSetup.Base64UrlEncoder(jwsMessage.Signatures[0].Signature.AsReadOnlySpan());

@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Infrastructure.Sessions;

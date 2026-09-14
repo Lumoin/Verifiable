@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Text;
 using System.Globalization;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Dcql;

@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using Verifiable.Core;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -86,12 +84,12 @@ internal sealed class TrustChainResolverTests
             [Key(AnchorId, IntermediateId)] = anchorAboutIntermediate.CompactJws,
         };
 
-        FetchEntityConfigurationDelegate fetchConfiguration = (entity, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchConfiguration(EntityIdentifier entity, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(configByEntity.TryGetValue(entity.Value, out string? jws)
                 ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
                 : null);
 
-        FetchEntityStatementDelegate fetchSubordinate = (subject, fetchEndpoint, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchSubordinate(EntityIdentifier subject, Uri fetchEndpoint, ExchangeContext context, CancellationToken ct)
         {
             if(endpointToIssuer.TryGetValue(fetchEndpoint.ToString(), out string? issuer)
                 && subordinateByIssuerSubject.TryGetValue(Key(issuer, subject.Value), out string? jws))
@@ -100,19 +98,19 @@ internal sealed class TrustChainResolverTests
             }
 
             return ValueTask.FromResult<FetchedEntityStatement?>(null);
-        };
+        }
 
         IReadOnlyList<string>? chain = await TrustChainResolver.BuildAsync(
             new EntityIdentifier(LeafId),
             [anchor.Identifier],
-            fetchConfiguration,
-            fetchSubordinate,
-            new ExchangeContext(),
+fetchConfiguration,
+fetchSubordinate,
+            [],
             maxChainLength: 5,
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(chain, "The walker must assemble a chain to the trust anchor.");
-        Assert.HasCount(5, chain!, "leaf EC, SS, intermediate EC, SS, anchor EC.");
+        Assert.HasCount(5, chain, "leaf EC, SS, intermediate EC, SS, anchor EC.");
         Assert.AreSequenceEqual(
             new[]
             {
@@ -122,7 +120,7 @@ internal sealed class TrustChainResolverTests
                 anchorAboutIntermediate.CompactJws,
                 anchorEc.CompactJws,
             },
-            (System.Collections.ICollection)chain!,
+            (System.Collections.ICollection)chain,
             "The assembled chain must be leaf -> anchor in canonical order.");
 
         //The assembled chain, fed to the production validator, must validate:
@@ -134,7 +132,7 @@ internal sealed class TrustChainResolverTests
             FederationKeyResolver.BuildInChainResolver(TestSetup.Base64UrlDecoder, BaseMemoryPool.Shared));
 
         TrustChainValidationOutcome outcome = await validate(
-            chain!,
+            chain,
             [anchor.Identifier],
             now,
             TimeSpan.FromMinutes(5),
@@ -185,12 +183,12 @@ internal sealed class TrustChainResolverTests
             [Key("https://a.example.com", "https://b.example.com")] = aAboutB.CompactJws,
         };
 
-        FetchEntityConfigurationDelegate fetchConfiguration = (entity, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchConfiguration(EntityIdentifier entity, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(configByEntity.TryGetValue(entity.Value, out string? jws)
                 ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
                 : null);
 
-        FetchEntityStatementDelegate fetchSubordinate = (subject, fetchEndpoint, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchSubordinate(EntityIdentifier subject, Uri fetchEndpoint, ExchangeContext context, CancellationToken ct) =>
             ValueTask.FromResult(
                 endpointToIssuer.TryGetValue(fetchEndpoint.ToString(), out string? issuer)
                 && subordinateByIssuerSubject.TryGetValue(Key(issuer, subject.Value), out string? jws)
@@ -200,9 +198,9 @@ internal sealed class TrustChainResolverTests
         IReadOnlyList<string>? chain = await TrustChainResolver.BuildAsync(
             new EntityIdentifier("https://a.example.com"),
             [new EntityIdentifier("https://unreachable-anchor.example.com")],
-            fetchConfiguration,
-            fetchSubordinate,
-            new ExchangeContext(),
+fetchConfiguration,
+fetchSubordinate,
+            [],
             maxChainLength: 5,
             TestContext.CancellationToken).ConfigureAwait(false);
 

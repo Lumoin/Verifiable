@@ -1,10 +1,9 @@
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
@@ -152,7 +151,7 @@ internal sealed class JwsAccessTokenValidatorTests
         string token = await BuildSignedAccessTokenAsync(keys.PrivateKey, payload).ConfigureAwait(false);
 
         //Resolver returns null for any kid — simulating an unknown key.
-        ServerVerificationKeyResolverDelegate resolver = (kid, tenant, ctx, ct) =>
+        static ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(null);
 
         JwsAccessTokenValidationResult result = await ValidateInternalAsync(token, resolver).ConfigureAwait(false);
@@ -178,8 +177,8 @@ internal sealed class JwsAccessTokenValidatorTests
 
         //Flip a middle character of the signature segment so it still
         //base64url-decodes but verifies as false.
-        int signatureStart = token.LastIndexOf('.') + 1;
-        int tamperIndex = signatureStart + (token.Length - signatureStart) / 2;
+        int signatureStart = token.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((token.Length - signatureStart) / 2);
         char tampered = token[tamperIndex] == 'A' ? 'B' : 'A';
         string tamperedToken = string.Concat(
             token.AsSpan(0, tamperIndex), tampered.ToString(), token.AsSpan(tamperIndex + 1));
@@ -846,7 +845,7 @@ internal sealed class JwsAccessTokenValidatorTests
     private async Task<JwsAccessTokenValidationResult> ValidateAsync(
         string token, PublicKeyMemory publicKey, string? expectedAuthorizedParty = null)
     {
-        ServerVerificationKeyResolverDelegate resolver = (kid, tenant, ctx, ct) =>
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) =>
             ValueTask.FromResult<PublicKeyMemory?>(string.Equals(kid.Value, DefaultKid, StringComparison.Ordinal)
                 ? publicKey : null);
         return await ValidateInternalAsync(token, resolver, expectedAuthorizedParty).ConfigureAwait(false);
@@ -868,7 +867,7 @@ internal sealed class JwsAccessTokenValidatorTests
             BaseMemoryPool.Shared,
             IatSkew,
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty,
             TestContext.CancellationToken).ConfigureAwait(false);
     }

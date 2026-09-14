@@ -1,6 +1,5 @@
-using System;
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cryptography;
@@ -231,7 +230,7 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
         writer.WriteByteString(ClientDataHashBytes);
         writer.WriteEndMap();
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapGetAssertionRequestCborReader.Read(writerBuffer.WrittenSpan.ToArray(), BaseMemoryPool.Shared));
     }
 
@@ -244,7 +243,7 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
         //time and would refuse to emit this): {1: h'', 1: h''} — a duplicate top-level key.
         byte[] duplicateKeyMap = [0xA2, 0x01, 0x40, 0x01, 0x40];
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapGetAssertionRequestCborReader.Read(duplicateKeyMap, BaseMemoryPool.Shared));
     }
 
@@ -256,7 +255,7 @@ internal sealed class CtapGetAssertionRequestCborReaderTests
         //Major type 5 (map) with additional info 31 (indefinite length), one entry, then the break byte.
         byte[] indefiniteLengthMap = [0xBF, 0x01, 0x40, 0xFF];
 
-        Assert.ThrowsExactly<Fido2FormatException>(
+        _ = Assert.ThrowsExactly<Fido2FormatException>(
             () => CtapGetAssertionRequestCborReader.Read(indefiniteLengthMap, BaseMemoryPool.Shared));
     }
 

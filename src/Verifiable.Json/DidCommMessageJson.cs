@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.Json.Converters;
 
 namespace Verifiable.Json;

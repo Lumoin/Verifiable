@@ -1,10 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Text;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
@@ -214,8 +207,7 @@ internal sealed class SecurityEventTokenTests
             SubjectIdentifier.Opaque("subj-1")).ConfigureAwait(false);
 
         //A receiver whose replay store reports every jti as already seen.
-        IsSecurityEventTokenJtiSeenDelegate alwaysSeen =
-            (jti, context, cancellationToken) => ValueTask.FromResult(true);
+        static ValueTask<bool> alwaysSeen(string jti, ExchangeContext context, CancellationToken cancellationToken) => ValueTask.FromResult(true);
 
         SecurityEventTokenVerificationResult result = await VerifyAsync(compact, transmitterPublic, alwaysSeen).ConfigureAwait(false);
 
@@ -242,7 +234,7 @@ internal sealed class SecurityEventTokenTests
             expectedIssuer: "https://impostor.example/",
             expectedAudience: Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart, TestSetup.Base64UrlDecoder, NeverSeen,
-            new ExchangeContext(), Pool, TestContext.CancellationToken).ConfigureAwait(false);
+            [], Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
         Assert.AreEqual(SecurityEventTokenValidationError.IssuerMismatch, result.Error);
@@ -267,7 +259,7 @@ internal sealed class SecurityEventTokenTests
             expectedIssuer: Issuer,
             expectedAudience: "https://other.example/",
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart, TestSetup.Base64UrlDecoder, NeverSeen,
-            new ExchangeContext(), Pool, TestContext.CancellationToken).ConfigureAwait(false);
+            [], Pool, TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid);
         Assert.AreEqual(SecurityEventTokenValidationError.AudienceMismatch, result.Error);
@@ -304,5 +296,5 @@ internal sealed class SecurityEventTokenTests
         await SecurityEventTokenVerification.VerifyAsync(
             compact, publicKey, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart, TestSetup.Base64UrlDecoder,
-            isJtiSeen ?? NeverSeen, new ExchangeContext(), Pool, TestContext.CancellationToken).ConfigureAwait(false);
+            isJtiSeen ?? NeverSeen, [], Pool, TestContext.CancellationToken).ConfigureAwait(false);
 }

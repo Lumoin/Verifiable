@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Foundation.Automata;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
+using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;
@@ -24,17 +24,17 @@ internal sealed class DidRegistrationTests
             if(input is BeginCreate create)
             {
                 var doc = new DidDocument { Id = (GenericDidMethod)$"did:{create.Method}:abc123" };
-                
+
                 return ValueTask.FromResult<RegistrationFlowState>(new RegistrationCompleted($"did:{create.Method}:abc123", doc));
             }
 
             return ValueTask.FromResult(state);
         });
 
-        await pda.StepAsync(new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsAccepted);
-        Assert.IsInstanceOfType<RegistrationCompleted>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationCompleted>(pda.CurrentState);
 
         var completed = (RegistrationCompleted)pda.CurrentState;
         Assert.AreEqual("did:key:abc123", completed.Did);
@@ -66,9 +66,9 @@ internal sealed class DidRegistrationTests
         });
 
         //Step 1: Begin create — PDA transitions to AwaitingSignature, pushes signing frame.
-        await pda.StepAsync(new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<AwaitingSignature>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<AwaitingSignature>(pda.CurrentState);
         Assert.AreEqual(2, pda.StackDepth, "Signing frame should be pushed.");
 
         var awaiting = (AwaitingSignature)pda.CurrentState;
@@ -84,11 +84,11 @@ internal sealed class DidRegistrationTests
             Algorithm = "EdDSA"
         };
 
-        await pda.StepAsync(new ProvideSignature(response), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(new ProvideSignature(response), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsAccepted);
         Assert.AreEqual(1, pda.StackDepth, "Signing frame should be popped.");
-        Assert.IsInstanceOfType<RegistrationCompleted>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationCompleted>(pda.CurrentState);
     }
 
     [TestMethod]
@@ -104,19 +104,19 @@ internal sealed class DidRegistrationTests
         });
 
         //Step 1: Begin create — backend needs time, returns wait state.
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("ebsi", null), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<AwaitingConfirmation>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<AwaitingConfirmation>(pda.CurrentState);
         var waiting = (AwaitingConfirmation)pda.CurrentState;
         Assert.AreEqual("job-42", waiting.JobId);
 
         //Step 2: Backend confirms completion.
         var doc = new DidDocument { Id = (GenericDidMethod)"did:ebsi:xyz789" };
-        await pda.StepAsync(new ConfirmCompletion("did:ebsi:xyz789", doc), TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await pda.StepAsync(new ConfirmCompletion("did:ebsi:xyz789", doc), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsAccepted);
-        Assert.IsInstanceOfType<RegistrationCompleted>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationCompleted>(pda.CurrentState);
     }
 
     [TestMethod]
@@ -134,7 +134,7 @@ internal sealed class DidRegistrationTests
         });
 
         var updatedDoc = new DidDocument { Id = (GenericDidMethod)"did:web:example.com" };
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.SetDidDocument, updatedDoc)]),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -157,7 +157,7 @@ internal sealed class DidRegistrationTests
             return ValueTask.FromResult(state);
         });
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginDeactivate("did:web:example.com"), TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsTrue(pda.IsAccepted);
@@ -172,13 +172,13 @@ internal sealed class DidRegistrationTests
             ValueTask.FromResult<RegistrationFlowState>(
                 new RegistrationInitiated("key", null)));
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
 
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new RegistrationError("ledgerUnavailable"), TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
+        _ = Assert.IsInstanceOfType<RegistrationFailed>(pda.CurrentState);
         var failed = (RegistrationFailed)pda.CurrentState;
         Assert.AreEqual("ledgerUnavailable", failed.Error);
     }
@@ -195,7 +195,7 @@ internal sealed class DidRegistrationTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync(
+            _ = await pda.StepAsync(
                 new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
         }
 
@@ -220,7 +220,7 @@ internal sealed class DidRegistrationTests
 
         using(pda.Subscribe(observer))
         {
-            await pda.StepAsync(
+            _ = await pda.StepAsync(
                 new BeginCreate("key", null), TestContext.CancellationToken).ConfigureAwait(false);
         }
 
@@ -248,7 +248,7 @@ internal sealed class DidRegistrationTests
         });
 
         var updatedDoc = new DidDocument { Id = (GenericDidMethod)"did:web:example.com" };
-        await pda.StepAsync(
+        _ = await pda.StepAsync(
             new BeginUpdate("did:web:example.com", [new DidDocumentOperationStep(WellKnownDidRegistrationValues.AddToDidDocument, updatedDoc)]),
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -286,7 +286,7 @@ internal sealed class DidRegistrationTests
         return DidRegistrationTransitions.CreateAutomaton("test-run", handler, new FakeTimeProvider(TestClock.CanonicalEpoch));
     }
 
-    private sealed class TestObserver<T>(List<T> entries) : IObserver<T>
+    private sealed class TestObserver<T>(List<T> entries): IObserver<T>
     {
         public void OnNext(T value) => entries.Add(value);
         public void OnError(Exception error) { }

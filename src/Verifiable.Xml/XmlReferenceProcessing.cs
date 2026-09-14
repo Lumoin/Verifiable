@@ -1,8 +1,7 @@
-using System.Collections.Generic;
+using Lumoin.Base;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -462,7 +461,7 @@ public static class XmlReferenceProcessing
                     return false;
                 }
 
-                output.AddRange(contribution.AsReadOnlySpan());
+                _ = output.AddRange(contribution.AsReadOnlySpan());
             }
             finally
             {
@@ -969,10 +968,10 @@ public static class XmlReferenceProcessing
     private static void CollectBase64SourceText(XmlNodeTable table, in XmlNodeSet nodeSet, BaseMemoryPool pool, PooledStructList<byte> output)
     {
         using var stack = new PooledStructList<TextWalkFrame>(pool, 32);
-        stack.Add(new TextWalkFrame { NextChild = table.FirstChildOf(table.RootIndex), IsUnderApex = false });
+        _ = stack.Add(new TextWalkFrame { NextChild = table.FirstChildOf(table.RootIndex), IsUnderApex = false });
         while(stack.Count > 0)
         {
-            ref TextWalkFrame frame = ref stack[stack.Count - 1];
+            ref TextWalkFrame frame = ref stack[^1];
             if(frame.NextChild < 0)
             {
                 stack.Truncate(stack.Count - 1);
@@ -989,7 +988,7 @@ public static class XmlReferenceProcessing
                     if(!nodeSet.IsExcludedElement(child))
                     {
                         bool isChildUnderApex = child == nodeSet.ApexElementIndex || isUnderApexHere;
-                        stack.Add(new TextWalkFrame { NextChild = table.FirstChildOf(child), IsUnderApex = isChildUnderApex });
+                        _ = stack.Add(new TextWalkFrame { NextChild = table.FirstChildOf(child), IsUnderApex = isChildUnderApex });
                     }
 
                     break;
@@ -997,9 +996,17 @@ public static class XmlReferenceProcessing
                 case XmlNodeKind.Text:
                     if(nodeSet.IsWholeDocument || isUnderApexHere)
                     {
-                        output.AddRange(table.ValueOf(child));
+                        _ = output.AddRange(table.ValueOf(child));
                     }
 
+                    break;
+
+                //The root never appears as a child, and a comment or processing instruction contributes no
+                //base64 source text and is never descended into.
+                case XmlNodeKind.Root:
+                case XmlNodeKind.Comment:
+                case XmlNodeKind.ProcessingInstruction:
+                default:
                     break;
             }
         }

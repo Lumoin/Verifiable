@@ -107,12 +107,12 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <remarks>This property provides a list of platforms on which the application can run, allowing
         /// developers to determine compatibility with various environments.</remarks>
         public string[] Platforms { get; }
-        
+
         /// <summary>
         /// Gets the reason associated with the current state or operation.
         /// </summary>
         public string Reason { get; }
-        
+
         /// <summary>
         /// Gets the file path of the source code where the associated event, such as an error or exception, occurred.
         /// </summary>
@@ -157,7 +157,7 @@ namespace Verifiable.Tests.TestInfrastructure
             }
 
             return base.ExecuteAsync(testMethod);
-        }      
+        }
     }
 
 
@@ -180,7 +180,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// to identify the exact location in the code where a method was invoked. It can help trace errors or
         /// understand the context of method calls during development and troubleshooting.</remarks>
         public string CallerFilePath { get; }
-        
+
         /// <summary>
         /// Gets the line number in the source code at which the method is called.
         /// </summary>
@@ -196,7 +196,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <param name="callerLineNumber">Automatically populated by the compiler.</param>
         public SkipOnCiTestMethodAttribute(
             [CallerFilePath] string callerFilePath = "",
-            [CallerLineNumber] int callerLineNumber = -1): base(callerFilePath, callerLineNumber)
+            [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
         {
             Reason = "Skipping on CI since running this test is not supported on CI at the moment.";
             CallerFilePath = callerFilePath;
@@ -236,7 +236,7 @@ namespace Verifiable.Tests.TestInfrastructure
             }
 
             return base.ExecuteAsync(testMethod);
-        }        
+        }
     }
 
 
@@ -293,7 +293,7 @@ namespace Verifiable.Tests.TestInfrastructure
             }
 
             return base.ExecuteAsync(testMethod);
-        }        
+        }
     }
 
 
@@ -310,7 +310,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// <remarks>This property provides a list of platforms on which the application can run, allowing
         /// developers to determine compatibility with various environments.</remarks>
         public string[] Platforms { get; }
-        
+
         /// <summary>
         /// Gets the reason for the platform's current state or behavior.
         /// </summary>
@@ -318,7 +318,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// functionality or performance. It is useful for debugging and understanding platform-specific
         /// issues.</remarks>
         public string PlatformReason { get; }
-        
+
         /// <summary>
         /// Gets the reason associated with the current configuration item.
         /// </summary>
@@ -351,7 +351,7 @@ namespace Verifiable.Tests.TestInfrastructure
         public RunOnlyOnPlatformSkipOnCiTestMethodAttribute(
             string[] platforms,
             [CallerFilePath] string callerFilePath = "",
-            [CallerLineNumber] int callerLineNumber = -1): base(callerFilePath, callerLineNumber)
+            [CallerLineNumber] int callerLineNumber = -1) : base(callerFilePath, callerLineNumber)
         {
             Platforms = platforms;
             PlatformReason = $"Test only runs on {string.Join(", ", Platforms)}.";
@@ -387,7 +387,7 @@ namespace Verifiable.Tests.TestInfrastructure
             }
 
             return base.ExecuteAsync(testMethod);
-        }        
+        }
     }
 
 
@@ -402,7 +402,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// Gets the condition function that determines whether the test should be ignored.
         /// </summary>
         public Func<bool> Condition { get; }
-        
+
         /// <summary>
         /// Gets the reason associated with the current state or operation.
         /// </summary>
@@ -439,7 +439,7 @@ namespace Verifiable.Tests.TestInfrastructure
         /// </remarks>
         public IgnoreIfAttribute(Type conditionType, string conditionMethodName, string reason)
         {
-            var method = 
+            var method =
                 conditionType.GetMethod(conditionMethodName, BindingFlags.Static | BindingFlags.Public)
                 ?? throw new ArgumentException($"Method '{conditionMethodName}' not found on type '{conditionType.Name}'.");
             Condition = (Func<bool>)Delegate.CreateDelegate(typeof(Func<bool>), method);
@@ -465,6 +465,6 @@ namespace Verifiable.Tests.TestInfrastructure
         public string? GetDisplayName(MethodInfo methodInfo, object?[]? data)
         {
             return methodInfo.Name;
-        }  
+        }
     }
 }

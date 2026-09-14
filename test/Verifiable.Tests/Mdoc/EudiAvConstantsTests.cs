@@ -45,17 +45,17 @@ internal sealed class EudiAvConstantsTests
     [TestMethod]
     public void DomesticVctRejectsNonTwoLetterCountryCode()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticVct("FIN"));
-        Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticVct("f"));
-        Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticVct(string.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticVct("FIN"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticVct("f"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticVct(string.Empty));
     }
 
 
     [TestMethod]
     public void DomesticNamespaceRejectsNonTwoLetterCountryCode()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticNamespace("FIN"));
-        Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticNamespace("f"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticNamespace("FIN"));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => EudiAv.DomesticNamespace("f"));
     }
 
 

@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Resolvers;
 
 namespace Verifiable.Json.Converters;
@@ -39,7 +36,7 @@ internal static class DidResolutionMetadataJson
             writer.WriteString("error"u8, error.Code);
 
             writer.WritePropertyName("problemDetails"u8);
-            JsonSerializer.Serialize(writer, error, options.GetTypeInfo(typeof(DidProblemDetails)));
+            JsonSerializer.Serialize(writer, error, options.GetTypeInfo<DidProblemDetails>());
         }
 
         if(proof is not null)
@@ -84,7 +81,7 @@ internal static class DidResolutionMetadataJson
             }
             else if(property.NameEquals("problemDetails"u8) && property.Value.ValueKind == JsonValueKind.Object)
             {
-                problemDetails = property.Value.Deserialize((JsonTypeInfo<DidProblemDetails>)options.GetTypeInfo(typeof(DidProblemDetails)));
+                problemDetails = property.Value.Deserialize(options.GetTypeInfo<DidProblemDetails>());
             }
             else if(property.NameEquals("proof"u8) && property.Value.ValueKind == JsonValueKind.Array)
             {
@@ -118,7 +115,7 @@ internal static class DidResolutionMetadataJson
                 AdditionalDataJson.AddFromElement(ref map, member.Name, member.Value);
             }
 
-            proofs.Add(map ?? new Dictionary<string, object>(StringComparer.Ordinal));
+            proofs.Add(map ?? new(StringComparer.Ordinal));
         }
 
         return proofs;

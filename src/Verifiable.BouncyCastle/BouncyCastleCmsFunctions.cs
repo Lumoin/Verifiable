@@ -1,16 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Cms;
-using Verifiable.Cryptography;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using Verifiable.Cryptography.Pki;
 using BcAttribute = Org.BouncyCastle.Asn1.Cms.Attribute;
 using BcCmsSignedData = Org.BouncyCastle.Cms.CmsSignedData;
@@ -263,7 +256,7 @@ public static class BouncyCastleCmsFunctions
                     result.Add(new BcX509Certificate(structure));
                 }
             }
-            catch(Exception exception) when (exception is not OutOfMemoryException)
+            catch(Exception exception) when(exception is not OutOfMemoryException)
             {
                 //Not signature-covered (§5.4/§5.6), so a member that fails RFC 5280 parsing is skipped rather
                 //than denying verification of the signer and the remaining, intact members. The guard spans both

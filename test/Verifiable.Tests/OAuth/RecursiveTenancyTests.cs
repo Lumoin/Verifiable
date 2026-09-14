@@ -1,7 +1,5 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
-using Verifiable.OAuth;
+using System.Collections.Immutable;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -65,7 +63,7 @@ internal sealed class RecursiveTenancyTests
             WellKnownEndpointNames.RegistrationRegister,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse customerRegisterResponse = await host.DispatchAtEndpointAsync(
@@ -73,7 +71,7 @@ internal sealed class RecursiveTenancyTests
             WellKnownEndpointNames.RegistrationRegister,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //Operator's chain includes the RFC 7592 management endpoints because
@@ -111,7 +109,7 @@ internal sealed class RecursiveTenancyTests
             HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
             if(registration.TenantId.Value.StartsWith("cust-", StringComparison.Ordinal))
             {
-                active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+                _ = active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
             }
             return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
         };
@@ -131,7 +129,7 @@ internal sealed class RecursiveTenancyTests
             HashSet<CapabilityIdentifier> active = [.. registration.AllowedCapabilities];
             if(registration.ClientId.StartsWith("https://customer-", StringComparison.Ordinal))
             {
-                active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
+                _ = active.Remove(WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
             }
             return ValueTask.FromResult<IReadOnlySet<CapabilityIdentifier>>(active);
         };
@@ -141,7 +139,7 @@ internal sealed class RecursiveTenancyTests
             WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         ServerHttpResponse customerJwks = await host.DispatchAtEndpointAsync(
@@ -149,7 +147,7 @@ internal sealed class RecursiveTenancyTests
             WellKnownEndpointNames.MetadataJwks,
             "GET",
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, operatorJwks.StatusCode,

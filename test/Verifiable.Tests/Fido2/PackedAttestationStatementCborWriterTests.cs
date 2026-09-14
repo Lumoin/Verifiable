@@ -67,6 +67,6 @@ internal sealed class PackedAttestationStatementCborWriterTests
     [TestMethod]
     public void EmptySignatureThrowsArgumentException()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => PackedAttestationStatementCborWriter.Write(WellKnownCoseAlgorithms.Es256, ReadOnlySpan<byte>.Empty));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => PackedAttestationStatementCborWriter.Write(WellKnownCoseAlgorithms.Es256, ReadOnlySpan<byte>.Empty));
     }
 }

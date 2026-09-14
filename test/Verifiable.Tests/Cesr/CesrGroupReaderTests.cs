@@ -1,8 +1,5 @@
 using System.Buffers;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Cesr;
 using Verifiable.Cesr.Streaming;
 
@@ -98,7 +95,7 @@ internal sealed class CesrGroupReaderTests
         byte[] key = PrimitiveBytes("D", PublicKeyRaw);
         byte[] body = [.. key, 0x00];
 
-        Assert.ThrowsExactly<CesrFormatException>(() =>
+        _ = Assert.ThrowsExactly<CesrFormatException>(() =>
         {
             foreach(CesrParsedPrimitive primitive in CesrGroupReader.ReadPrimitives(body, BaseMemoryPool.Shared))
             {
@@ -183,7 +180,7 @@ internal sealed class CesrGroupReaderTests
         byte[] key = PrimitiveTextBytes("D", PublicKeyRaw);
         byte[] body = [.. key, (byte)'0'];
 
-        Assert.ThrowsExactly<CesrFormatException>(() =>
+        _ = Assert.ThrowsExactly<CesrFormatException>(() =>
         {
             foreach(CesrParsedPrimitive primitive in CesrGroupReader.ReadPrimitivesText(body, BaseMemoryPool.Shared))
             {

@@ -1,16 +1,14 @@
-using System;
-using System.Net;
-using System.Net.Security;
-using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net;
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -51,7 +49,7 @@ internal sealed class LoopbackKestrelTests
 
         WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
         LoopbackKestrel.ConfigureLoopbackLogging(builder.Logging);
-        builder.WebHost.ConfigureKestrel(options => LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
+        _ = builder.WebHost.ConfigureKestrel(options => LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         await using WebApplication app = builder.Build();
         KestrelServerLimits limits = app.Services.GetRequiredService<IOptions<KestrelServerOptions>>().Value.Limits;

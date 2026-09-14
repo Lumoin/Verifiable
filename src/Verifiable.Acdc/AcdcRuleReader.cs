@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Acdc;
@@ -76,7 +74,7 @@ public static class AcdcRuleReader
 
             //The frame's members are all built; close it into a rule-group and attach it to its parent's reserved
             //slot, or return it as the root when there is no parent.
-            stack.Pop();
+            _ = stack.Pop();
             var group = new AcdcRuleGroup(frame.Said, frame.Uuid, frame.Legal, Materialize(frame.Built));
             if(stack.Count == 0)
             {

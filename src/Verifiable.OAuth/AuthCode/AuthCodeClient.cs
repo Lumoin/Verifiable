@@ -83,7 +83,7 @@ public readonly struct AuthCodeClient
         Uri redirectUri,
         OAuthFormEncodedFields additionalFields,
         CancellationToken cancellationToken) =>
-        StartParAsync(registration, redirectUri, additionalFields, new ExchangeContext(), cancellationToken);
+        StartParAsync(registration, redirectUri, additionalFields, [], cancellationToken);
 
 
     /// <inheritdoc cref="StartParAsync(ClientRegistration, Uri, OAuthFormEncodedFields, CancellationToken)"/>
@@ -137,7 +137,7 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         OAuthFormEncodedFields callbackParams,
         CancellationToken cancellationToken) =>
-        HandleCallbackAsync(registration, callbackParams, new ExchangeContext(), cancellationToken);
+        HandleCallbackAsync(registration, callbackParams, [], cancellationToken);
 
 
     /// <inheritdoc cref="HandleCallbackAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
@@ -177,7 +177,7 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         string flowId,
         CancellationToken cancellationToken) =>
-        ExchangeTokenAsync(registration, flowId, new ExchangeContext(), cancellationToken);
+        ExchangeTokenAsync(registration, flowId, [], cancellationToken);
 
 
     /// <inheritdoc cref="ExchangeTokenAsync(ClientRegistration, string, CancellationToken)"/>
@@ -256,7 +256,7 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         RefreshTokenRequest request,
         CancellationToken cancellationToken) =>
-        RefreshAsync(registration, request, new ExchangeContext(), cancellationToken);
+        RefreshAsync(registration, request, [], cancellationToken);
 
 
     /// <inheritdoc cref="RefreshAsync(ClientRegistration, RefreshTokenRequest, CancellationToken)"/>
@@ -311,7 +311,7 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         OAuthFormEncodedFields fields,
         CancellationToken cancellationToken) =>
-        RevokeAsync(registration, fields, new ExchangeContext(), cancellationToken);
+        RevokeAsync(registration, fields, [], cancellationToken);
 
 
     /// <inheritdoc cref="RevokeAsync(ClientRegistration, OAuthFormEncodedFields, CancellationToken)"/>
@@ -344,7 +344,7 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         AuthCodeStartJarParOptions jarOptions,
         CancellationToken cancellationToken) =>
-        StartJarParAsync(registration, jarOptions, new ExchangeContext(), cancellationToken);
+        StartJarParAsync(registration, jarOptions, [], cancellationToken);
 
 
     /// <inheritdoc cref="StartJarParAsync(ClientRegistration, AuthCodeStartJarParOptions, CancellationToken)"/>
@@ -376,7 +376,7 @@ public readonly struct AuthCodeClient
         ClientRegistration registration,
         AuthCodeStartJarAuthorizeOptions jarOptions,
         CancellationToken cancellationToken) =>
-        StartJarAuthorizeAsync(registration, jarOptions, new ExchangeContext(), cancellationToken);
+        StartJarAuthorizeAsync(registration, jarOptions, [], cancellationToken);
 
 
     /// <inheritdoc cref="StartJarAuthorizeAsync(ClientRegistration, AuthCodeStartJarAuthorizeOptions, CancellationToken)"/>

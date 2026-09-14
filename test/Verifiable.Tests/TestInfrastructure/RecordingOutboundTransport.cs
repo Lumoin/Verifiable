@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -26,14 +23,14 @@ internal static class RecordingOutboundTransport
 
         List<string?> contentTypes = [];
 
-        OutboundTransportDelegate recording = async (request, context, cancellationToken) =>
+        async ValueTask<OutboundResponse> recording(OutboundRequest request, Verifiable.Core.ExchangeContext context, CancellationToken cancellationToken)
         {
             OutboundResponse response = await transport(request, context, cancellationToken).ConfigureAwait(false);
-            response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
+            _ = response.Headers.TryGetValue(WellKnownHttpHeaderNames.ContentType, out string? contentType);
             contentTypes.Add(contentType);
 
             return response;
-        };
+        }
 
         return (recording, () => contentTypes);
     }

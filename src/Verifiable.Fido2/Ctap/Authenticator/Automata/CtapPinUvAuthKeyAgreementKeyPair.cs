@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Fido2.Ctap.Authenticator.Automata;

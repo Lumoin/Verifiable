@@ -1,16 +1,12 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -179,7 +175,7 @@ internal sealed class TpmInHouseSimulatorRsaOnlyDispatchTests
         secretResult.Value.Dispose();
 
         Assert.IsNotNull(capturedPolicySecretCommand, "The capturing wrapper must have observed the outgoing PolicySecret command.");
-        var authAreaReader = new TpmReader(capturedPolicySecretCommand!);
+        var authAreaReader = new TpmReader(capturedPolicySecretCommand);
         _ = TpmHeader.Parse(ref authAreaReader);
         _ = authAreaReader.ReadUInt32(); //authHandle.
         _ = authAreaReader.ReadUInt32(); //policySession.

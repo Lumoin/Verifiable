@@ -95,7 +95,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool pdpInvoked = false;
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             pdpInvoked = true;
@@ -125,7 +125,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool pdpInvoked = false;
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             pdpInvoked = true;
@@ -143,7 +143,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
              "resource":{"type":"account","id":"123"}}
             """;
 
-        using JsonDocument _ = await PostAsync(host, segment, Body, expectedStatus: 400).ConfigureAwait(false);
+        using JsonDocument rejectedResponse = await PostAsync(host, segment, Body, expectedStatus: 400).ConfigureAwait(false);
         Assert.IsFalse(pdpInvoked, "The PDP must not run for a structurally incomplete request.");
     }
 
@@ -346,7 +346,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool pdpInvoked = false;
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         app.Server.OAuth().EvaluateAccessAsync = (request, _, _, _) =>
         {
             pdpInvoked = true;
@@ -478,7 +478,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         using VerifierKeyMaterial pdp = RegisterPdp(app);
 
         bool seamInvoked = false;
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
         {
             seamInvoked = true;
@@ -494,7 +494,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
             {"action":{"name":"can_read"},"resource":{"type":"account","id":"123"}}
             """;
 
-        using JsonDocument _ = await PostSearchAsync(host, segment, "subject", Body, expectedStatus: 400).ConfigureAwait(false);
+        using JsonDocument rejectedResponse = await PostSearchAsync(host, segment, "subject", Body, expectedStatus: 400).ConfigureAwait(false);
         Assert.IsFalse(seamInvoked, "The search seam must not run for a request rejected at validation.");
     }
 
@@ -514,7 +514,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
         //offset), limit is a maximum, next_token is "" at the end. The request
         //is parsed by the SHIPPED default parser, so page{token,limit} comes off
         //the wire through production code.
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
         app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
         {
             int offset = 0;
@@ -632,7 +632,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
             $"{field} must be advertised when its seam is wired.");
         Assert.IsTrue(Uri.TryCreate(element.GetString(), UriKind.Absolute, out Uri? uri),
             $"{field} must be an absolute URL.");
-        Assert.AreEqual(expectedPath, uri!.AbsolutePath,
+        Assert.AreEqual(expectedPath, uri.AbsolutePath,
             $"{field} must be the URL the endpoint serves.");
     }
 
@@ -695,7 +695,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
             "The signer's JWT is embedded verbatim as signed_metadata.");
 
         Assert.IsNotNull(signedClaims, "The signer must be invoked.");
-        Assert.IsTrue(signedClaims!.ContainsKey(AuthZenMetadataParameterNames.PolicyDecisionPoint),
+        Assert.IsTrue(signedClaims.ContainsKey(AuthZenMetadataParameterNames.PolicyDecisionPoint),
             "The signed claim set carries the PDP identifier.");
         Assert.IsTrue(signedClaims.ContainsKey(AuthZenMetadataParameterNames.AccessEvaluationEndpoint),
             "The signed claim set carries the chain-resolved access_evaluation_endpoint.");
@@ -775,7 +775,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     {
         //Wire the SHIPPED default STJ parsers (Verifiable.Json) — the e2e flow
         //then exercises the real production parse path, not a test-local one.
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
 
         //The application's Policy Decision Point: alice may read; everyone else
         //is denied. A permit carries a reason in its context.
@@ -800,7 +800,7 @@ internal sealed class AuthZenAccessEvaluationEndpointTests
     //return single-page results.
     private static void WireSearch(TestHostShell app)
     {
-        app.Server.OAuth().UseDefaultAuthZenJsonParsing();
+        _ = app.Server.OAuth().UseDefaultAuthZenJsonParsing();
 
         app.Server.OAuth().SearchSubjectsAsync = (request, _, _, _) =>
             ValueTask.FromResult(new SubjectSearchResult

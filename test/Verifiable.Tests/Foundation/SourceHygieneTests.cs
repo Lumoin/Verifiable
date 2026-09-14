@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Verifiable.Cryptography;
@@ -567,7 +564,7 @@ internal sealed class SourceHygieneTests
         ("src/Verifiable.Microsoft/MicrosoftKeyAgreementFunctions.cs", "RandomNumberGenerator.Fill(ivOwner.Memory.Span[..AesGcmIvLength]);"),
         ("src/Verifiable.BouncyCastle/BouncyCastleKeyAgreementFunctions.cs", "RandomNumberGenerator.Fill(ivOwner.Memory.Span[..AesGcmIvLength]);"),
         ("src/Verifiable.BouncyCastle/BouncyCastleKeyAgreementFunctions.cs", "RandomNumberGenerator.Fill(ivOwner.Memory.Span[..XChaCha20NonceLength]);"),
-        ("src/Verifiable/Program.cs", "builder.Services.AddSingleton<FillEntropyDelegate>(RandomNumberGenerator.Fill);"),
+        ("src/Verifiable/Program.cs", "_ = builder.Services.AddSingleton<FillEntropyDelegate>(RandomNumberGenerator.Fill);"),
         ("src/Verifiable/Program.cs", "FillEntropyDelegate rng = RandomNumberGenerator.Fill;"),
     ];
 
@@ -1116,7 +1113,7 @@ internal sealed class SourceHygieneTests
             }
 
             string trailing = line.TrimEnd();
-            bool isJoinable = (trailing.EndsWith('(') || trailing.EndsWith(',')) && i + 1 < lines.Length;
+            bool isJoinable = (trailing.EndsWith('(', StringComparison.Ordinal) || trailing.EndsWith(',', StringComparison.Ordinal)) && i + 1 < lines.Length;
             string joined = isJoinable ? line + lines[i + 1] : line;
 
             bool isCandidateOnOwnLine = FormatOneResponseCodePattern.IsMatch(line) && FormatOneDesignationPositionPattern.IsMatch(line);
@@ -1581,16 +1578,16 @@ internal sealed class SourceHygieneTests
             .ToDictionary(static group => group.Key, static group => group.Count());
         Dictionary<(string FilePath, string LineText), int> matchedCounts = [];
 
-        foreach((string FilePath, int LineNumber, string LineText) hit in hits)
+        foreach((string FilePath, int LineNumber, string LineText) in hits)
         {
-            (string FilePath, string LineText) key = (hit.FilePath, hit.LineText);
+            (string FilePath, string LineText) key = (FilePath, LineText);
             int allowed = allowedCounts.GetValueOrDefault(key);
             int matchedSoFar = matchedCounts.GetValueOrDefault(key);
 
             if(matchedSoFar >= allowed)
             {
                 failures.Add(
-                    $"{hit.FilePath}:{hit.LineNumber}: site not on the allowlist ({ruleDescription}): {hit.LineText} " +
+                    $"{FilePath}:{LineNumber}: site not on the allowlist ({ruleDescription}): {LineText} " +
                     $"(recorded {allowed} time(s), now matched {matchedSoFar + 1}).");
             }
             else

@@ -108,7 +108,7 @@ public static class TrustChainResolver
             SubordinateStatement = null,
             AuthorityHints = ReadAuthorityHints(leafConfiguration),
         });
-        onPath.Add(leaf.Value);
+        _ = onPath.Add(leaf.Value);
 
         while(path.Count > 0)
         {
@@ -124,8 +124,8 @@ public static class TrustChainResolver
             if(top.NextHintIndex >= top.AuthorityHints.Count)
             {
                 //Exhausted this entity's hints — backtrack.
-                onPath.Remove(top.Entity.Value);
-                path.Pop();
+                _ = onPath.Remove(top.Entity.Value);
+                _ = path.Pop();
                 continue;
             }
 
@@ -187,7 +187,7 @@ public static class TrustChainResolver
                 continue;
             }
 
-            onPath.Add(superior.Value);
+            _ = onPath.Add(superior.Value);
             path.Push(new WalkFrame
             {
                 Entity = superior,

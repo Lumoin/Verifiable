@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Attributes;
 using Verifiable.Tpm.Spec.Constants;
@@ -292,7 +290,7 @@ public sealed class TpmtPublic: IDisposable
             TpmuPublicId.FromRsaModulus(modulus, pool));
     }
 
-    
+
     /// <summary>
     /// Creates a public area template for an ECC ECDH key agreement key.
     /// </summary>

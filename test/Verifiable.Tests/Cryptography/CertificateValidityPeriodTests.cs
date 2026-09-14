@@ -1,7 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Formats.Asn1;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -85,7 +84,7 @@ internal sealed class CertificateValidityPeriodTests
         root.Certificate.RawDataMemory.Span.CopyTo(owner.Memory.Span);
         using var mistagged = new PkiCertificateMemory(owner, PkiCertificateTags.X509Crl);
 
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CertificateValidityPeriod.TryRead(mistagged, out _),
             "A CRL-tagged carrier must be rejected before any parsing.");
     }
@@ -95,7 +94,7 @@ internal sealed class CertificateValidityPeriodTests
     [TestMethod]
     public void RejectsANullCertificate()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => CertificateValidityPeriod.TryRead(null!, out _));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => CertificateValidityPeriod.TryRead(null!, out _));
     }
 
 
@@ -114,7 +113,7 @@ internal sealed class CertificateValidityPeriodTests
     {
         using PkiCertificateMemory pseudoCertificate = BuildCertificateWithNullIssuer();
 
-        Assert.ThrowsExactly<AsnContentException>(() => ManagedCertificate.Parse(pseudoCertificate.AsReadOnlyMemory()));
+        _ = Assert.ThrowsExactly<AsnContentException>(() => ManagedCertificate.Parse(pseudoCertificate.AsReadOnlyMemory()));
 
         bool wasRead = CertificateValidityPeriod.TryRead(pseudoCertificate, out CertificateValidityPeriod? validityPeriod);
 
@@ -138,7 +137,7 @@ internal sealed class CertificateValidityPeriodTests
     {
         using PkiCertificateMemory pseudoCertificate = BuildCertificateWithNonIntegerVersion();
 
-        Assert.ThrowsExactly<AsnContentException>(() => ManagedCertificate.Parse(pseudoCertificate.AsReadOnlyMemory()));
+        _ = Assert.ThrowsExactly<AsnContentException>(() => ManagedCertificate.Parse(pseudoCertificate.AsReadOnlyMemory()));
 
         bool wasRead = CertificateValidityPeriod.TryRead(pseudoCertificate, out CertificateValidityPeriod? validityPeriod);
 
@@ -162,7 +161,7 @@ internal sealed class CertificateValidityPeriodTests
     {
         using PkiCertificateMemory pseudoCertificate = BuildCertificateWithSignatureAlgorithmMissingObjectIdentifier();
 
-        Assert.ThrowsExactly<AsnContentException>(() => ManagedCertificate.Parse(pseudoCertificate.AsReadOnlyMemory()));
+        _ = Assert.ThrowsExactly<AsnContentException>(() => ManagedCertificate.Parse(pseudoCertificate.AsReadOnlyMemory()));
 
         bool wasRead = CertificateValidityPeriod.TryRead(pseudoCertificate, out CertificateValidityPeriod? validityPeriod);
 

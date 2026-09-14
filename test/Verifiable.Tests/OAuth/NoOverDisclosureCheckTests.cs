@@ -27,7 +27,7 @@ internal sealed class NoOverDisclosureCheckTests
     public async Task RejectsOverDisclosureWhenEnforcedByDefault()
     {
         //Default policy (no key set) → enforce. Over-disclosed → Failure.
-        ClaimOutcome outcome = await RunAsync(new ExchangeContext(), overDisclosed: true);
+        ClaimOutcome outcome = await RunAsync([], overDisclosed: true);
 
         Assert.AreEqual(ClaimOutcome.Failure, outcome,
             "With enforcement on (the default) an over-disclosing presentation must fail.");
@@ -37,7 +37,7 @@ internal sealed class NoOverDisclosureCheckTests
     [TestMethod]
     public async Task AcceptsMinimalDisclosureWhenEnforced()
     {
-        ClaimOutcome outcome = await RunAsync(new ExchangeContext(), overDisclosed: false);
+        ClaimOutcome outcome = await RunAsync([], overDisclosed: false);
 
         Assert.AreEqual(ClaimOutcome.Success, outcome,
             "A presentation that did not over-disclose passes regardless of enforcement.");
@@ -49,7 +49,7 @@ internal sealed class NoOverDisclosureCheckTests
     {
         //Deployment opted out of strict minimization: over-disclosure is recorded
         //as a (passing) signal rather than rejected.
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetEnforceNoOverDisclosure(false);
 
         ClaimOutcome outcome = await RunAsync(context, overDisclosed: true);

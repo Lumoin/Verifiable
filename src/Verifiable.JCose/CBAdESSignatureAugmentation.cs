@@ -201,14 +201,14 @@ public sealed class CBAdESAugmentationException: Exception
 
 
     /// <summary>Initializes a new <see cref="CBAdESAugmentationException"/> with an unclassified malformed input.</summary>
-    public CBAdESAugmentationException(): this(CBAdESAugmentationFailureKind.MalformedEncoding, "The CB-AdES signature could not be augmented.")
+    public CBAdESAugmentationException() : this(CBAdESAugmentationFailureKind.MalformedEncoding, "The CB-AdES signature could not be augmented.")
     {
     }
 
 
     /// <summary>Initializes a new <see cref="CBAdESAugmentationException"/> with an unclassified malformed input.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public CBAdESAugmentationException(string message): this(CBAdESAugmentationFailureKind.MalformedEncoding, message)
+    public CBAdESAugmentationException(string message) : this(CBAdESAugmentationFailureKind.MalformedEncoding, message)
     {
     }
 
@@ -216,7 +216,7 @@ public sealed class CBAdESAugmentationException: Exception
     /// <summary>Initializes a new <see cref="CBAdESAugmentationException"/> with an unclassified malformed input.</summary>
     /// <param name="message">The message describing the fault.</param>
     /// <param name="innerException">The exception that caused it.</param>
-    public CBAdESAugmentationException(string message, Exception innerException): this(CBAdESAugmentationFailureKind.MalformedEncoding, message, innerException)
+    public CBAdESAugmentationException(string message, Exception innerException) : this(CBAdESAugmentationFailureKind.MalformedEncoding, message, innerException)
     {
     }
 
@@ -224,7 +224,7 @@ public sealed class CBAdESAugmentationException: Exception
     /// <summary>Initializes a new <see cref="CBAdESAugmentationException"/>.</summary>
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
-    public CBAdESAugmentationException(CBAdESAugmentationFailureKind failureKind, string message): base(message)
+    public CBAdESAugmentationException(CBAdESAugmentationFailureKind failureKind, string message) : base(message)
     {
         FailureKind = failureKind;
     }
@@ -234,7 +234,7 @@ public sealed class CBAdESAugmentationException: Exception
     /// <param name="failureKind">What could not be done.</param>
     /// <param name="message">The message describing the fault.</param>
     /// <param name="innerException">The exception that caused it.</param>
-    public CBAdESAugmentationException(CBAdESAugmentationFailureKind failureKind, string message, Exception innerException): base(message, innerException)
+    public CBAdESAugmentationException(CBAdESAugmentationFailureKind failureKind, string message, Exception innerException) : base(message, innerException)
     {
         FailureKind = failureKind;
     }
@@ -361,7 +361,7 @@ public abstract class CBAdESPayloadTimestampAcquisitionSource
 
 /// <summary>The attached-payload arm: the COSE Payload field is present, and <see cref="PayloadBytes"/> is its content.</summary>
 [DebuggerDisplay("CBAdESAttachedPayloadTimestampAcquisitionSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESAttachedPayloadTimestampAcquisitionSource : CBAdESPayloadTimestampAcquisitionSource
+public sealed class CBAdESAttachedPayloadTimestampAcquisitionSource: CBAdESPayloadTimestampAcquisitionSource
 {
     /// <summary>Initializes a new <see cref="CBAdESAttachedPayloadTimestampAcquisitionSource"/>.</summary>
     /// <param name="payloadBytes">The COSE Payload field's content bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory.</param>
@@ -377,7 +377,7 @@ public sealed class CBAdESAttachedPayloadTimestampAcquisitionSource : CBAdESPayl
 
 /// <summary>The detached-and-unreferenced arm: the caller already holds the out-of-band detached COSE Payload bytes.</summary>
 [DebuggerDisplay("CBAdESDetachedPayloadTimestampAcquisitionSource: {PayloadBytes.Length} bytes")]
-public sealed class CBAdESDetachedPayloadTimestampAcquisitionSource : CBAdESPayloadTimestampAcquisitionSource
+public sealed class CBAdESDetachedPayloadTimestampAcquisitionSource: CBAdESPayloadTimestampAcquisitionSource
 {
     /// <summary>Initializes a new <see cref="CBAdESDetachedPayloadTimestampAcquisitionSource"/>.</summary>
     /// <param name="payloadBytes">The out-of-band detached COSE Payload bytes. <strong>Borrowed</strong> view — the caller owns the underlying memory.</param>
@@ -1361,7 +1361,7 @@ public static class CBAdESSignatureAugmentation
                         //Classified by DECODED-MODEL index, for the raw-splice seam below to skip the matching
                         //raw array entry verbatim -- never a re-encode of what is retained.
                         skipDecodedIndexes ??= [];
-                        skipDecodedIndexes.Add(i);
+                        _ = skipDecodedIndexes.Add(i);
 
                         if(element is IDisposable disposable)
                         {
@@ -1636,7 +1636,7 @@ public static class CBAdESSignatureAugmentation
 
             if(context.CertificatesToReference is { Count: > 0 } certificatesToReference)
             {
-                certificateReferences = new List<CBAdESCertificateReference>(certificatesToReference.Count);
+                certificateReferences = new(certificatesToReference.Count);
                 for(int i = 0; i < certificatesToReference.Count; ++i)
                 {
                     PkiCertificateMemory candidate = certificatesToReference[i];
@@ -1660,7 +1660,7 @@ public static class CBAdESSignatureAugmentation
 
             if(context.CrlsToReference is { Count: > 0 } crlsToReference)
             {
-                crlReferences = new List<CBAdESCrlReference>(crlsToReference.Count);
+                crlReferences = new(crlsToReference.Count);
                 for(int i = 0; i < crlsToReference.Count; ++i)
                 {
                     PkiCertificateMemory candidate = crlsToReference[i];
@@ -1677,7 +1677,7 @@ public static class CBAdESSignatureAugmentation
 
             if(context.OcspResponsesToReference is { Count: > 0 } ocspResponsesToReference)
             {
-                ocspReferences = new List<CBAdESOcspReference>(ocspResponsesToReference.Count);
+                ocspReferences = new(ocspResponsesToReference.Count);
                 for(int i = 0; i < ocspResponsesToReference.Count; ++i)
                 {
                     CBAdESOcspReferenceInput input = ocspResponsesToReference[i];
@@ -2032,8 +2032,8 @@ public static class CBAdESSignatureAugmentation
             {
                 throw new CBAdESAugmentationException(
                     CBAdESAugmentationFailureKind.MessageImprintInputMalformed,
-                    payloadFailureReason ?? "The arcTst message-imprint input's payload contribution (clause " +
-                        "5.3.5.3 steps 6/7) could not be resolved.");
+                    payloadFailureReason ?? ("The arcTst message-imprint input's payload contribution (clause " +
+                        "5.3.5.3 steps 6/7) could not be resolved."));
             }
 
             bool built = buildImprintInput(
@@ -3033,7 +3033,7 @@ public static class CBAdESSignatureAugmentation
     /// <summary>Disposes every entry of <paramref name="entries"/>, tolerating a <see langword="null"/> list.</summary>
     /// <typeparam name="T">The disposable entry type.</typeparam>
     /// <param name="entries">The list whose entries to dispose, or <see langword="null"/>.</param>
-    private static void DisposeEntries<T>(List<T>? entries) where T: IDisposable
+    private static void DisposeEntries<T>(List<T>? entries) where T : IDisposable
     {
         if(entries is null)
         {

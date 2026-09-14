@@ -1,6 +1,6 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Text;
-using Lumoin.Veritas.Cbor;
 using Verifiable.Core.Model.Mdoc;
 
 namespace Verifiable.Cbor.Mdoc;

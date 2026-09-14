@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -126,7 +125,7 @@ internal sealed class JAdESHeaderRulesTests
         Assert.Contains("JA-5.2.8.2-04", exception.Message);
 
         IReadOnlyList<JAdESRuleViolation> violations = JAdESHeaderRules.Check(headers, payloadIsDetached: true);
-        Assert.Contains(static (JAdESRuleViolation v) => v is JAdESHttpHeadersParsNotLowercaseViolation, violations);
+        Assert.Contains(static v => v is JAdESHttpHeadersParsNotLowercaseViolation, violations);
     }
 
 
@@ -210,7 +209,7 @@ internal sealed class JAdESHeaderRulesTests
     [TestMethod]
     public void NullHeadersRaisesArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => JAdESHeaderRules.Check(null!, payloadIsDetached: false));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => JAdESHeaderRules.Check(null!, payloadIsDetached: false));
     }
 
 

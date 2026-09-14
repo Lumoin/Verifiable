@@ -1,17 +1,9 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Extensions.Hierarchy;
 
@@ -1229,7 +1221,7 @@ public static class TpmDeviceExtensions
         TpmRh authHandle,
         ReadOnlyMemory<byte> authValue,
         ITpmCommandInput input,
-        CancellationToken cancellationToken) where TResponse: class, ITpmWireType
+        CancellationToken cancellationToken) where TResponse : class, ITpmWireType
     {
         TpmResult<TpmSession> sessionResult = await StartHierarchyBoundSessionAsync(
             device, pool, registry, authHandle, authValue, cancellationToken).ConfigureAwait(false);
@@ -1280,7 +1272,7 @@ public static class TpmDeviceExtensions
         TpmResponseRegistry registry,
         ReadOnlyMemory<byte> authValue,
         ITpmCommandInput input,
-        CancellationToken cancellationToken) where TResponse: ITpmWireType
+        CancellationToken cancellationToken) where TResponse : ITpmWireType
     {
         using TpmPasswordSession authSession = TpmPasswordSession.Create(authValue.Span, pool);
 

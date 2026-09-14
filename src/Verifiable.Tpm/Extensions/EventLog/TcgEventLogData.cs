@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 
 namespace Verifiable.Tpm.Extensions.EventLog;
@@ -31,7 +30,7 @@ public sealed class TcgEventLogData: IDisposable
         get
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            return MemoryOwner.Memory.Span.Slice(0, Length);
+            return MemoryOwner.Memory.Span[..Length];
         }
     }
 
@@ -44,7 +43,7 @@ public sealed class TcgEventLogData: IDisposable
         get
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            return MemoryOwner.Memory.Slice(0, Length);
+            return MemoryOwner.Memory[..Length];
         }
     }
 

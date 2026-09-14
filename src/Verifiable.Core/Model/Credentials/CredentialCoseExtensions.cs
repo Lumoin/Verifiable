@@ -1,10 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
@@ -348,7 +343,7 @@ public static class CredentialCoseExtensions
         VerifiableCredential credential;
         try
         {
-            header = new Dictionary<int, object>(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
+            header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
 
             //The credential must be decoded before the signature is checked -- its signed `issuer`
             //claim is the identity the kid is bound to (gate 2). A malformed payload cannot verify
@@ -509,7 +504,7 @@ public static class CredentialCoseExtensions
         VerifiableCredential credential;
         try
         {
-            header = new Dictionary<int, object>(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
+            header = new(headerParser(message.ProtectedHeader.AsReadOnlySpan()));
             credential = credentialDeserializer(message.Payload.Span);
         }
         catch(OperationCanceledException)

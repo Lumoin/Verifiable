@@ -1,9 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -12,12 +11,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -972,7 +965,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
         BinaryPrimitives.WriteUInt32BigEndian(endorsementName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
 
         Span<byte> predicted = stackalloc byte[size];
-        TpmPolicyDigest.ExtendForSecret(current, endorsementName, ReadOnlySpan<byte>.Empty, policyHash, predicted, BaseMemoryPool.Shared);
+        _ = TpmPolicyDigest.ExtendForSecret(current, endorsementName, ReadOnlySpan<byte>.Empty, policyHash, predicted, BaseMemoryPool.Shared);
 
         return actualDigest.SequenceEqual(predicted);
     }
@@ -1003,7 +996,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
             byte[] matchingBranch = new byte[size];
             Span<byte> zero = stackalloc byte[size];
             zero.Clear();
-            TpmPolicyDigest.ExtendForAuthValue(zero, PolicyHash, matchingBranch, pool);
+            _ = TpmPolicyDigest.ExtendForAuthValue(zero, PolicyHash, matchingBranch, pool);
 
             byte[] otherBranch = new byte[size];
             Array.Fill(otherBranch, (byte)0x5A);
@@ -1022,7 +1015,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
             using PolicyGetDigestResponse digest = digestResult.Value;
 
             byte[] predicted = new byte[size];
-            TpmPolicyDigest.ExtendForOr(branches, PolicyHash, predicted, pool);
+            _ = TpmPolicyDigest.ExtendForOr(branches, PolicyHash, predicted, pool);
 
             Assert.IsTrue(
                 digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -1082,7 +1075,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
                 byte[] predicted = new byte[size];
                 Span<byte> zero = stackalloc byte[size];
                 zero.Clear();
-                TpmPolicyDigest.ExtendForNv(zero, operandB, Offset, (ushort)Operation, nvName, PolicyHash, predicted, pool);
+                _ = TpmPolicyDigest.ExtendForNv(zero, operandB, Offset, (ushort)Operation, nvName, PolicyHash, predicted, pool);
 
                 Assert.IsTrue(
                     digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -1166,8 +1159,8 @@ internal sealed class TpmInHouseSimulatorPolicyTests
                 byte[] predictedFromEmptyPolicy = new byte[size];
                 Span<byte> zero = stackalloc byte[size];
                 zero.Clear();
-                TpmPolicyDigest.ExtendForNv(zero, operandB, Offset, (ushort)Operation, policyName, PolicyHash, predicted, pool);
-                TpmPolicyDigest.ExtendForNv(zero, operandB, Offset, (ushort)Operation, emptyPolicyName, PolicyHash, predictedFromEmptyPolicy, pool);
+                _ = TpmPolicyDigest.ExtendForNv(zero, operandB, Offset, (ushort)Operation, policyName, PolicyHash, predicted, pool);
+                _ = TpmPolicyDigest.ExtendForNv(zero, operandB, Offset, (ushort)Operation, emptyPolicyName, PolicyHash, predictedFromEmptyPolicy, pool);
 
                 Assert.IsTrue(
                     digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),
@@ -1244,7 +1237,7 @@ internal sealed class TpmInHouseSimulatorPolicyTests
                 byte[] predicted = new byte[size];
                 Span<byte> zero = stackalloc byte[size];
                 zero.Clear();
-                TpmPolicyDigest.ExtendForNv(zero, writtenData, Offset, (ushort)Operation, nvName, PolicyHash, predicted, pool);
+                _ = TpmPolicyDigest.ExtendForNv(zero, writtenData, Offset, (ushort)Operation, nvName, PolicyHash, predicted, pool);
 
                 Assert.IsTrue(
                     digest.PolicyDigest.AsReadOnlySpan().SequenceEqual(predicted),

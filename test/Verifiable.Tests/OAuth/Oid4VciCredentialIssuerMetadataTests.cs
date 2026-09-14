@@ -1,16 +1,12 @@
-using System.Buffers;
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Json;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -166,7 +162,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         //The signer received the same values the plain document carries (so they cannot diverge).
         Assert.IsNotNull(seenClaims);
         Assert.AreEqual($"https://issuer.test/{segment}",
-            seenClaims!.TryGetValue("credential_issuer", out object? iss) ? iss as string : null);
+            seenClaims.TryGetValue("credential_issuer", out object? iss) ? iss as string : null);
         Assert.AreEqual($"https://issuer.test/connect/{segment}/credential",
             seenClaims.TryGetValue("credential_endpoint", out object? ce) ? ce as string : null);
         Assert.IsTrue(seenClaims.TryGetValue("credential_configurations_supported", out _),
@@ -263,13 +259,13 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     [TestMethod]
     public void SignedMetadataHelperRejectsNoneAndSymmetricAlg()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => SignedCredentialIssuerMetadata.EnsureSignatureAlgorithmAllowed(WellKnownJwaValues.None),
             "§12.2.3 forbids alg=none for signed_metadata.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => SignedCredentialIssuerMetadata.EnsureSignatureAlgorithmAllowed(WellKnownJwaValues.Hs256),
             "§12.2.3 forbids a symmetric (MAC) alg for signed_metadata.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => SignedCredentialIssuerMetadata.EnsureSignatureAlgorithmAllowed(WellKnownJwaValues.Hs512),
             "§12.2.3 forbids a symmetric (MAC) alg for signed_metadata.");
 
@@ -534,13 +530,13 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
         Dictionary<string, object>? header = SecurityEventTestJson.DeserializePart(
             SecurityEventTestJson.DecodeSegment(segments[0], BaseMemoryPool.Shared));
         Assert.IsNotNull(header);
-        Assert.AreEqual("openidvci-issuer-metadata+jwt", header!["typ"] as string,
+        Assert.AreEqual("openidvci-issuer-metadata+jwt", header["typ"] as string,
             "§12.2.3 typ MUST be openidvci-issuer-metadata+jwt.");
 
         Dictionary<string, object>? payload = SecurityEventTestJson.DeserializePart(
             SecurityEventTestJson.DecodeSegment(segments[1], BaseMemoryPool.Shared));
         Assert.IsNotNull(payload);
-        Assert.AreEqual(expectedIssuer, payload!["sub"] as string,
+        Assert.AreEqual(expectedIssuer, payload["sub"] as string,
             "§12.2.3 sub MUST match the Credential Issuer Identifier.");
         Assert.IsTrue(payload.ContainsKey("iat"), "§12.2.3 iat is REQUIRED.");
         Assert.AreEqual(expectedIssuer, payload["credential_issuer"] as string,
@@ -696,7 +692,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
     /// </summary>
     private static void WireChainEndpointSeams(TestHostShell host)
     {
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
         host.Server.OAuth().IssueCredentialAsync =
             (request, accessToken, registration, context, ct) =>
                 ValueTask.FromResult(CredentialIssuanceDecision.Issue(["credential"]));
@@ -744,7 +740,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
             WellKnownEndpointNames.Oid4VciCredentialIssuerMetadata,
             WellKnownHttpMethods.Get,
             new RequestFields(),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -762,7 +758,7 @@ internal sealed class Oid4VciCredentialIssuerMetadataTests
             WellKnownHttpMethods.Get,
             new RequestFields(),
             headers,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 

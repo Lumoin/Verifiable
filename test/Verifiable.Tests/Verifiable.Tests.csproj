@@ -66,7 +66,7 @@
   <ItemGroup>
     <!--
       Kestrel + HttpContext mapping types live in the Microsoft.AspNetCore.App
-      shared framework rather than as NuGet packages on .NET 10. Test
+      shared framework rather than as NuGet packages on .NET 11. Test
       infrastructure (Kestrel host + IHttpApplication mapping) needs this
       reference; the library itself never does.
     -->

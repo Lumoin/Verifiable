@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Formats.Asn1;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.Cryptography;
@@ -169,7 +166,7 @@ public static class MicrosoftX509Functions
                 X509Certificate2 anchorCert =
                     X509CertificateLoader.LoadCertificate(anchor.AsReadOnlyMemory().Span);
                 anchorCerts.Add(anchorCert);
-                x509Chain.ChainPolicy.CustomTrustStore.Add(anchorCert);
+                _ = x509Chain.ChainPolicy.CustomTrustStore.Add(anchorCert);
             }
 
             for(int i = 1; i < chain.Count; i++)
@@ -177,7 +174,7 @@ public static class MicrosoftX509Functions
                 X509Certificate2 intermediate =
                     X509CertificateLoader.LoadCertificate(chain[i].AsReadOnlyMemory().Span);
                 intermediateCerts.Add(intermediate);
-                x509Chain.ChainPolicy.ExtraStore.Add(intermediate);
+                _ = x509Chain.ChainPolicy.ExtraStore.Add(intermediate);
             }
 
             bool valid = x509Chain.Build(leafCert);
@@ -298,7 +295,7 @@ public static class MicrosoftX509Functions
             }
             else
             {
-                sequence.ReadEncodedValue();
+                _ = sequence.ReadEncodedValue();
             }
         }
 

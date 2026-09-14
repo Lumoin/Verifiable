@@ -1,10 +1,7 @@
-using System;
-using System.Net.WebSockets;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using System.Net.WebSockets;
+using System.Security.Cryptography.X509Certificates;
 using Verifiable.DidComm.Transport;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -85,14 +82,14 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
         }
 
         WebSocket socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
-        Accepted.TrySetResult(socket);
+        _ = Accepted.TrySetResult(socket);
 
         //Wait for DisposeAsync's shutdown signal rather than returning — returning here would tear the
         //socket down while the test is still driving direct SendFrameAsync/ReceiveFrameAsync calls against
         //it. Once signaled, this returns without its own close handshake: DisposeAsync's app.StopAsync tears
         //the listener (and every accepted connection) down regardless, and by the time it is called the test
         //has already finished asserting everything it needs from this connection.
-        await CloseRequested.Task.ConfigureAwait(false);
+        _ = await CloseRequested.Task.ConfigureAwait(false);
     }
 
 
@@ -141,7 +138,7 @@ internal sealed class DidCommDuplexMediatorHost: IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        CloseRequested.TrySetResult(true);
+        _ = CloseRequested.TrySetResult(true);
         await App.StopAsync(CancellationToken.None).ConfigureAwait(false);
         await App.DisposeAsync().ConfigureAwait(false);
         ListenerCertificate.Dispose();

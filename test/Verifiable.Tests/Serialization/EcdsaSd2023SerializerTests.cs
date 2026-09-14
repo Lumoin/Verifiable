@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
 

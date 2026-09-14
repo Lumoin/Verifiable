@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -96,7 +95,7 @@ public sealed class Tpm2bMaxNvBuffer: IDisposable
                 return ReadOnlySpan<byte>.Empty;
             }
 
-            return Storage.Memory.Span.Slice(0, Length);
+            return Storage.Memory.Span[..Length];
         }
     }
 
@@ -113,7 +112,7 @@ public sealed class Tpm2bMaxNvBuffer: IDisposable
             return ReadOnlyMemory<byte>.Empty;
         }
 
-        return Storage.Memory.Slice(0, Length);
+        return Storage.Memory[..Length];
     }
 
     /// <summary>
@@ -163,7 +162,7 @@ public sealed class Tpm2bMaxNvBuffer: IDisposable
         try
         {
             ReadOnlySpan<byte> source = reader.ReadBytes(size);
-            source.CopyTo(storage.Memory.Span.Slice(0, size));
+            source.CopyTo(storage.Memory.Span[..size]);
 
             return new Tpm2bMaxNvBuffer(storage, size);
         }

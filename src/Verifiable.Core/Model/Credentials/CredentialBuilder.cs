@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.JCose;
 
@@ -186,7 +185,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
         .With((credential, builder, buildState) =>
         {
             var types = new List<string> { CredentialConstants.VerifiableCredentialType };
-            if(buildState!.AdditionalTypes != null)
+            if(buildState.AdditionalTypes != null)
             {
                 types.AddRange(buildState.AdditionalTypes);
             }
@@ -198,7 +197,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
         //Third transformation: Set issuer and validity period.
         .With((credential, builder, buildState) =>
         {
-            credential.Issuer = buildState!.Issuer;
+            credential.Issuer = buildState.Issuer;
             credential.ValidFrom = buildState.ValidFrom?.ToString("O");
             credential.ValidUntil = buildState.ValidUntil?.ToString("O");
 
@@ -210,7 +209,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
         //Fourth transformation: Create credential subjects.
         .With((credential, builder, buildState) =>
         {
-            if(buildState!.Subjects != null && buildState.Subjects.Count > 0)
+            if(buildState.Subjects != null && buildState.Subjects.Count > 0)
             {
                 credential.CredentialSubject = buildState.Subjects.ToList();
             }
@@ -489,7 +488,7 @@ public sealed class CredentialBuilder: Builder<VerifiableCredential, CredentialB
             config.Encoder,
             config.ComputeDigest,
             config.MemoryPool,
-            context ?? new ExchangeContext(),
+            context ?? [],
             cancellationToken).ConfigureAwait(false);
     }
 

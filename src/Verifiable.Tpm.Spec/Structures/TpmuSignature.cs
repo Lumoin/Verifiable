@@ -1,5 +1,3 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Tpm.Spec.Algorithms;
 using Verifiable.Tpm.Spec.Constants;
@@ -261,7 +259,7 @@ public sealed class TpmuSignature: IDisposable
 
         switch(Type)
         {
-            case(TpmAlgIdConstants.TPM_ALG_ECDSA):
+            case TpmAlgIdConstants.TPM_ALG_ECDSA:
             {
                 writer.WriteUInt16((ushort)HashAlgorithm);
                 SignatureR!.WriteTo(ref writer);
@@ -269,13 +267,13 @@ public sealed class TpmuSignature: IDisposable
 
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_HMAC):
+            case TpmAlgIdConstants.TPM_ALG_HMAC:
             {
                 HmacSignature!.WriteTo(ref writer);
 
                 break;
             }
-            case(TpmAlgIdConstants.TPM_ALG_NULL):
+            case TpmAlgIdConstants.TPM_ALG_NULL:
             {
                 //TPM_ALG_NULL selects no member: nothing follows the sigAlg selector the enclosing
                 //TPMT_SIGNATURE already wrote.

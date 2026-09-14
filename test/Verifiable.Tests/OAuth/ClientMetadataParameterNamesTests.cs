@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;

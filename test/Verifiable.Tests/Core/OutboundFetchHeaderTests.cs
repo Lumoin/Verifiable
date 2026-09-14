@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Core.Transport;
 using Verifiable.OAuth.Client;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Core;
@@ -280,7 +275,7 @@ internal sealed class OutboundFetchHeaderTests
     /// <param name="policy">The policy every hop is validated against.</param>
     private static ExchangeContext Context(OutboundFetchPolicy policy)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(policy);
 
         return context;

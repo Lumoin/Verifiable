@@ -1,12 +1,7 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Cryptography.Pki.Xml;
 
 namespace Verifiable.Tests.Cryptography;
 
@@ -480,7 +475,7 @@ internal sealed class TrustedListQualificationTests
         using PkiCertificateMemory certificate = CreateCertificateMemory(CertificateUnderTestBytes);
         QualifiedCertificateFacts facts = CreateFacts(hasQcCompliance: true, qcTypes: []);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await TrustedListQualification.DetermineEuQualifiedCertificateAsync(
                 trustedList, certificate, facts, RegulationEvaluationTime, ByteEqualityMatch, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -1001,30 +996,30 @@ internal sealed class TrustedListQualificationTests
         IReadOnlyList<KeyUsageBitName>? setKeyUsageBits = null,
         bool hasCertificatePoliciesExtension = true,
         IReadOnlyList<string>? certificatePolicyOids = null) => new()
-    {
-        IssuerCountryCode = "FI",
-        IssuerOrganizationNames = issuerOrganizationNames ?? ["Example Provider Oy"],
-        IssuerCommonNames = ["Example Provider Root CA"],
-        SubjectCountryCode = "FI",
-        SubjectOrganizationNames = subjectOrganizationNames ?? ["Example Provider Oy"],
-        NotBefore = notBefore ?? new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
-        HasQcCompliance = hasQcCompliance,
-        QcTypes = qcTypes,
-        HasQcSscdStatement = hasQcSscdStatement,
-        QcLimitValue = null,
-        QcRetentionPeriodYears = null,
-        QcPdsLocations = [],
-        QcCcLegislationCountryCodes = [],
-        QcIdentityVerificationMethods = [],
-        QcQscdLegislationCountryCodes = [],
-        HasCertificatePoliciesExtension = hasCertificatePoliciesExtension,
-        CertificatePolicyOids = certificatePolicyOids ?? [MatchingPolicyOid],
-        HasKeyUsageExtension = hasKeyUsageExtension,
-        SetKeyUsageBits = setKeyUsageBits ?? [KeyUsageBitName.NonRepudiation],
-        HasExtendedKeyUsageExtension = false,
-        ExtendedKeyUsageOids = [],
-        SubjectAttributeTypeOids = [WellKnownOids.CountryName, WellKnownOids.OrganizationName, WellKnownOids.CommonName]
-    };
+        {
+            IssuerCountryCode = "FI",
+            IssuerOrganizationNames = issuerOrganizationNames ?? ["Example Provider Oy"],
+            IssuerCommonNames = ["Example Provider Root CA"],
+            SubjectCountryCode = "FI",
+            SubjectOrganizationNames = subjectOrganizationNames ?? ["Example Provider Oy"],
+            NotBefore = notBefore ?? new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            HasQcCompliance = hasQcCompliance,
+            QcTypes = qcTypes,
+            HasQcSscdStatement = hasQcSscdStatement,
+            QcLimitValue = null,
+            QcRetentionPeriodYears = null,
+            QcPdsLocations = [],
+            QcCcLegislationCountryCodes = [],
+            QcIdentityVerificationMethods = [],
+            QcQscdLegislationCountryCodes = [],
+            HasCertificatePoliciesExtension = hasCertificatePoliciesExtension,
+            CertificatePolicyOids = certificatePolicyOids ?? [MatchingPolicyOid],
+            HasKeyUsageExtension = hasKeyUsageExtension,
+            SetKeyUsageBits = setKeyUsageBits ?? [KeyUsageBitName.NonRepudiation],
+            HasExtendedKeyUsageExtension = false,
+            ExtendedKeyUsageOids = [],
+            SubjectAttributeTypeOids = [WellKnownOids.CountryName, WellKnownOids.OrganizationName, WellKnownOids.CommonName]
+        };
 
 
     /// <summary>Creates a qualification element whose criteria (a PolicySet on <see cref="MatchingPolicyOid"/>) identify the default facts.</summary>
@@ -1090,16 +1085,16 @@ internal sealed class TrustedListQualificationTests
         byte[] certificateBytes,
         IReadOnlyList<TrustServiceHistoryEntry> history,
         TrustServiceTypeIdentifier? serviceTypeIdentifier = null) => new()
-    {
-        ServiceTypeIdentifier = serviceTypeIdentifier ?? TrustServiceTypeIdentifier.CertificationAuthorityQualifiedCertificates,
-        ServiceNames = [new LocalizedText("en", "Example CA")],
-        DigitalIdentity = new ServiceDigitalIdentity { Entries = [new X509CertificateIdentity(CreateCertificateMemory(certificateBytes))] },
-        Status = status,
-        StatusStartingTime = statusStartingTime,
-        AdditionalServiceInformation = additionalServiceInformation,
-        Qualifications = qualifications,
-        History = history
-    };
+        {
+            ServiceTypeIdentifier = serviceTypeIdentifier ?? TrustServiceTypeIdentifier.CertificationAuthorityQualifiedCertificates,
+            ServiceNames = [new LocalizedText("en", "Example CA")],
+            DigitalIdentity = new ServiceDigitalIdentity { Entries = [new X509CertificateIdentity(CreateCertificateMemory(certificateBytes))] },
+            Status = status,
+            StatusStartingTime = statusStartingTime,
+            AdditionalServiceInformation = additionalServiceInformation,
+            Qualifications = qualifications,
+            History = history
+        };
 
 
     /// <summary>Creates a history instance recognising the certificate under test, in the given prior state.</summary>
@@ -1110,15 +1105,15 @@ internal sealed class TrustedListQualificationTests
         IReadOnlyList<TrustServiceAdditionalInformationType> additionalServiceInformation,
         IReadOnlyList<QualificationElement> qualifications,
         TrustServiceTypeIdentifier? serviceTypeIdentifier = null) => new()
-    {
-        ServiceTypeIdentifier = serviceTypeIdentifier ?? TrustServiceTypeIdentifier.CertificationAuthorityQualifiedCertificates,
-        ServiceNames = [new LocalizedText("en", "Example CA")],
-        DigitalIdentity = new ServiceDigitalIdentity { Entries = [new X509CertificateIdentity(CreateCertificateMemory(CertificateUnderTestBytes))] },
-        PreviousStatus = previousStatus,
-        StatusStartingTime = statusStartingTime,
-        AdditionalServiceInformation = additionalServiceInformation,
-        Qualifications = qualifications
-    };
+        {
+            ServiceTypeIdentifier = serviceTypeIdentifier ?? TrustServiceTypeIdentifier.CertificationAuthorityQualifiedCertificates,
+            ServiceNames = [new LocalizedText("en", "Example CA")],
+            DigitalIdentity = new ServiceDigitalIdentity { Entries = [new X509CertificateIdentity(CreateCertificateMemory(CertificateUnderTestBytes))] },
+            PreviousStatus = previousStatus,
+            StatusStartingTime = statusStartingTime,
+            AdditionalServiceInformation = additionalServiceInformation,
+            Qualifications = qualifications
+        };
 
 
     /// <summary>Rents a <see cref="PkiCertificateMemory"/> carrier over the given DER-stand-in bytes.</summary>

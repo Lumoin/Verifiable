@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
@@ -12,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// (Part 2: Structures, section "6 Constants", Table 22).
 /// </para>
 /// </remarks>
-public enum TpmSuConstants : ushort
+public enum TpmSuConstants: ushort
 {
     /// <summary>
     /// on TPM2_Shutdown(), indicates that the TPM should prepare for loss of power and save state required for an orderly startup (TPM Reset). on TPM2_Startup(), indicates that the TPM should perform TPM Reset or TPM Restart Name Value Description

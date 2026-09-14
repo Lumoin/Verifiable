@@ -1,7 +1,6 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cbor;

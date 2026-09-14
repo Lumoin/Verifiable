@@ -2,7 +2,6 @@ using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.OAuth.Oid4Vp;
 
 namespace Verifiable.OAuth.Oid4Vci;
 
@@ -325,6 +324,12 @@ public static class KeyAttestationVerifier
         status switch
         {
             HeaderKeyResolutionStatus.KeyReferenceUnresolved => KeyAttestationVerificationFailureReason.KeyReferenceUnresolved,
+
+            //HeaderKeyResolutionStatus has no attestation-specific counterpart for a jwk carrying
+            //private key material; it is an invalid key reference here too.
+            HeaderKeyResolutionStatus.JwkContainsPrivateKey => KeyAttestationVerificationFailureReason.InvalidKeyReference,
+            HeaderKeyResolutionStatus.InvalidKeyReference => KeyAttestationVerificationFailureReason.InvalidKeyReference,
+
             _ => KeyAttestationVerificationFailureReason.InvalidKeyReference
         };
 }

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Model.Common;
 
 namespace Verifiable.Tests;
@@ -118,7 +116,7 @@ internal sealed class ContextEquatableTests
     [TestMethod]
     public void ParameterlessConstructorThrows()
     {
-        Assert.ThrowsExactly<InvalidOperationException>(() => new ContextEntry());
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => new ContextEntry());
     }
 
 
@@ -266,7 +264,7 @@ internal sealed class ContextEquatableTests
     [TestMethod]
     public void ScalarFormConstructorThrowsWithZeroEntries()
     {
-        Assert.ThrowsExactly<ArgumentException>(() => new Context([], ContextForm.Scalar));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new Context([], ContextForm.Scalar));
     }
 
 
@@ -287,7 +285,7 @@ internal sealed class ContextEquatableTests
             ContextEntry.FromIri(Context.DataIntegrity20)
         };
 
-        Assert.ThrowsExactly<ArgumentException>(() => new Context(entries, ContextForm.Scalar));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new Context(entries, ContextForm.Scalar));
     }
 
 

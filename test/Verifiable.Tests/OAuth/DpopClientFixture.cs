@@ -1,7 +1,5 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 using Verifiable.Cryptography;
-using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 

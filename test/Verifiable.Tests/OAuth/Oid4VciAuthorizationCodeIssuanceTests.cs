@@ -1,14 +1,9 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
-using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Verifiable.Core;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
@@ -108,7 +103,7 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         //OID4VCI 1.0 section 13.10: a plain-bearer credential token stays within the
         //long-lived threshold (lifetimes over 5 minutes count as long lived).
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         IReadOnlyList<CredentialAuthorizationDetail>? grantedDetails = null;
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
@@ -145,7 +140,7 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         });
 
         AuthCodeFlowEndpointResult parResult = await client.AuthCode.StartParAsync(
-            registration, RedirectUri, authorizationFields, new ExchangeContext(), TestContext.CancellationToken)
+            registration, RedirectUri, authorizationFields, [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
@@ -153,7 +148,7 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
         string flowId = clientFlowStore.Keys.Single();
         ParCompletedState parState = (ParCompletedState)clientFlowStore[flowId];
-        await client.Infrastructure.SaveStateAsync(parState, new ExchangeContext(), TestContext.CancellationToken)
+        await client.Infrastructure.SaveStateAsync(parState, [], TestContext.CancellationToken)
             .ConfigureAwait(false);
 
         HostedAuthorizationServer hosted = host.Host("default");
@@ -274,7 +269,7 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         IssuerSeamObservations observations = new();
         string? mintedNonce = null;
 
-        host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
+        _ = host.Server.OAuth().UseDefaultCredentialRequestJsonParsing();
 
         host.Server.OAuth().IssueCredentialNonceAsync = (_, _) =>
         {
@@ -322,7 +317,7 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
         Assert.IsNotNull(jwk);
 
         var (algorithm, purpose, scheme, keyBytes) = CryptoFormatConversions.DefaultJwkToAlgorithmConverter(
-            jwk!, Pool, TestSetup.Base64UrlDecoder);
+            jwk, Pool, TestSetup.Base64UrlDecoder);
         Tag proofTag = Tag.Create(algorithm).With(purpose).With(scheme);
         PublicKeyMemory proofKey = new(keyBytes, proofTag);
 
@@ -422,7 +417,7 @@ internal sealed class Oid4VciAuthorizationCodeIssuanceTests
 
         foreach(KeyValuePair<string, string> header in headers)
         {
-            request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            _ = request.Headers.TryAddWithoutValidation(header.Key, header.Value);
         }
 
         using HttpResponseMessage response = await httpClient.SendAsync(

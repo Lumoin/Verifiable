@@ -1,4 +1,3 @@
-using System.Text;
 using Verifiable.Cryptography.Text;
 
 namespace Verifiable.JCose;

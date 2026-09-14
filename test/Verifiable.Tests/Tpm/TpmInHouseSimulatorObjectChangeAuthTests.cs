@@ -1,11 +1,7 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
@@ -13,10 +9,6 @@ using Verifiable.Tpm.Extensions.DictionaryAttack;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1282,7 +1274,7 @@ internal sealed class TpmInHouseSimulatorObjectChangeAuthTests
     {
         const int IntegrityLength = sizeof(ushort) + DigestSize;
         const int IvLength = sizeof(ushort) + 16;
-        int sensitiveInterior = sizeof(ushort) + (sizeof(ushort) + Tpm2bAuth.MaxSize) + (sizeof(ushort) + DigestSize) + (sizeof(ushort) + sensitiveDataLength);
+        int sensitiveInterior = sizeof(ushort) + sizeof(ushort) + Tpm2bAuth.MaxSize + sizeof(ushort) + DigestSize + sizeof(ushort) + sensitiveDataLength;
 
         return IntegrityLength + IvLength + sizeof(ushort) + sensitiveInterior;
     }

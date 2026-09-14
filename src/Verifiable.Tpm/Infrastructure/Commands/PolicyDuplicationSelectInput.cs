@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -43,7 +40,7 @@ public readonly record struct PolicyDuplicationSelectInput(uint PolicySession, R
     /// </summary>
     public ReadOnlyMemory<byte> ObjectName
     {
-        get => field;
+        get;
         init => field = EnsureWithinNameBound(value);
     } = EnsureWithinNameBound(ObjectName);
 
@@ -52,7 +49,7 @@ public readonly record struct PolicyDuplicationSelectInput(uint PolicySession, R
     /// </summary>
     public ReadOnlyMemory<byte> NewParentName
     {
-        get => field;
+        get;
         init => field = EnsureWithinNameBound(value);
     } = EnsureWithinNameBound(NewParentName);
 

@@ -1,12 +1,10 @@
 using System.Buffers;
-using System.Collections.Generic;
 using Verifiable.Core;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
-using Verifiable.Cryptography.Context;
 using Verifiable.Foundation;
 using Verifiable.JCose;
 
@@ -794,7 +792,7 @@ public static class RoutingForwardExtensions
     {
         string? id = method.Id;
 
-        return id is not null && id.StartsWith('#') ? did + id : id ?? did;
+        return id is not null && id.StartsWith('#', StringComparison.Ordinal) ? did + id : id ?? did;
     }
 
 

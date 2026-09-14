@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Security.Cryptography.Xml;
 using System.Text;
 using System.Xml;
-using Verifiable.Foundation;
 using Verifiable.Xml;
 
 namespace Verifiable.Tests.Xml;
@@ -453,7 +452,7 @@ internal sealed class XmlCanonicalizationDifferentialTests
         var document = new XmlDocument
         {
             PreserveWhitespace = true,
-            XmlResolver = null!
+            XmlResolver = null
         };
         using(var stringReader = new StringReader(xml))
         {
@@ -613,8 +612,8 @@ internal sealed class XmlCanonicalizationDifferentialTests
         var printable = new StringBuilder();
         for(int i = start; i < start + length; ++i)
         {
-            hex.Append(octets[i].ToString("X2", CultureInfo.InvariantCulture)).Append(' ');
-            printable.Append(octets[i] is >= 0x20 and < 0x7F ? (char)octets[i] : '.');
+            _ = hex.Append(octets[i].ToString("X2", CultureInfo.InvariantCulture)).Append(' ');
+            _ = printable.Append(octets[i] is >= 0x20 and < 0x7F ? (char)octets[i] : '.');
         }
 
         return $"bytes [{start}..{start + length}) {hex.ToString().TrimEnd()} |{printable}|";

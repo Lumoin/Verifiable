@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.Client;
@@ -77,19 +73,19 @@ internal static class GuardedHttpClientTransport
             {
                 if(encoded.Length > 0)
                 {
-                    encoded.Append('&');
+                    _ = encoded.Append('&');
                 }
 
-                encoded.Append(Uri.EscapeDataString(field.Key));
-                encoded.Append('=');
-                encoded.Append(Uri.EscapeDataString(field.Value));
+                _ = encoded.Append(Uri.EscapeDataString(field.Key));
+                _ = encoded.Append('=');
+                _ = encoded.Append(Uri.EscapeDataString(field.Value));
             }
 
             HttpHeaderSet.Builder requestHeaderBuilder = new HttpHeaderSet.Builder()
                 .Add(WellKnownHttpHeaderNames.ContentType, "application/x-www-form-urlencoded");
             foreach(KeyValuePair<string, string> header in headers.Values)
             {
-                requestHeaderBuilder.Add(header.Key, header.Value);
+                _ = requestHeaderBuilder.Add(header.Key, header.Value);
             }
 
             OutboundRequest request = new()
@@ -136,7 +132,7 @@ internal static class GuardedHttpClientTransport
 
             if(response.Headers.TryGetValue(TraceStateHeaderName, out string? traceState))
             {
-                transportMetadata ??= new Dictionary<string, string>(StringComparer.Ordinal);
+                transportMetadata ??= new(StringComparer.Ordinal);
                 transportMetadata[HttpResponseDataKeys.TraceState] = traceState;
             }
 
@@ -177,7 +173,7 @@ internal static class GuardedHttpClientTransport
                     if(!httpRequest.Headers.TryAddWithoutValidation(name, value)
                         && httpRequest.Content is not null)
                     {
-                        httpRequest.Content.Headers.TryAddWithoutValidation(name, value);
+                        _ = httpRequest.Content.Headers.TryAddWithoutValidation(name, value);
                     }
                 }
             }

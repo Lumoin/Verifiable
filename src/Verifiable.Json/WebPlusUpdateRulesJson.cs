@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -104,7 +102,7 @@ public static class WebPlusUpdateRulesJson
             else
             {
                 WebPlusUpdateRule built = frame.Build();
-                stack.Pop();
+                _ = stack.Pop();
                 if(stack.Count > 0)
                 {
                     BuildFrame parent = stack.Peek();

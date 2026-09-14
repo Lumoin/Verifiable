@@ -1,5 +1,3 @@
-using System;
-using System.Threading;
 using Verifiable.DidComm.ProblemReports;
 
 namespace Verifiable.DidComm.Transport;

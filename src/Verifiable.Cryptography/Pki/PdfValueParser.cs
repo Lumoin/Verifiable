@@ -1,6 +1,4 @@
-using System;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Text;
 
 namespace Verifiable.Cryptography.Pki;
@@ -358,12 +356,12 @@ internal static class PdfValueParser
             byte b = s[pos];
             if(b == (byte)'#' && pos + 2 < s.Length && IsHexDigit(s[pos + 1]) && IsHexDigit(s[pos + 2]))
             {
-                decoded.Append((char)((HexValue(s[pos + 1]) << 4) | HexValue(s[pos + 2])));
+                _ = decoded.Append((char)((HexValue(s[pos + 1]) << 4) | HexValue(s[pos + 2])));
                 pos += 3;
             }
             else
             {
-                decoded.Append((char)b);
+                _ = decoded.Append((char)b);
                 pos++;
             }
         }
@@ -442,20 +440,20 @@ internal static class PdfValueParser
                         pos++;
                         break;
                     case >= (byte)'0' and <= (byte)'7':
+                    {
+                        int octal = 0;
+                        int digits = 0;
+                        while(digits < 3 && pos < s.Length && s[pos] is >= (byte)'0' and <= (byte)'7')
                         {
-                            int octal = 0;
-                            int digits = 0;
-                            while(digits < 3 && pos < s.Length && s[pos] is >= (byte)'0' and <= (byte)'7')
-                            {
-                                octal = (octal << 3) | (s[pos] - (byte)'0');
-                                pos++;
-                                digits++;
-                            }
-
-                            bytes.Add((byte)(octal & 0xFF));
+                            octal = (octal << 3) | (s[pos] - (byte)'0');
+                            pos++;
+                            digits++;
                         }
 
-                        break;
+                        bytes.Add((byte)(octal & 0xFF));
+                    }
+
+                    break;
                     default:
                         bytes.Add(e);
                         pos++;

@@ -16,7 +16,7 @@ internal sealed class InMemoryDpopReplayCacheTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
 
     /// <summary>A jti never persisted is not seen.</summary>
@@ -76,7 +76,7 @@ internal sealed class InMemoryDpopReplayCacheTests
         await cache.PersistAsync("jti-evict", time.GetUtcNow() + TimeSpan.FromSeconds(30), Context, TestContext.CancellationToken);
         time.Advance(TimeSpan.FromMinutes(1));
 
-        await cache.IsSeenAsync("jti-evict", Context, TestContext.CancellationToken);
+        _ = await cache.IsSeenAsync("jti-evict", Context, TestContext.CancellationToken);
 
         Assert.AreEqual(0, cache.Count);
     }

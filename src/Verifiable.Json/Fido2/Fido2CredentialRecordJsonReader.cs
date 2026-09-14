@@ -1,7 +1,4 @@
-using System;
-using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Verifiable.Fido2;
@@ -167,52 +164,52 @@ public static class Fido2CredentialRecordJsonReader
 
             switch(memberName)
             {
-                case(VersionMember):
+                case VersionMember:
                 {
                     version = ReadRequiredInt32(ref reader, memberName);
                     break;
                 }
-                case(TypeMember):
+                case TypeMember:
                 {
                     type = ReadRequiredString(ref reader, memberName);
                     break;
                 }
-                case(IdMember):
+                case IdMember:
                 {
                     idBytes = ReadRequiredBinary(ref reader, memberName);
                     break;
                 }
-                case(PublicKeyMember):
+                case PublicKeyMember:
                 {
                     publicKey = ReadPublicKey(ref reader);
                     break;
                 }
-                case(SignCountMember):
+                case SignCountMember:
                 {
                     signCount = ReadRequiredUInt32(ref reader, memberName);
                     break;
                 }
-                case(UvInitializedMember):
+                case UvInitializedMember:
                 {
                     uvInitialized = ReadRequiredBoolean(ref reader, memberName);
                     break;
                 }
-                case(TransportsMember):
+                case TransportsMember:
                 {
                     transports = ReadStringArray(ref reader, memberName);
                     break;
                 }
-                case(BackupEligibleMember):
+                case BackupEligibleMember:
                 {
                     backupEligible = ReadRequiredBoolean(ref reader, memberName);
                     break;
                 }
-                case(BackupStateMember):
+                case BackupStateMember:
                 {
                     backupState = ReadRequiredBoolean(ref reader, memberName);
                     break;
                 }
-                case(AuthenticatorAttachmentMember):
+                case AuthenticatorAttachmentMember:
                 {
                     authenticatorAttachment = ReadRequiredString(ref reader, memberName);
                     break;
@@ -335,42 +332,42 @@ public static class Fido2CredentialRecordJsonReader
 
             switch(memberName)
             {
-                case(KtyMember):
+                case KtyMember:
                 {
                     kty = ReadRequiredInt32(ref reader, memberName);
                     break;
                 }
-                case(AlgMember):
+                case AlgMember:
                 {
                     alg = ReadRequiredInt32(ref reader, memberName);
                     break;
                 }
-                case(CrvMember):
+                case CrvMember:
                 {
                     curve = ReadRequiredInt32(ref reader, memberName);
                     break;
                 }
-                case(XMember):
+                case XMember:
                 {
                     x = ReadRequiredBinary(ref reader, memberName);
                     break;
                 }
-                case(YMember):
+                case YMember:
                 {
                     y = ReadRequiredBinary(ref reader, memberName);
                     break;
                 }
-                case(YCompressionSignMember):
+                case YCompressionSignMember:
                 {
                     encodedYCompressionSign = ReadRequiredBoolean(ref reader, memberName);
                     break;
                 }
-                case(NMember):
+                case NMember:
                 {
                     n = ReadRequiredBinary(ref reader, memberName);
                     break;
                 }
-                case(EMember):
+                case EMember:
                 {
                     e = ReadRequiredBinary(ref reader, memberName);
                     break;
@@ -406,7 +403,7 @@ public static class Fido2CredentialRecordJsonReader
             throw new Fido2FormatException($"The Fido2CredentialRecord member '{memberName}' MUST be a JSON array.");
         }
 
-        List<string> values = new();
+        List<string> values = [];
         while(reader.Read() && reader.TokenType != JsonTokenType.EndArray)
         {
             if(reader.TokenType != JsonTokenType.String)
@@ -495,7 +492,7 @@ public static class Fido2CredentialRecordJsonReader
     /// </summary>
     private static bool ReadRequiredBoolean(ref Utf8JsonReader reader, string memberName)
     {
-        if(reader.TokenType != JsonTokenType.True && reader.TokenType != JsonTokenType.False)
+        if(reader.TokenType is not JsonTokenType.True and not JsonTokenType.False)
         {
             throw new Fido2FormatException($"The Fido2CredentialRecord member '{memberName}' MUST be a boolean.");
         }

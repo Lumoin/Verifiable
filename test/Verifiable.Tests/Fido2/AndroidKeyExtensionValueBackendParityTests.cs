@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Fido2;
 using Verifiable.Microsoft;
 
 namespace Verifiable.Tests.Fido2;

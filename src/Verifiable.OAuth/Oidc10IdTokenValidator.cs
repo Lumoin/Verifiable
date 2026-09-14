@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
@@ -144,7 +143,7 @@ public static class Oidc10IdTokenValidator
                 "ID Token aud contains a member that is neither the expected audience nor in the caller's trusted audience set (OIDC Core §3.1.3.7).");
         }
 
-        JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Nonce, out string? nonce);
+        _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Nonce, out string? nonce);
         if(expectedNonce is not null && !string.Equals(nonce, expectedNonce, StringComparison.Ordinal))
         {
             return Oidc10IdTokenValidationResult.Failure(
@@ -156,12 +155,12 @@ public static class Oidc10IdTokenValidator
             payload, WellKnownJwtClaimNames.AuthTime, out DateTimeOffset authTimeValue)
             ? authTimeValue
             : null;
-        JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Acr, out string? acr);
+        _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Acr, out string? acr);
         IReadOnlyList<string>? amr = JwsAccessTokenValidator.TryReadStringList(
             payload, WellKnownJwtClaimNames.Amr, out IReadOnlyList<string> amrValues)
             ? amrValues
             : null;
-        JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Sid, out string? sid);
+        _ = JwsAccessTokenValidator.TryReadString(payload, WellKnownJwtClaimNames.Sid, out string? sid);
         ConfirmationMethod? confirmation = JwsAccessTokenValidator.TryReadConfirmation(payload);
 
         Oidc10IdTokenClaims claims = new()

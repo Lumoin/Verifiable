@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Tests.Cryptography;
@@ -94,21 +92,21 @@ internal sealed class KdfeTests
     [TestMethod]
     public async Task EmptyLabelIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await Kdfe.DeriveAsync(HashAlgorithmName.SHA256, Z, string.Empty, PartyU, PartyV, 256, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [TestMethod]
     public async Task NonPositiveOutputIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Kdfe.DeriveAsync(HashAlgorithmName.SHA256, Z, "SECRET", PartyU, PartyV, 0, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     [TestMethod]
     public async Task NonOctetOutputIsRejected()
     {
-        await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentOutOfRangeException>(async () =>
             await Kdfe.DeriveAsync(HashAlgorithmName.SHA256, Z, "SECRET", PartyU, PartyV, 100, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
 

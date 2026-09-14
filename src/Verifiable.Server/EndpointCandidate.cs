@@ -81,4 +81,26 @@ public sealed record EndpointCandidate
     /// endpoints that are not advertised in discovery.
     /// </summary>
     public string? DiscoveryMetadataKey { get; init; }
+
+    /// <summary>
+    /// The OAuth 2.0 error code this endpoint's handler returns when its correlation handle — a
+    /// <c>code</c>, <c>request_uri</c>, or similar continuation token — resolves to no live flow:
+    /// unknown, expired, or already consumed. Read by <see cref="EndpointServer"/> at every
+    /// "handle not found" refusal site in <c>HandleCoreAsync</c>. <see langword="null"/> falls back
+    /// to the host-generic <see cref="ServerErrors.InvalidRequest"/> vocabulary — correct for an
+    /// endpoint whose handle carries no protocol-specific error semantics of its own.
+    /// </summary>
+    /// <remarks>
+    /// The token endpoint's authorization code is the motivating case:
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see> defines
+    /// <c>invalid_grant</c> as "the provided authorization grant ... is invalid, expired, revoked
+    /// ..." — exactly the three refusals this property governs.
+    /// </remarks>
+    public string? HandleNotFoundError { get; init; }
+
+    /// <summary>
+    /// The <c>error_description</c> paired with <see cref="HandleNotFoundError"/>.
+    /// <see langword="null"/> falls back to the host-generic description.
+    /// </summary>
+    public string? HandleNotFoundErrorDescription { get; init; }
 }

@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;

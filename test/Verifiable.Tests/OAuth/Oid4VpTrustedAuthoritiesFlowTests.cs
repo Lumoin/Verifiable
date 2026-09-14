@@ -1,18 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Did;
-using Verifiable.Core.Model.Federation;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -26,7 +20,6 @@ using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Federation;
 using Verifiable.OAuth.Oid4Vp;
-using Verifiable.OAuth.Oid4Vp.Server.States;
 using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
@@ -110,7 +103,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
         FlowState state = await RunSdJwtAkiFlowAsync(
             backend, chain, BuildSdJwtAkiQuery(leafAuthorityKeyIdentifier)).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(state,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(state,
             "Section 6.1.1.1: a chain certificate's AuthorityKeyIdentifier named in trusted_authorities (aki) must reach PresentationVerified.");
     }
 
@@ -169,7 +162,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
         FlowState state = await RunSdJwtAkiFlowAsync(
             backend, chain, BuildSdJwtAkiQuery(intermediateAuthorityKeyIdentifier)).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<PresentationVerifiedState>(state,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(state,
             "Section 6.1.1.1: an intermediate certificate's AuthorityKeyIdentifier in the chain must satisfy the aki constraint.");
     }
 
@@ -618,16 +611,16 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
             [candidateAnchor.Value] = anchorEntityConfiguration.CompactJws
         };
 
-        FetchEntityConfigurationDelegate fetchConfiguration = (entity, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchConfiguration(EntityIdentifier entity, ExchangeContext context, CancellationToken ct)
         {
             fetchCounter.EntityConfigurationFetches++;
 
             return ValueTask.FromResult(configurationByEntity.TryGetValue(entity.Value, out string? jws)
                 ? FederationHttpClientTransport.TryParseFetchedStatement(jws)
                 : null);
-        };
+        }
 
-        FetchEntityStatementDelegate fetchSubordinate = (subject, fetchEndpoint, context, ct) =>
+        ValueTask<FetchedEntityStatement?> fetchSubordinate(EntityIdentifier subject, Uri fetchEndpoint, ExchangeContext context, CancellationToken ct)
         {
             fetchCounter.SubordinateStatementFetches++;
 
@@ -636,7 +629,7 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
                     && string.Equals(subject.Value, issuerEntity.Value, StringComparison.Ordinal)
                     ? FederationHttpClientTransport.TryParseFetchedStatement(anchorAboutIssuer.CompactJws)
                     : null);
-        };
+        }
 
         ValidateTrustChainAsyncDelegate validate = TrustChainValidation.BuildInlineValidator(
             HeaderDeserializer, PayloadDeserializer, TestSetup.Base64UrlDecoder,
@@ -650,10 +643,10 @@ internal sealed class Oid4VpTrustedAuthoritiesFlowTests
             resolveFederationTrustPath: (issuer, ct) => FederationTrustPathEvidence.ResolveAsync(
                 issuer,
                 familiarTrustAnchors,
-                fetchConfiguration,
-                fetchSubordinate,
+fetchConfiguration,
+fetchSubordinate,
                 validate,
-                new ExchangeContext(),
+                [],
                 maxChainLength: 5,
                 validationTime: now,
                 clockSkew: TimeSpan.FromMinutes(5),

@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Core.Model.Mdoc;
@@ -95,7 +95,7 @@ internal sealed class MdocCborDeviceResponseReaderTests
             Assert.IsTrue(isIssuerVerified, "Issuer signature must verify against the wire-reconstructed issuerAuth.");
 
             //Digest binding (M.4) over the wire-reconstructed items.
-            MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(parsedDocument.IssuerSigned,BaseMemoryPool.Shared);
+            MdocDigestBindingResult binding = MdocMsoDigestBindingValidator.Validate(parsedDocument.IssuerSigned, BaseMemoryPool.Shared);
             Assert.IsTrue(binding.IsValid, $"Digest binding must hold on the wire-reconstructed items; got {binding}.");
 
             //Device signature (M.3b) over the verifier-reconstructed SessionTranscript.

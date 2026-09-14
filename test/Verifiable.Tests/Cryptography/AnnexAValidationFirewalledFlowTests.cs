@@ -1,13 +1,8 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.X509;
+using System.Buffers;
 using Verifiable.BouncyCastle;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
@@ -95,7 +90,7 @@ internal sealed class AnnexAValidationFirewalledFlowTests
             "Clause A.3.2 states the expected sub-indication REVOKED_NO_POE.");
 
         Assert.HasCount(1, conclusion.ReportData, "Table 6 mandates one associated validation report data item for REVOKED_NO_POE.");
-        Assert.IsInstanceOfType<CertificateRevocationReportData>(conclusion.ReportData[0],
+        _ = Assert.IsInstanceOfType<CertificateRevocationReportData>(conclusion.ReportData[0],
             "Table 6 mandates the chain together with the time and the reason of revocation for REVOKED_NO_POE.");
         var revocation = (CertificateRevocationReportData)conclusion.ReportData[0];
         Assert.HasCount(3, revocation.CertificateChain,
@@ -359,7 +354,7 @@ internal sealed class AnnexAValidationFirewalledFlowTests
                 "The received octets have to be a CMS SignedData the shipped CAdES binding can read; nothing else can be asserted otherwise.");
             Assert.IsNotNull(facts.SigningCertificate, "Clause 5.2.3 identifies the signing certificate from the signature's own certificate set.");
 
-            SigningCertificate = Own(ToCarrier(facts.SigningCertificate!.AsReadOnlySpan().ToArray(), PkiCertificateTags.X509Certificate));
+            SigningCertificate = Own(ToCarrier(facts.SigningCertificate.AsReadOnlySpan().ToArray(), PkiCertificateTags.X509Certificate));
 
             BcX509Certificate signer = ReadCertificate(SigningCertificate);
             PkiCertificateMemory? issuer = null;
@@ -375,7 +370,7 @@ internal sealed class AnnexAValidationFirewalledFlowTests
             }
 
             Assert.IsNotNull(issuer, "The signature of example 1 carries the certification authority certificate that issued the signing certificate.");
-            SigningCertificateIssuer = issuer!;
+            SigningCertificateIssuer = issuer;
 
             IReadOnlyList<EmbeddedTimestamp> tokens = facts.TimestampsOfClass(SignatureTimestampClass.SignatureTimestamp);
             Assert.HasCount(1, tokens, "The signature of clause A.3.1 carries exactly one signature time-stamp attribute.");
@@ -383,7 +378,7 @@ internal sealed class AnnexAValidationFirewalledFlowTests
             DateTimeOffset? generationTime = await TimestampValidation.ReadGenerationTimeAsync(
                 tokens[0].Token, BaseMemoryPool.Shared, cancellationToken).ConfigureAwait(false);
             Assert.IsNotNull(generationTime, "The received token's TSTInfo states a generation time.");
-            SignatureTimestampGenerationTimePerWire = generationTime!.Value;
+            SignatureTimestampGenerationTimePerWire = generationTime.Value;
         }
 
 
@@ -510,7 +505,7 @@ internal sealed class AnnexAValidationFirewalledFlowTests
         /// <typeparam name="T">The carrier's type.</typeparam>
         /// <param name="carrier">The carrier.</param>
         /// <returns>The same carrier.</returns>
-        private T Own<T>(T carrier) where T: IDisposable
+        private T Own<T>(T carrier) where T : IDisposable
         {
             Owned.Add(carrier);
 

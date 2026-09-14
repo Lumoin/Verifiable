@@ -40,8 +40,7 @@ public static class ValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<ValidationContext>> CallbackRfc6749WithPkceRules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
+        [
             new(ValidationChecks.CheckCallbackCodePresent,
                 [ValidationClaimIds.CallbackCodePresent]),
 
@@ -56,7 +55,7 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckCallbackFlowNotExpired,
                 [ValidationClaimIds.FlowStateNotExpired]),
-        };
+        ];
 
 
     /// <summary>
@@ -65,8 +64,7 @@ public static class ValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<ValidationContext>> CallbackHaip10Rules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
+        [
             new(ValidationChecks.CheckCallbackCodePresent,
                 [ValidationClaimIds.CallbackCodePresent]),
 
@@ -84,7 +82,7 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckCallbackFlowNotExpired,
                 [ValidationClaimIds.FlowStateNotExpired]),
-        };
+        ];
 
 
 
@@ -93,8 +91,7 @@ public static class ValidationProfiles
     /// </summary>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<ValidationContext>> Haip10SdJwtRules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
+        [
             new(ValidationChecks.CheckKbJwtSignature,
                 [ValidationClaimIds.KbJwtSignatureValid]),
 
@@ -133,7 +130,7 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckSaltReuse,
                 [ValidationClaimIds.SaltNotReused]),
-        };
+        ];
 
 
     /// <summary>
@@ -149,8 +146,7 @@ public static class ValidationProfiles
     /// </remarks>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<ValidationContext>> Haip10MdocRules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
+        [
             new(ValidationChecks.CheckCredentialSignature,
                 [ValidationClaimIds.CredentialSignatureValid]),
 
@@ -162,7 +158,7 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckNoOverDisclosure,
                 [ValidationClaimIds.NoOverDisclosure]),
-        };
+        ];
 
 
     /// <summary>
@@ -176,8 +172,7 @@ public static class ValidationProfiles
     /// </remarks>
     /// <returns>A mutable list the application can extend.</returns>
     public static IList<ClaimDelegate<ValidationContext>> Haip10SdCwtRules() =>
-        new List<ClaimDelegate<ValidationContext>>
-        {
+        [
             new(ValidationChecks.CheckKbJwtSignature,
                 [ValidationClaimIds.KbJwtSignatureValid]),
 
@@ -207,5 +202,5 @@ public static class ValidationProfiles
 
             new(ValidationChecks.CheckSaltReuse,
                 [ValidationClaimIds.SaltNotReused]),
-        };
+        ];
 }

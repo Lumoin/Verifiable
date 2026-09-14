@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tpm.Spec.Constants;
 
 /// <summary>
@@ -12,7 +10,7 @@ namespace Verifiable.Tpm.Spec.Constants;
 /// (Part 2: Structures, section "6 Constants", Table 30).
 /// </para>
 /// </remarks>
-public enum TpmPsConstants : uint
+public enum TpmPsConstants: uint
 {
     /// <summary>
     /// not platform specific

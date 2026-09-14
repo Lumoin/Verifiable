@@ -1,8 +1,4 @@
-using System;
-using System.Buffers;
 using System.Buffers.Text;
-using System.Collections.Generic;
-using System.Linq;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Fido2;
@@ -49,7 +45,7 @@ internal sealed class Fido2ChallengeGenerationTests
     [TestMethod]
     public void BelowMinimumByteLengthIsRejected()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Fido2ChallengeGeneration.Generate(15, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Fido2ChallengeGeneration.Generate(15, BaseMemoryPool.Shared));
     }
 
 
@@ -57,7 +53,7 @@ internal sealed class Fido2ChallengeGenerationTests
     [TestMethod]
     public void NullPoolIsRejected()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() => Fido2ChallengeGeneration.Generate(32, null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => Fido2ChallengeGeneration.Generate(32, null!));
     }
 
 
@@ -96,7 +92,7 @@ internal sealed class Fido2ChallengeGenerationTests
     [TestMethod]
     public void GenerationEmitsEntropyEventThroughRegisteredSeam()
     {
-        List<CryptoEvent> observed = new();
+        List<CryptoEvent> observed = [];
         using(CryptographicKeyEvents.Events.Subscribe(new CollectingObserver(observed)))
         {
             string challenge = Fido2ChallengeGeneration.Generate(BaseMemoryPool.Shared);

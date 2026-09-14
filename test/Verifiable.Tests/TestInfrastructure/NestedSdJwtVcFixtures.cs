@@ -1,12 +1,8 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Sd;
 using Verifiable.Core.Model.SelectiveDisclosure;
@@ -404,7 +400,7 @@ internal static class NestedSdJwtVcFixtures
             """;
 
             SdTokenResult issued = await payloadJson.IssueSdJwtAsync(
-                static (string json) => Encoding.UTF8.GetBytes(json),
+                static json => Encoding.UTF8.GetBytes(json),
                 SdJwtIssuance.IssueVerboseAsync,
                 RootDisclosablePaths,
                 TestSalts.DefaultGenerator(),
@@ -466,12 +462,12 @@ internal static class NestedSdJwtVcFixtures
         ArgumentNullException.ThrowIfNull(encodedDisclosures);
 
         var builder = new StringBuilder(issuerJws);
-        builder.Append(SdConstants.JwtSeparator);
+        _ = builder.Append(SdConstants.JwtSeparator);
 
         foreach(string encoded in encodedDisclosures)
         {
-            builder.Append(encoded);
-            builder.Append(SdConstants.JwtSeparator);
+            _ = builder.Append(encoded);
+            _ = builder.Append(SdConstants.JwtSeparator);
         }
 
         return builder.ToString();
@@ -575,7 +571,7 @@ internal static class NestedSdJwtVcFixtures
     /// <returns>The compact SD-JWT: the issuer-signed JWS followed by every disclosure.</returns>
     public static string MintDeterministicIdentityCredential()
     {
-        (string Encoded, string Digest) familyName = EncodeProperty("salt-family-name", "family_name", "\"M\\u00f6bius\"");
+        (string Encoded, string Digest) = EncodeProperty("salt-family-name", "family_name", "\"M\\u00f6bius\"");
         (string Encoded, string Digest) employerFamilyName = EncodeProperty("salt-employer-family-name", "family_name", "\"Mustermann\"");
         (string Encoded, string Digest) employer = EncodeProperty(
             "salt-employer", "employer", $$"""{"_sd": ["{{employerFamilyName.Digest}}"]}""");
@@ -622,7 +618,7 @@ internal static class NestedSdJwtVcFixtures
                 "self_attested"
             ],
             "_sd": [
-                "{{familyName.Digest}}",
+                "{{Digest}}",
                 "{{employer.Digest}}",
                 "{{address.Digest}}",
                 "{{ageEqualOrOver.Digest}}",
@@ -633,7 +629,7 @@ internal static class NestedSdJwtVcFixtures
 
         string[] disclosures =
         [
-            familyName.Encoded,
+            Encoded,
             employer.Encoded,
             employerFamilyName.Encoded,
             address.Encoded,

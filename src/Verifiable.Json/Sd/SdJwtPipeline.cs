@@ -1,12 +1,7 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;

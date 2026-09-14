@@ -1,4 +1,3 @@
-using System;
 using System.Globalization;
 
 using Verifiable.Apdu;
@@ -61,7 +60,7 @@ internal sealed class ApduResultTests
     {
         var result = ApduResult<int>.CardError(StatusWord.FromValue(0x6A82));
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.Value);
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.Value);
     }
 
     [TestMethod]
@@ -69,7 +68,7 @@ internal sealed class ApduResultTests
     {
         var result = ApduResult<int>.TransportError(0x80100069);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.Value);
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.Value);
     }
 
     [TestMethod]
@@ -77,7 +76,7 @@ internal sealed class ApduResultTests
     {
         var result = ApduResult<int>.TransportError(0x80100069);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.StatusWord);
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.StatusWord);
     }
 
     [TestMethod]
@@ -85,7 +84,7 @@ internal sealed class ApduResultTests
     {
         var result = ApduResult<int>.Success(42);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.TransportErrorCode);
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => _ = result.TransportErrorCode);
     }
 
     [TestMethod]

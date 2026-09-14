@@ -1,14 +1,11 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
@@ -16,7 +13,6 @@ using Verifiable.OAuth.IdJag;
 using Verifiable.OAuth.JwtBearer;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.TokenExchange;
-using Verifiable.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -560,8 +556,7 @@ internal sealed class IdJagGrantTests
 
         //The Resource AS resolves the external IdP's key by kid (an in-memory JWKS for the foreign key)
         //and runs the full §4.4.1 validation — nothing here came from our own mint.
-        ServerVerificationKeyResolverDelegate foreignResolver =
-            (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> foreignResolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? idpPublicKey : null);
         app.Server.OAuth().ValidateJwtBearerAssertionAsync =
             async (assertion, requestedScope, registration, context, ct) =>
@@ -621,8 +616,7 @@ internal sealed class IdJagGrantTests
             attackerPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, ResourceAsIssuer,
             ClientId, ChatScope, now, now.AddMinutes(5)).ConfigureAwait(false);
 
-        ServerVerificationKeyResolverDelegate resolver =
-            (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? trustedPublicKey : null);
         app.Server.OAuth().ValidateJwtBearerAssertionAsync =
             async (assertion, requestedScope, registration, context, ct) =>
@@ -666,8 +660,7 @@ internal sealed class IdJagGrantTests
             idpPrivateKey, externalKid, externalIdpIssuer, SubjectIdentity, "https://other-rs.example/",
             ClientId, ChatScope, now, now.AddMinutes(5)).ConfigureAwait(false);
 
-        ServerVerificationKeyResolverDelegate resolver =
-            (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(
+        ValueTask<PublicKeyMemory?> resolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(
                 string.Equals(kid.Value, externalKid, StringComparison.Ordinal) ? idpPublicKey : null);
         app.Server.OAuth().ValidateJwtBearerAssertionAsync =
             async (assertion, requestedScope, registration, context, ct) =>
@@ -1112,8 +1105,7 @@ internal sealed class IdJagGrantTests
         Uri tokenUrl = new(host.HttpBaseAddress!, $"/connect/{segment}/token");
 
         //An empty key resolver — no issuer's key resolves, modelling an untrusted issuer.
-        ServerVerificationKeyResolverDelegate emptyResolver =
-            static (kid, tenant, ctx, ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
+        static ValueTask<PublicKeyMemory?> emptyResolver(KeyId kid, TenantId tenant, ExchangeContext ctx, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
         app.Server.OAuth().ValidateJwtBearerAssertionAsync =
             async (assertion, requestedScope, registration, context, ct) =>
                 await ValidateIdJagAsync(assertion, registration, emptyResolver, ResourceAsIssuer).ConfigureAwait(false);
@@ -1679,7 +1671,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, ChatScope, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1750,7 +1742,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, WellKnownScopes.OpenId, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1802,7 +1794,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, WellKnownScopes.OpenId, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1848,7 +1840,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, WellKnownScopes.OpenId, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -1901,7 +1893,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, WellKnownScopes.OpenId, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -2001,7 +1993,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, WellKnownScopes.OpenId, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -2047,7 +2039,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, ChatScope, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -2086,7 +2078,7 @@ internal sealed class IdJagGrantTests
         await using TestHostShell app = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterIdJagClient(app);
         WireMintSeams(app, WellKnownScopes.OpenId, resourceClientId: null);
-        app.EnableDpop();
+        _ = app.EnableDpop();
 
         await app.StartHttpHostAsync(TestContext.CancellationToken).ConfigureAwait(false);
         HostedAuthorizationServer host = app.Host("default");
@@ -2890,7 +2882,7 @@ internal sealed class IdJagGrantTests
 
         //The IdP host mints; the Resource Authorization Server is the default host. The client holds an
         //independent registration at each (§5: separate client relationships per trust domain).
-        app.AddHost("idp");
+        _ = app.AddHost("idp");
         using VerifierKeyMaterial idpClient = app.RegisterDpopClientOnHost(
             "idp", ClientId, new Uri(ClientId), PolicyProfile.Rfc6749WithPkce, IdJagClientCapabilities);
         using VerifierKeyMaterial rsClient = app.RegisterDpopClientOnHost(
@@ -3172,9 +3164,9 @@ internal sealed class IdJagGrantTests
         Assert.IsTrue(mintResult.IsSuccess, mintResult.Error?.Support.Summary);
 
         Assert.IsNotNull(seenResources, "The authorization seam must have run.");
-        Assert.HasCount(2, seenResources!);
-        Assert.Contains(FirstResource, seenResources!);
-        Assert.Contains(SecondResource, seenResources!);
+        Assert.HasCount(2, seenResources);
+        Assert.Contains(FirstResource, seenResources);
+        Assert.Contains(SecondResource, seenResources);
     }
 
 
@@ -4001,7 +3993,7 @@ internal sealed class IdJagGrantTests
         using HttpRequestMessage request = new(HttpMethod.Post, url) { Content = content };
         if(dpopProof is not null)
         {
-            request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, dpopProof);
+            _ = request.Headers.TryAddWithoutValidation(WellKnownHttpHeaderNames.DPoP, dpopProof);
         }
 
         return await http.SendAsync(request, TestContext.CancellationToken).ConfigureAwait(false);
@@ -4107,7 +4099,7 @@ internal sealed class IdJagGrantTests
         }
 
         PublicKeyMemory? key = await resolver(
-            new KeyId(kid), default, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            new KeyId(kid), default, [], TestContext.CancellationToken).ConfigureAwait(false);
         if(key is null)
         {
             return null;
@@ -4267,7 +4259,7 @@ internal sealed class IdJagGrantTests
             Pool,
             TimeSpan.FromSeconds(60),
             tenantId: default,
-            new ExchangeContext(),
+            [],
             expectedAuthorizedParty: null,
             TestContext.CancellationToken).ConfigureAwait(false);
 

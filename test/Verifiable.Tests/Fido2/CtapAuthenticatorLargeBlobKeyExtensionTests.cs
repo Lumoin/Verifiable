@@ -1,13 +1,8 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
-using Verifiable.Tests.TestInfrastructure;
 using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
@@ -37,7 +32,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     [TestMethod]
     public async Task MakeCredentialWithLargeBlobKeyAndResidentKeyEmitsFreshThirtyTwoByteKeyAtTopLevel()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-fresh-key",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-fresh-key", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(largeBlobKey: true);
@@ -48,7 +43,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
         CtapMakeCredentialResponse decoded = CtapMakeCredentialResponseCborReader.Read(response.AsReadOnlyMemory()[1..]);
 
         Assert.IsNotNull(decoded.LargeBlobKey);
-        Assert.HasCount(32, decoded.LargeBlobKey!.Value);
+        Assert.HasCount(32, decoded.LargeBlobKey.Value);
     }
 
 
@@ -56,7 +51,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     [TestMethod]
     public async Task MakeCredentialWithLargeBlobKeyMintsADifferentKeyPerCredential()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-distinct-keys",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-distinct-keys", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(largeBlobKey: true);
@@ -78,7 +73,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     [TestMethod]
     public async Task MakeCredentialWithLargeBlobKeyValueFalseReturnsInvalidOption()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-value-false",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-value-false", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(largeBlobKey: false);
@@ -93,7 +88,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     [TestMethod]
     public async Task MakeCredentialWithLargeBlobKeyWithoutResidentKeyReturnsInvalidOption()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-no-rk",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-no-rk", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         ReadOnlyMemory<byte> extensions = BuildMakeCredentialExtensionsInput(largeBlobKey: true);
@@ -108,7 +103,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     [TestMethod]
     public async Task MakeCredentialWithoutLargeBlobKeyExtensionNeverEmitsLargeBlobKeyMember()
     {
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-unsolicited",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-mc-unsolicited", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(ResidentKey: true));
@@ -130,7 +125,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     public async Task GetAssertionWithLargeBlobKeyOnKeyedCredentialEmitsTheSameKeyMcMinted()
     {
         const string rpId = "lbk-ga-keyed.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-keyed",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-keyed", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         (byte[] credentialIdBytes, ReadOnlyMemory<byte> mintedKey) = await RegisterWithLargeBlobKeyAsync(simulator, pool, BuildFixedBytes(16, 0xE2), rpId, TestContext.CancellationToken);
@@ -143,7 +138,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
         decoded.Credential.Id.Dispose();
 
         Assert.IsNotNull(decoded.LargeBlobKey);
-        Assert.IsTrue(decoded.LargeBlobKey!.Value.Span.SequenceEqual(mintedKey.Span));
+        Assert.IsTrue(decoded.LargeBlobKey.Value.Span.SequenceEqual(mintedKey.Span));
 
         using CredentialId disposeId = CredentialId.Create(credentialIdBytes, pool);
     }
@@ -154,7 +149,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     public async Task GetAssertionWithoutLargeBlobKeyExtensionNeverEmitsLargeBlobKeyEvenOnKeyedCredential()
     {
         const string rpId = "lbk-ga-unsolicited.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-unsolicited",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-unsolicited", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         (byte[] credentialIdBytes, _) = await RegisterWithLargeBlobKeyAsync(simulator, pool, BuildFixedBytes(16, 0xE3), rpId, TestContext.CancellationToken);
@@ -176,10 +171,10 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     public async Task GetAssertionWithLargeBlobKeyOnKeylessCredentialSucceedsWithNoLargeBlobKeyMember()
     {
         const string rpId = "lbk-ga-keyless.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-keyless",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-keyless", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE4), TestContext.CancellationToken, rpId: rpId);
+        _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE4), TestContext.CancellationToken, rpId: rpId);
 
         ReadOnlyMemory<byte> gaExtensions = BuildGetAssertionExtensionsInput(largeBlobKey: true);
         using PooledMemory gaResponse = await SendGetAssertionAsync(simulator, BuildGetAssertionRequest(pool, rpId: rpId, extensions: gaExtensions), pool, TestContext.CancellationToken);
@@ -197,10 +192,10 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     public async Task GetAssertionWithLargeBlobKeyValueFalseReturnsInvalidOption()
     {
         const string rpId = "lbk-ga-value-false.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-value-false",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-value-false", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE5), TestContext.CancellationToken, rpId: rpId);
+        _ = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE5), TestContext.CancellationToken, rpId: rpId);
 
         ReadOnlyMemory<byte> gaExtensions = BuildGetAssertionExtensionsInput(largeBlobKey: false);
         using PooledMemory gaResponse = await SendGetAssertionAsync(simulator, BuildGetAssertionRequest(pool, rpId: rpId, extensions: gaExtensions), pool, TestContext.CancellationToken);
@@ -223,7 +218,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
     public async Task GetNextAssertionResolvesLargeBlobKeyAgainstItsOwnCredentialNotTheFirstResponse()
     {
         const string rpId = "lbk-ga-continuation.example";
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-continuation",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("lbk-ga-continuation", BaseMemoryPool.Shared);
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
         byte[] olderKeylessCredentialId = await RegisterAndCaptureCredentialIdBytesAsync(simulator, pool, BuildFixedBytes(16, 0xE6), TestContext.CancellationToken, rpId: rpId);
@@ -239,7 +234,7 @@ internal sealed class CtapAuthenticatorLargeBlobKeyExtensionTests
 
             Assert.AreEqual(2, firstDecoded.NumberOfCredentials);
             Assert.IsNotNull(firstDecoded.LargeBlobKey);
-            Assert.IsTrue(firstDecoded.LargeBlobKey!.Value.Span.SequenceEqual(mintedKey.Span));
+            Assert.IsTrue(firstDecoded.LargeBlobKey.Value.Span.SequenceEqual(mintedKey.Span));
         }
 
         using PooledMemory nextResponse = await SendGetNextAssertionAsync(simulator, pool, TestContext.CancellationToken);

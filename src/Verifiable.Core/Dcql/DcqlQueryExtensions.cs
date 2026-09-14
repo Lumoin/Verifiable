@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Cryptography.Pki;
@@ -65,7 +63,7 @@ public static class DcqlQueryExtensions
             {
                 if(credential.Format is not null)
                 {
-                    formats.Add(credential.Format);
+                    _ = formats.Add(credential.Format);
                 }
             }
 
@@ -95,7 +93,7 @@ public static class DcqlQueryExtensions
                 {
                     if(claim.Path is not null)
                     {
-                        patterns.Add(claim.Path);
+                        _ = patterns.Add(claim.Path);
                     }
                 }
             }
@@ -120,7 +118,7 @@ public static class DcqlQueryExtensions
             {
                 if(credential.Id is not null)
                 {
-                    definedIds.Add(credential.Id);
+                    _ = definedIds.Add(credential.Id);
                 }
             }
 
@@ -138,7 +136,7 @@ public static class DcqlQueryExtensions
                     {
                         if(!definedIds.Contains(credentialId))
                         {
-                            undefined.Add(credentialId);
+                            _ = undefined.Add(credentialId);
                         }
                     }
                 }
@@ -363,7 +361,7 @@ public static class DcqlQueryExtensions
             {
                 foreach(var credentialId in option)
                 {
-                    ids.Add(credentialId);
+                    _ = ids.Add(credentialId);
                 }
             }
 

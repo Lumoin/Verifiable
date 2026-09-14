@@ -93,8 +93,8 @@ internal sealed class IdJagActorDecisionTests
 
         Assert.AreEqual(IdJagActorDecisionKind.DelegationRecorded, decision.Kind);
         Assert.IsNotNull(decision.Act);
-        Assert.AreEqual(RedeemingClientId, ActorSubject(decision.Act!));
-        Assert.IsFalse(decision.Act!.ContainsKey(WellKnownJwtClaimNames.Act),
+        Assert.AreEqual(RedeemingClientId, ActorSubject(decision.Act));
+        Assert.IsFalse(decision.Act.ContainsKey(WellKnownJwtClaimNames.Act),
             "Exactly one hop occurred, so the chain has exactly one link.");
     }
 
@@ -122,10 +122,10 @@ internal sealed class IdJagActorDecisionTests
 
         Assert.AreEqual(IdJagActorDecisionKind.ChainPreserved, decision.Kind);
         Assert.IsNotNull(decision.Act);
-        Assert.AreEqual(RedeemingClientId, ActorSubject(decision.Act!));
-        Assert.AreEqual(PriorActorSubject, ActorSubject(NestedActor(decision.Act!)),
+        Assert.AreEqual(RedeemingClientId, ActorSubject(decision.Act));
+        Assert.AreEqual(PriorActorSubject, ActorSubject(NestedActor(decision.Act)),
             "The prior actor stays exactly one level deep — the chain crossed verbatim.");
-        Assert.IsFalse(NestedActor(decision.Act!).ContainsKey(WellKnownJwtClaimNames.Act),
+        Assert.IsFalse(NestedActor(decision.Act).ContainsKey(WellKnownJwtClaimNames.Act),
             "A boundary that changes no actor adds no nesting level.");
     }
 

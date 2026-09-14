@@ -1,9 +1,6 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 
@@ -417,7 +414,7 @@ public static class PaceProtocol
         ApduDevice device, ReadOnlyMemory<byte> objectIdentifier, byte passwordReference, BaseMemoryPool pool, CancellationToken cancellationToken)
     {
         using IMemoryOwner<byte> data = pool.Rent(SetAuthenticationTemplateDataLength(objectIdentifier.Length));
-        WriteSetAuthenticationTemplateData(objectIdentifier.Span, passwordReference, data.Memory.Span);
+        _ = WriteSetAuthenticationTemplateData(objectIdentifier.Span, passwordReference, data.Memory.Span);
         using CommandApdu command = CommandApdu.BuildCase3(
             PlainClass, ManageSecurityEnvironmentInstruction, 0xC1, 0xA4, data.Memory.Span, pool);
 
@@ -621,7 +618,7 @@ public static class PaceProtocol
     /// <summary>
     /// Resolves a registered delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

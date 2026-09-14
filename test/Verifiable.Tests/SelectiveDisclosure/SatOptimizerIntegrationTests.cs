@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.SelectiveDisclosure;
 
@@ -50,15 +50,15 @@ internal sealed class SatOptimizerIntegrationTests
             CreateMatch("national-id", "req-name",
                 required: [GivenName],
                 available: [Iss, GivenName, FamilyName, Birthdate, Ssn, Nationality],
-                mandatory: new HashSet<CredentialPath> { Iss }),
+                mandatory: [Iss]),
             CreateMatch("drivers-license", "req-birthdate",
                 required: [Birthdate],
                 available: [Iss, GivenName, Birthdate, Category, Address],
-                mandatory: new HashSet<CredentialPath> { Iss }),
+                mandatory: [Iss]),
             CreateMatch("utility-bill", "req-address",
                 required: [Address],
                 available: [Iss, GivenName, Address, AccountNumber],
-                mandatory: new HashSet<CredentialPath> { Iss })
+                mandatory: [Iss])
         };
 
         var plan = await computation.ComputeAsync(matches,
@@ -122,7 +122,7 @@ internal sealed class SatOptimizerIntegrationTests
                 available: [GivenName])
         };
 
-        await computation.ComputeAsync(matches,
+        _ = await computation.ComputeAsync(matches,
             requestingPartySignals: requestingPartySignals,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -239,7 +239,7 @@ internal sealed class SatOptimizerIntegrationTests
                     int variable = variableMap[(i, path)];
                     if(result.Assignment![variable])
                     {
-                        keptPaths.Add(path);
+                        _ = keptPaths.Add(path);
                     }
                 }
 

@@ -1,5 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Mdoc;
 using Verifiable.Cbor.StatusList;
@@ -616,7 +616,7 @@ internal sealed class MdocCborMsoStatusTests
         Exception? caught = null;
         try
         {
-            MdocCborMsoReader.Read(msoBytes);
+            _ = MdocCborMsoReader.Read(msoBytes);
         }
         catch(Exception ex)
         {

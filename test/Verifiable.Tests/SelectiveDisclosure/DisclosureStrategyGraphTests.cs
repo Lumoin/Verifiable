@@ -257,7 +257,7 @@ internal sealed class DisclosureStrategyGraphTests
     public void CustomEntropyDelegateIsUsed()
     {
         //Custom entropy: double the additive total.
-        EntropyComputeDelegate<string> doubleEntropy = (contributions, signals) =>
+        static double doubleEntropy(IReadOnlyList<CredentialContribution<string>> contributions, IReadOnlyDictionary<Type, object>? signals)
         {
             double total = 0.0;
             foreach(var contribution in contributions)
@@ -269,7 +269,7 @@ internal sealed class DisclosureStrategyGraphTests
             }
 
             return total * 2.0;
-        };
+        }
 
         var graph = new DisclosureStrategyGraph<string>(
         [
@@ -288,11 +288,11 @@ internal sealed class DisclosureStrategyGraphTests
     {
         IReadOnlyDictionary<Type, object>? receivedSignals = null;
 
-        EntropyComputeDelegate<string> signalCapture = (contributions, signals) =>
+        double signalCapture(IReadOnlyList<CredentialContribution<string>> contributions, IReadOnlyDictionary<Type, object>? signals)
         {
             receivedSignals = signals;
             return 0.0;
-        };
+        }
 
         var signals = new Dictionary<Type, object>
         {
@@ -309,7 +309,7 @@ internal sealed class DisclosureStrategyGraphTests
         _ = graph.EnumerateStrategies().ToList();
 
         Assert.IsNotNull(receivedSignals);
-        Assert.AreEqual(0.5, (double)receivedSignals![typeof(double)]);
+        Assert.AreEqual(0.5, (double)receivedSignals[typeof(double)]);
     }
 
 

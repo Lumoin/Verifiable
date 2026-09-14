@@ -1,4 +1,3 @@
-using System.Buffers;
 using Org.BouncyCastle.Asn1.X9;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Generators;
@@ -186,7 +185,7 @@ internal sealed class EllipticCurveUtilitiesBrainpoolTests
         //(fieldByteSize bytes); slice through EllipticCurveUtilities to exercise the
         //full slice/uncompressed-length path.
         byte[] uncompressed = pub.Q.GetEncoded(compressed: false);
-        Assert.HasCount(1 + 2 * fieldByteSize, uncompressed);
+        Assert.HasCount(1 + (2 * fieldByteSize), uncompressed);
 
         byte[] x = EllipticCurveUtilities.SliceXCoordinate(uncompressed).ToArray();
         byte[] y = EllipticCurveUtilities.SliceYCoordinate(uncompressed).ToArray();

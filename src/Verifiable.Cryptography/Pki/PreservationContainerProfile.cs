@@ -1,9 +1,4 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -246,7 +241,7 @@ public sealed class PreservationContainerProfileException: Exception
 
     /// <summary>Initializes a new <see cref="PreservationContainerProfileException"/> with an unclassified fault.</summary>
     /// <param name="message">The message describing the fault.</param>
-    public PreservationContainerProfileException(string message): this(PreservationContainerProfileStatus.NotEvaluated, message)
+    public PreservationContainerProfileException(string message) : this(PreservationContainerProfileStatus.NotEvaluated, message)
     {
     }
 
@@ -263,7 +258,7 @@ public sealed class PreservationContainerProfileException: Exception
     /// <summary>Initializes a new <see cref="PreservationContainerProfileException"/>.</summary>
     /// <param name="status">Which requirement the creation would not have satisfied.</param>
     /// <param name="message">The message describing the fault.</param>
-    public PreservationContainerProfileException(PreservationContainerProfileStatus status, string message): base(message)
+    public PreservationContainerProfileException(PreservationContainerProfileStatus status, string message) : base(message)
     {
         Status = status;
     }

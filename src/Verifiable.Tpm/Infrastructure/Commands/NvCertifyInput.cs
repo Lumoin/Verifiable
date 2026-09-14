@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -204,7 +201,7 @@ public sealed class NvCertifyInput: ITpmCommandInput, IDisposable
         qualifyingData.CopyTo(owner.Memory.Span);
 
         return new NvCertifyInput(
-            signHandle, authHandle, nvIndex, owner, owner.Memory.Slice(0, qualifyingData.Length), signatureScheme, schemeHashAlg, size, offset);
+            signHandle, authHandle, nvIndex, owner, owner.Memory[..qualifyingData.Length], signatureScheme, schemeHashAlg, size, offset);
     }
 
     private NvCertifyInput(

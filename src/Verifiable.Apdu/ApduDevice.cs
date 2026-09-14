@@ -1,8 +1,4 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Apdu;
 
@@ -50,7 +46,7 @@ namespace Verifiable.Apdu;
 /// <see cref="IsHealthy"/> and inspect <see cref="Failure"/> for diagnostics.
 /// </para>
 /// </remarks>
-public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
+public sealed class ApduDevice: IDisposable, IObservable<ApduExchange>
 {
     /// <summary>
     /// A field, not a property: a lock target must be one instance that no accessor can re-mint.
@@ -247,7 +243,7 @@ public sealed class ApduDevice : IDisposable, IObservable<ApduExchange>
         }
     }
 
-    private sealed class Unsubscriber(ApduDevice device, IObserver<ApduExchange> observer) : IDisposable
+    private sealed class Unsubscriber(ApduDevice device, IObserver<ApduExchange> observer): IDisposable
     {
         public void Dispose() => device.Unsubscribe(observer);
     }

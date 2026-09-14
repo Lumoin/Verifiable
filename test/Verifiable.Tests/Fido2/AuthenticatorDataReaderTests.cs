@@ -82,7 +82,7 @@ internal sealed class AuthenticatorDataReaderTests
         byte[] extensions = [0xA0]; //An empty CBOR map.
         byte[] authenticatorData = BuildAuthenticatorData(
             CreateRpIdHash(),
-            flags: (byte)(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit),
+            flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit,
             signCount: 1,
             attestedCredentialData: attestedCredentialData,
             extensions: extensions);
@@ -142,7 +142,7 @@ internal sealed class AuthenticatorDataReaderTests
     {
         byte[] authenticatorData = new byte[36];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
     }
 
 
@@ -159,7 +159,7 @@ internal sealed class AuthenticatorDataReaderTests
             signCount: 0,
             attestedCredentialData: new byte[17]);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
     }
 
 
@@ -202,7 +202,7 @@ internal sealed class AuthenticatorDataReaderTests
             signCount: 0,
             attestedCredentialData: attestedCredentialData);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
     }
 
 
@@ -219,7 +219,7 @@ internal sealed class AuthenticatorDataReaderTests
             signCount: 0,
             attestedCredentialData: [0xFF]);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
     }
 
 
@@ -232,7 +232,7 @@ internal sealed class AuthenticatorDataReaderTests
     {
         byte[] authenticatorData = BuildAuthenticatorData(CreateRpIdHash(), flags: AuthenticatorDataFlags.ExtensionDataIncludedBit, signCount: 0);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, TestCredentialPublicKeyReader, BaseMemoryPool.Shared));
     }
 
 
@@ -250,9 +250,9 @@ internal sealed class AuthenticatorDataReaderTests
             signCount: 0,
             attestedCredentialData: attestedCredentialData);
 
-        ReadCredentialPublicKeyDelegate stubReader = source => new CredentialPublicKeyReadResult(new CoseKey(CoseKeyTypes.Ec2), 0, []);
+        static CredentialPublicKeyReadResult stubReader(ReadOnlyMemory<byte> source) => new(new CoseKey(CoseKeyTypes.Ec2), 0, []);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, stubReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, stubReader, BaseMemoryPool.Shared));
     }
 
 
@@ -270,9 +270,9 @@ internal sealed class AuthenticatorDataReaderTests
             signCount: 0,
             attestedCredentialData: attestedCredentialData);
 
-        ReadCredentialPublicKeyDelegate stubReader = source => new CredentialPublicKeyReadResult(new CoseKey(CoseKeyTypes.Ec2), source.Length + 1, []);
+        static CredentialPublicKeyReadResult stubReader(ReadOnlyMemory<byte> source) => new(new CoseKey(CoseKeyTypes.Ec2), source.Length + 1, []);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, stubReader, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticatorDataReader.Read(authenticatorData, stubReader, BaseMemoryPool.Shared));
     }
 
 
@@ -291,7 +291,7 @@ internal sealed class AuthenticatorDataReaderTests
             signCount: 0,
             attestedCredentialData: attestedCredentialData);
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => AuthenticatorDataReader.Read(authenticatorData, null!, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => AuthenticatorDataReader.Read(authenticatorData, null!, BaseMemoryPool.Shared));
     }
 
 

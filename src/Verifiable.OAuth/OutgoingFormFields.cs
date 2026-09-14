@@ -2,7 +2,6 @@ using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 
 namespace Verifiable.OAuth;
 
@@ -62,7 +61,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
     /// <param name="capacity">The initial number of occurrences the collection can contain.</param>
     public OutgoingFormFields(int capacity)
     {
-        Entries = new List<KeyValuePair<string, string>>(capacity);
+        Entries = new(capacity);
     }
 
     /// <summary>
@@ -113,7 +112,7 @@ public sealed class OutgoingFormFields: IReadOnlyCollection<KeyValuePair<string,
         }
         set
         {
-            Entries.RemoveAll(entry => string.Equals(entry.Key, key, StringComparison.Ordinal));
+            _ = Entries.RemoveAll(entry => string.Equals(entry.Key, key, StringComparison.Ordinal));
             Entries.Add(new KeyValuePair<string, string>(key, value));
         }
     }

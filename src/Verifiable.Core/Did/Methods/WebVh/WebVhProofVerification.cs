@@ -1,14 +1,11 @@
-using System;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Cryptography.EventLogs;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
 
@@ -256,7 +253,7 @@ public static class WebVhProofVerification
         {
             int byteCount = Encoding.UTF8.GetByteCount(updateKey);
             using IMemoryOwner<byte> updateKeyBytes = context.MemoryPool.Rent(byteCount);
-            Encoding.UTF8.GetBytes(updateKey, updateKeyBytes.Memory.Span[..byteCount]);
+            _ = Encoding.UTF8.GetBytes(updateKey, updateKeyBytes.Memory.Span[..byteCount]);
 
             string keyHash = await WebVhHash.ComputeBase58Async(updateKeyBytes.Memory[..byteCount], context.ComputeDigest, context.Base58Encoder, context.MemoryPool, cancellationToken).ConfigureAwait(false);
             if(!prior.NextKeyHashes.Contains(keyHash))
@@ -347,7 +344,7 @@ public static class WebVhProofVerification
             }
         }
 
-        if(proof.ProofValue is not { Length: > 0 } proofValue)
+        if(proof.ProofValue is not { Length: > 0 })
         {
             return "A did:webvh proof MUST carry a proofValue.";
         }

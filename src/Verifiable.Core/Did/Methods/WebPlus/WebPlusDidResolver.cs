@@ -1,18 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.EventLogs;
 
 namespace Verifiable.Core.Did.Methods.WebPlus;
 
@@ -347,6 +342,10 @@ public static class WebPlusDidResolver
                     finalEntry = result.Entry;
                     switch(result.State)
                     {
+                        case EmptyLogState<WebPlusState>:
+                            //The replayer has not yet applied an entry into this state; finalState and
+                            //isDeactivated keep whatever the prior iteration left them at.
+                            break;
                         case ActiveLogState<WebPlusState> active:
                             finalState = active.Value;
                             states.Add(active.Value);
@@ -356,6 +355,10 @@ public static class WebPlusDidResolver
                             finalState = deactivated.Value;
                             states.Add(deactivated.Value);
                             isDeactivated = true;
+                            break;
+                        default:
+                            //No known log-state subtype matched; finalState and isDeactivated keep whatever the
+                            //prior iteration left them at.
                             break;
                     }
                 }

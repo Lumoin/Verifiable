@@ -1,14 +1,13 @@
-using System.Linq;
-using System.Net.Http;
 using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
+using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
+using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -56,7 +55,7 @@ internal sealed class DpopBoundRefreshTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
@@ -79,7 +78,7 @@ internal sealed class DpopBoundRefreshTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = parCompleted.Par.RequestUri.ToString()
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -169,7 +168,7 @@ internal sealed class DpopBoundRefreshTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        host.EnableDpop();
+        _ = host.EnableDpop();
 
         using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
             material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
@@ -191,7 +190,7 @@ internal sealed class DpopBoundRefreshTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = parCompleted.Par.RequestUri.ToString()
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
 
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
@@ -322,5 +321,489 @@ internal sealed class DpopBoundRefreshTests
             "Refresh must issue a fresh access token, not return the original.");
         Assert.AreEqual(WellKnownAuthenticationSchemes.Bearer, (string)refreshResult.Body[OAuthRequestParameterNames.TokenType]!,
             "Routing the refresh leg through SendTokenRequestWithDpopRetryAsync must not attach a DPoP header for a non-DPoP client.");
+    }
+
+
+    /// <summary>
+    /// A VALID reuse presentation of a DPoP-bound rotated-out refresh token — the proof matches
+    /// the retired token's own stored thumbprint, exactly as a live rotation would present it —
+    /// exercises the DPoP branch of
+    /// <see cref="Verifiable.OAuth.AuthCode.AuthCodeEndpoints.HandleRefreshTokenReuseAsync"/> and
+    /// revokes the current successor, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2">RFC 9700 §4.14.2</see>.
+    /// Both the rotation and the reuse are driven through the same real
+    /// <see cref="AuthCodeClient.RefreshAsync(ClientRegistration, RefreshTokenRequest, System.Threading.CancellationToken)"/>
+    /// entry point with the SAME <see cref="OAuthClientInfrastructure.DpopKey"/>, so the reuse proof
+    /// is cryptographically the legitimate client's own — the scenario this branch exists to detect
+    /// (a stolen refresh token replayed by whoever holds it, key included).
+    /// </summary>
+    [TestMethod]
+    public async Task DpopSenderConstrainedReuseWithMatchingProofRevokesTheSuccessorAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
+        _ = host.EnableDpop();
+
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
+
+        string flowId = fixture.ClientFlowStore.Keys.Single();
+        ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri authorizeUri = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + "?client_id=" + Uri.EscapeDataString(ClientId)
+            + "&request_uri=" + Uri.EscapeDataString(parCompleted.Par.RequestUri.ToString()));
+        using HttpResponseMessage authorizeResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)authorizeResponse.StatusCode);
+        string location = authorizeResponse.Headers.Location!.OriginalString;
+        string code = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Code)
+            ?? throw new AssertFailedException("Authorize redirect missing code.");
+        string? iss = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Iss);
+
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId
+        };
+        if(iss is not null)
+        {
+            callbackFields[OAuthRequestParameterNames.Iss] = iss;
+        }
+
+        AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
+            fixture.Registration, new OAuthFormEncodedFields(callbackFields), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome,
+            $"Callback must succeed. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Expected token issuance success. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        string originalRefreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //A single legitimate, DPoP-proved rotation.
+        RefreshTokenRequest rotateRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = originalRefreshToken
+        };
+        AuthCodeFlowEndpointResult rotation = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, rotateRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, rotation.Outcome,
+            $"The DPoP-proved rotation must succeed. ErrorCode={rotation.ErrorCode}");
+        string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //A VALID reuse of the just-retired token, presented with a fresh proof from the SAME key —
+        //the retired token's own stored thumbprint matches, so this exercises the DPoP branch of
+        //HandleRefreshTokenReuseAsync rather than short-circuiting past it.
+        RefreshTokenRequest reuseRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = originalRefreshToken
+        };
+        AuthCodeFlowEndpointResult reuse = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, reuseRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, reuse.Outcome,
+            "A rotated-out refresh token must never be honoured, DPoP-bound or not.");
+        Assert.AreEqual(OAuthErrors.InvalidGrant, reuse.ErrorCode);
+
+        //The successor must now be refused too — the family was revoked.
+        RefreshTokenRequest successorRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = successorRefreshToken
+        };
+        AuthCodeFlowEndpointResult successorAfterReuse = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, successorRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreNotEqual(AuthCodeFlowEndpointOutcome.Ok, successorAfterReuse.Outcome,
+            "A VALID DPoP-proved reuse must revoke the successor of the same grant family.");
+        Assert.AreEqual(OAuthErrors.InvalidGrant, successorAfterReuse.ErrorCode);
+    }
+
+
+    /// <summary>
+    /// The mirror of
+    /// <see cref="DpopSenderConstrainedReuseWithMatchingProofRevokesTheSuccessorAsync"/>: reuse of a
+    /// DPoP-bound rotated-out refresh token presented with a proof from a DIFFERENT key is an
+    /// INVALID presentation — the same denial-of-service reasoning
+    /// <see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
+    /// §7.5.3</see> applies to a code replay applies here — and revokes nothing. A raw wire push
+    /// carries the mismatched proof, since no real client entry point would ever sign with a key
+    /// other than the one <see cref="ClientRegistration"/> is holding.
+    /// </summary>
+    [TestMethod]
+    public async Task DpopSenderConstrainedReuseWithMismatchedProofLeavesSuccessorUsableAsync()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
+        _ = host.EnableDpop();
+
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
+
+        string flowId = fixture.ClientFlowStore.Keys.Single();
+        ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri authorizeUri = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + "?client_id=" + Uri.EscapeDataString(ClientId)
+            + "&request_uri=" + Uri.EscapeDataString(parCompleted.Par.RequestUri.ToString()));
+        using HttpResponseMessage authorizeResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)authorizeResponse.StatusCode);
+        string location = authorizeResponse.Headers.Location!.OriginalString;
+        string code = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Code)
+            ?? throw new AssertFailedException("Authorize redirect missing code.");
+        string? iss = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Iss);
+
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId
+        };
+        if(iss is not null)
+        {
+            callbackFields[OAuthRequestParameterNames.Iss] = iss;
+        }
+
+        AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
+            fixture.Registration, new OAuthFormEncodedFields(callbackFields), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome,
+            $"Callback must succeed. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Expected token issuance success. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        string originalRefreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //A single legitimate, DPoP-proved rotation.
+        RefreshTokenRequest rotateRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = originalRefreshToken
+        };
+        AuthCodeFlowEndpointResult rotation = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, rotateRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, rotation.Outcome,
+            $"The DPoP-proved rotation must succeed. ErrorCode={rotation.ErrorCode}");
+        string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //An INVALID reuse: the correct client_id and refresh token, but a proof signed by an
+        //UNRELATED key — a raw wire push, since no client entry point would ever attach one. The
+        //proof carries a currently-valid nonce (the one the legitimate rotation above already
+        //obtained and cached) rather than none at all: DpopTokenEndpointValidation checks the
+        //bound thumbprint BEFORE the nonce, so an otherwise well-formed proof isolates that
+        //thumbprint check — without a valid nonce, removing the thumbprint check would still fail
+        //this request for the UNRELATED reason of a missing nonce, and the test would not notice
+        //the thumbprint check being gone.
+        var attackerKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
+        try
+        {
+            DpopKey attackerKey = new(attackerKeys, WellKnownJwaValues.Es256);
+            string segment = material.Registration.TenantId.Value;
+            Uri tokenEndpoint = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment);
+
+            string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
+            string validNonce = fixture.NonceCache.Lookup(authority)
+                ?? throw new AssertFailedException(
+                    "Expected a DPoP nonce cached by the legitimate rotation above.");
+
+            string mismatchedProof = await DpopProofConstruction.BuildAsync(
+                new DpopProofClaims
+                {
+                    Htm = WellKnownHttpMethods.Post,
+                    Htu = tokenEndpoint.OriginalString,
+                    Iat = TimeProvider.GetUtcNow(),
+                    Jti = Guid.NewGuid().ToString("N"),
+                    Nonce = validNonce
+                },
+                attackerKey,
+                TestHostShell.Base64UrlEncoder,
+                DpopTestSupport.Serializer,
+                MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+                TestHostShell.MemoryPool,
+                TestContext.CancellationToken).ConfigureAwait(false);
+
+            (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+                host, segment,
+                RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, originalRefreshToken),
+                OutgoingHeaders.Empty.WithDpop(mismatchedProof),
+                TestContext.CancellationToken).ConfigureAwait(false);
+            Assert.AreEqual(400, reuse.StatusCode, reuse.Body);
+            Assert.Contains(OAuthErrors.InvalidGrant, reuse.Body, StringComparison.Ordinal);
+        }
+        finally
+        {
+            attackerKeys.PublicKey.Dispose();
+            attackerKeys.PrivateKey.Dispose();
+        }
+
+        //The successor must remain usable — the mismatched-key reuse presentation revoked nothing.
+        RefreshTokenRequest successorRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = successorRefreshToken
+        };
+        AuthCodeFlowEndpointResult successorAfterReuse = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, successorRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, successorAfterReuse.Outcome,
+            $"An INVALID (mismatched-key) reuse presentation must revoke nothing. ErrorCode={successorAfterReuse.ErrorCode}");
+    }
+
+
+    /// <summary>
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>'s
+    /// invalid_grant response covers a retired refresh token. Issuer-resolution failure during
+    /// a valid DPoP-bound reuse preserves the unknown-token response bytes and revokes nothing.
+    /// </summary>
+    [TestMethod]
+    public async Task ReuseIssuerResolutionFailureHasTheUnknownTokenBody()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
+        _ = host.EnableDpop();
+
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
+
+        string flowId = fixture.ClientFlowStore.Keys.Single();
+        ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri authorizeUri = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + "?client_id=" + Uri.EscapeDataString(ClientId)
+            + "&request_uri=" + Uri.EscapeDataString(parCompleted.Par.RequestUri.ToString()));
+        using HttpResponseMessage authorizeResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)authorizeResponse.StatusCode);
+        string location = authorizeResponse.Headers.Location!.OriginalString;
+        string code = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Code)
+            ?? throw new AssertFailedException("Authorize redirect missing code.");
+        string? iss = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Iss);
+
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId
+        };
+        if(iss is not null)
+        {
+            callbackFields[OAuthRequestParameterNames.Iss] = iss;
+        }
+
+        AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
+            fixture.Registration, new OAuthFormEncodedFields(callbackFields), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome,
+            $"Callback must succeed. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Expected token issuance success. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        string originalRefreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //A single legitimate, DPoP-proved rotation.
+        RefreshTokenRequest rotateRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = originalRefreshToken
+        };
+        AuthCodeFlowEndpointResult rotation = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, rotateRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, rotation.Outcome,
+            $"The DPoP-proved rotation must succeed. ErrorCode={rotation.ErrorCode}");
+        string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
+
+        string segment = material.Registration.TenantId.Value;
+        string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
+        string proof = await DpopProofConstruction.BuildAsync(
+            new DpopProofClaims
+            {
+                Htm = WellKnownHttpMethods.Post,
+                Htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString,
+                Iat = TimeProvider.GetUtcNow(),
+                Jti = Guid.NewGuid().ToString("N"),
+                Nonce = fixture.NonceCache.Lookup(authority)
+                    ?? throw new AssertFailedException("The legitimate rotation must cache a valid nonce.")
+            },
+            fixture.DpopKey,
+            TestHostShell.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+            TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        var originalResolver = host.Server.OAuth().ResolveIssuerAsync;
+        host.Server.OAuth().ResolveIssuerAsync = (registration, ctx, ct) =>
+        {
+            if(ctx.FlowId is not null)
+            {
+                throw new InvalidOperationException("issuer-configuration-private-detail");
+            }
+
+            return originalResolver is not null
+                ? originalResolver(registration, ctx, ct)
+                : ValueTask.FromResult<Uri?>(ctx.Issuer);
+        };
+
+        (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, originalRefreshToken),
+            OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken).ConfigureAwait(false);
+        (int StatusCode, string Body) unknown = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, "unknown-refresh-token"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, reuse.StatusCode, "Issuer resolution during reuse must preserve invalid_grant.");
+        Assert.AreEqual(unknown, reuse, "Issuer resolution during reuse must preserve the constant response bytes.");
+        host.Server.OAuth().ResolveIssuerAsync = originalResolver;
+        AuthCodeFlowEndpointResult next = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, new RefreshTokenRequest
+            {
+                ClientId = ClientId,
+                RefreshToken = successorRefreshToken
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, next.Outcome,
+            "Issuer failure during reuse must leave the successor usable.");
+    }
+
+
+    /// <summary>
+    /// <see cref="Verifiable.Server.ResolveServerIssuerDelegate"/>'s return type is <c>Uri?</c> — a
+    /// <see langword="null"/> result is an explicitly permitted outcome, not a configuration
+    /// fault. During a valid DPoP-bound reuse, a resolver that returns <see langword="null"/>
+    /// must fold onto the same constant <c>invalid_grant</c> response as issuer-resolution
+    /// failure and an unknown refresh token, per
+    /// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-5.2">RFC 6749 §5.2</see>.
+    /// </summary>
+    [TestMethod]
+    public async Task ReuseWithNullResolvedIssuerHasTheUnknownTokenBody()
+    {
+        await using TestHostShell host = new(TimeProvider);
+        using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
+        _ = host.EnableDpop();
+
+        using DpopClientFixture fixture = await host.CreateDpopEnabledOAuthClientAsync(
+            material.Registration, RedirectUri.OriginalString, TestContext.CancellationToken).ConfigureAwait(false);
+
+        AuthCodeFlowEndpointResult parResult = await fixture.Client.AuthCode.StartParAsync(
+            fixture.Registration, RedirectUri, OAuthFormEncodedFields.Empty, TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Redirect, parResult.Outcome,
+            $"Expected PAR to yield a redirect. ErrorCode={parResult.ErrorCode} ErrorDescription={parResult.ErrorDescription}");
+
+        string flowId = fixture.ClientFlowStore.Keys.Single();
+        ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
+
+        HostedAuthorizationServer hosted = host.Host("default");
+        Uri authorizeUri = new(hosted.HttpBaseAddress!,
+            TestHostShell.ComposeEndpointPath(WellKnownEndpointNames.AuthCodeAuthorize, material.Registration.TenantId.Value)
+            + "?client_id=" + Uri.EscapeDataString(ClientId)
+            + "&request_uri=" + Uri.EscapeDataString(parCompleted.Par.RequestUri.ToString()));
+        using HttpResponseMessage authorizeResponse = await RawAuthCodeWirePushers.SendPinnedNoRedirectGetAsync(
+            host, authorizeUri, SubjectId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(302, (int)authorizeResponse.StatusCode);
+        string location = authorizeResponse.Headers.Location!.OriginalString;
+        string code = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Code)
+            ?? throw new AssertFailedException("Authorize redirect missing code.");
+        string? iss = TestBrowser.ExtractQueryParam(location, OAuthRequestParameterNames.Iss);
+
+        Dictionary<string, string> callbackFields = new(StringComparer.Ordinal)
+        {
+            [OAuthRequestParameterNames.Code] = code,
+            [OAuthRequestParameterNames.State] = flowId
+        };
+        if(iss is not null)
+        {
+            callbackFields[OAuthRequestParameterNames.Iss] = iss;
+        }
+
+        AuthCodeFlowEndpointResult callbackResult = await fixture.Client.AuthCode.HandleCallbackAsync(
+            fixture.Registration, new OAuthFormEncodedFields(callbackFields), TestContext.CancellationToken)
+            .ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, callbackResult.Outcome,
+            $"Callback must succeed. ErrorCode={callbackResult.ErrorCode} ErrorDescription={callbackResult.ErrorDescription}");
+
+        AuthCodeFlowEndpointResult tokenResult = await fixture.Client.AuthCode.ExchangeTokenAsync(
+            fixture.Registration, flowId, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, tokenResult.Outcome,
+            $"Expected token issuance success. ErrorCode={tokenResult.ErrorCode} ErrorDescription={tokenResult.ErrorDescription}");
+        string originalRefreshToken = (string)tokenResult.Body![OAuthRequestParameterNames.RefreshToken];
+
+        //A single legitimate, DPoP-proved rotation.
+        RefreshTokenRequest rotateRequest = new()
+        {
+            ClientId = fixture.Registration.ClientId.Value,
+            RefreshToken = originalRefreshToken
+        };
+        AuthCodeFlowEndpointResult rotation = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, rotateRequest, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, rotation.Outcome,
+            $"The DPoP-proved rotation must succeed. ErrorCode={rotation.ErrorCode}");
+        string successorRefreshToken = (string)rotation.Body![OAuthRequestParameterNames.RefreshToken];
+
+        string segment = material.Registration.TenantId.Value;
+        string authority = InMemoryDpopNonceCache.AuthorityFor(fixture.Registration.AuthorizationServerIssuer);
+        string proof = await DpopProofConstruction.BuildAsync(
+            new DpopProofClaims
+            {
+                Htm = WellKnownHttpMethods.Post,
+                Htu = RawAuthCodeWirePushers.ResolveTokenEndpointUri(host, segment).OriginalString,
+                Iat = TimeProvider.GetUtcNow(),
+                Jti = Guid.NewGuid().ToString("N"),
+                Nonce = fixture.NonceCache.Lookup(authority)
+                    ?? throw new AssertFailedException("The legitimate rotation must cache a valid nonce.")
+            },
+            fixture.DpopKey,
+            TestHostShell.Base64UrlEncoder,
+            DpopTestSupport.Serializer,
+            MicrosoftCryptographicFunctionsAdapter.SignP256Async,
+            TestHostShell.MemoryPool,
+            TestContext.CancellationToken).ConfigureAwait(false);
+        var originalResolver = host.Server.OAuth().ResolveIssuerAsync;
+        host.Server.OAuth().ResolveIssuerAsync = (registration, ctx, ct) =>
+            ValueTask.FromResult<Uri?>(null);
+
+        (int StatusCode, string Body) reuse = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, originalRefreshToken),
+            OutgoingHeaders.Empty.WithDpop(proof), TestContext.CancellationToken).ConfigureAwait(false);
+        (int StatusCode, string Body) unknown = await RawAuthCodeWirePushers.PushRawTokenFieldsAsync(
+            host, segment, RawAuthCodeWirePushers.BuildRefreshTokenFields(ClientId, "unknown-refresh-token"),
+            TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(400, reuse.StatusCode, "A null resolved issuer during reuse must preserve invalid_grant.");
+        Assert.AreEqual(unknown, reuse, "A null resolved issuer during reuse must preserve the constant response bytes.");
+        host.Server.OAuth().ResolveIssuerAsync = originalResolver;
+        AuthCodeFlowEndpointResult next = await fixture.Client.AuthCode.RefreshAsync(
+            fixture.Registration, new RefreshTokenRequest
+            {
+                ClientId = ClientId,
+                RefreshToken = successorRefreshToken
+            }, TestContext.CancellationToken).ConfigureAwait(false);
+        Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, next.Outcome,
+            "A null resolved issuer during reuse must leave the successor usable.");
     }
 }

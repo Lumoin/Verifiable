@@ -1,20 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Core;
+using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
-using Verifiable.Core.Model.Did;
-using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.StatusList;
@@ -37,7 +30,7 @@ internal sealed class BitstringStatusListCredentialDataIntegrityTests
     private const string IssuerDidWeb = "did:web:issuer.example";
 
     private static DateTimeOffset Now { get; } = StatusListTestConstants.BitstringDataIntegrityReferenceTime;
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
     private static BaseMemoryPool Pool => BaseMemoryPool.Shared;
     private static JsonSerializerOptions JsonOptions { get; } = TestSetup.DefaultSerializationOptions;

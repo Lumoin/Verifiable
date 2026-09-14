@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text.Json;
 using Verifiable.JCose;
 using Verifiable.Json;
@@ -69,6 +67,7 @@ internal static class SecurityEventTestJson
         JsonValueKind.Number => element.TryGetInt64(out long l) ? l : element.GetDecimal(),
         JsonValueKind.Object => ConvertObject(element),
         JsonValueKind.Array => ConvertArray(element),
+        JsonValueKind.Undefined => null,
         _ => null
     };
 

@@ -1,5 +1,3 @@
-using System;
-using System.Threading.Tasks;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -40,7 +38,7 @@ internal sealed class CBAdESLevelAwareValidationSmokeTests
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await CBAdESSignatureValidation.ValidateAsync(
                 ReadOnlyMemory<byte>.Empty,
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -67,7 +65,7 @@ internal sealed class CBAdESLevelAwareValidationSmokeTests
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await CBAdESSignatureValidation.ValidateAsync(
                 ReadOnlyMemory<byte>.Empty,
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -94,7 +92,7 @@ internal sealed class CBAdESLevelAwareValidationSmokeTests
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await CBAdESSignatureValidation.ValidateAsync(
                 ReadOnlyMemory<byte>.Empty,
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -121,7 +119,7 @@ internal sealed class CBAdESLevelAwareValidationSmokeTests
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await CBAdESSignatureValidation.ValidateAsync(
                 ReadOnlyMemory<byte>.Empty,
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -148,7 +146,7 @@ internal sealed class CBAdESLevelAwareValidationSmokeTests
         var keyMaterial = TestKeyMaterialProvider.CreateP256KeyMaterial();
         using var publicKey = keyMaterial.PublicKey;
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await CBAdESSignatureValidation.ValidateAsync(
                 ReadOnlyMemory<byte>.Empty,
                 CBAdESSignatureSerialization.ParseCBAdESSign1,
@@ -197,7 +195,7 @@ internal sealed class CBAdESLevelAwareValidationSmokeTests
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(result.IsValid, "Malformed wire bytes must not validate.");
-        Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
+        _ = Assert.IsInstanceOfType<CBAdESMalformedEncodingFailure>(result.Failure);
     }
 
 

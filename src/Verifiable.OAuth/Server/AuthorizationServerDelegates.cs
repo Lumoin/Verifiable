@@ -870,7 +870,7 @@ public delegate ValueTask<JwtBearer.JwtBearerGrant?> ValidateJwtBearerAssertionD
 /// to locate the token faster; an unrecognized hint MUST NOT cause a failure.
 /// </para>
 /// </remarks>
-/// <param name="token">The token to revoke, exactly as presented on the wire.</param>
+/// <param name="token">The token to revoke, the wire string exactly as presented on the request.</param>
 /// <param name="tokenTypeHint">The <c>token_type_hint</c> form value, or <see langword="null"/> when omitted.</param>
 /// <param name="registration">The authenticated client whose token is being revoked.</param>
 /// <param name="context">The per-request context bag.</param>
@@ -878,6 +878,54 @@ public delegate ValueTask<JwtBearer.JwtBearerGrant?> ValidateJwtBearerAssertionD
 public delegate ValueTask RevokeTokenDelegate(
     string token,
     string? tokenTypeHint,
+    ClientRecord registration,
+    ExchangeContext context,
+    CancellationToken cancellationToken);
+
+
+/// <summary>
+/// Revokes one issued token identified by its persisted <c>jti</c> rather than by its wire bytes,
+/// for the paths where the library itself decides a token must die — a VALID replay of an
+/// already-redeemed authorization code
+/// (<see href="https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-16.txt">OAuth 2.1 draft-16
+/// §7.5.3</see>) and reuse of a rotated-out refresh token
+/// (<see href="https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2">RFC 9700 §4.14.2</see>) —
+/// distinct from <see cref="RevokeTokenDelegate"/>, which answers the client-driven RFC 7009
+/// request naming a token by its wire string.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Optional. Per
+/// <see href="https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2">RFC 6749 §4.1.2</see>, revoking
+/// issued tokens on a valid code replay is a SHOULD "when possible" — a deployment whose
+/// access tokens are stateless JWTs with no denylist store cannot honour it, and "when possible" is
+/// exactly the reason this seam is optional rather than required. When unwired, the replay and
+/// reuse-detection paths still delete the affected refresh-token record through
+/// the required <see cref="ServerIntegration.DeleteFlowStateAsync"/> after claiming the loaded live
+/// record — invalidating the refresh token, though not
+/// the access tokens already issued from it, which remain valid until they expire on their own; that
+/// degradation is the documented, deliberate behaviour of leaving this seam unwired, not a defect.
+/// </para>
+/// <para>
+/// <see cref="AuthorizationServerIntegration.Validate"/> does not require this delegate — an
+/// unwired deployment is a valid, if weaker, configuration, not a composition defect.
+/// </para>
+/// </remarks>
+/// <param name="tokenIdentifier">
+/// The persisted <c>jti</c> claim of the token being revoked — never its compact JWS bytes, which
+/// the library does not retain past issuance (see
+/// <see cref="Verifiable.OAuth.AuthCode.Server.States.ServerTokenIssuedState"/>).
+/// </param>
+/// <param name="tokenType">
+/// The audited token type — the response field name the token was issued under (see
+/// <see cref="Audit.IssuedTokenAuditSet"/>), e.g. <see cref="WellKnownTokenTypes.AccessToken"/>.
+/// </param>
+/// <param name="registration">The client the revoked token was issued to.</param>
+/// <param name="context">The per-request context bag.</param>
+/// <param name="cancellationToken">Cancellation token.</param>
+public delegate ValueTask RevokeIssuedTokenDelegate(
+    string tokenIdentifier,
+    string tokenType,
     ClientRecord registration,
     ExchangeContext context,
     CancellationToken cancellationToken);

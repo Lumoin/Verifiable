@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Verifiable.Core.Model.SelectiveDisclosure;
 
 /// <summary>
@@ -56,7 +53,7 @@ public static class SdDisclosureSelection
         var allPaths = new HashSet<CredentialPath>();
         foreach(var pointer in allDisclosures.Keys)
         {
-            allPaths.Add(CredentialPath.FromJsonPointer(pointer));
+            _ = allPaths.Add(CredentialPath.FromJsonPointer(pointer));
         }
 
         var mandatory = mandatoryPaths is not null

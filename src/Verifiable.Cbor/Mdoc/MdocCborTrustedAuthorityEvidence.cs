@@ -1,6 +1,5 @@
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.Mdoc;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cbor.Mdoc;

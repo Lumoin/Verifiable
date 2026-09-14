@@ -202,7 +202,7 @@ internal sealed class XmlReaderAdversarialLimitsTests
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(document);
 
         Assert.AreEqual(XmlReadFailure.UnexpectedEndOfDocument, error.Failure);
-        Assert.AreEqual((long)document.Length, error.ByteOffset);
+        Assert.AreEqual(document.Length, error.ByteOffset);
     }
 
 
@@ -221,12 +221,12 @@ internal sealed class XmlReaderAdversarialLimitsTests
             var builder = new StringBuilder(depthCount * 8);
             for(int i = 0; i < depthCount; ++i)
             {
-                builder.Append("<d>");
+                _ = builder.Append("<d>");
             }
 
             for(int i = 0; i < depthCount; ++i)
             {
-                builder.Append("</d>");
+                _ = builder.Append("</d>");
             }
 
             return Encoding.UTF8.GetBytes(builder.ToString());
@@ -315,13 +315,13 @@ internal sealed class XmlReaderAdversarialLimitsTests
     {
         const int AttributeCount = 20_000;
         var builder = new StringBuilder(AttributeCount * 16);
-        builder.Append("<a");
+        _ = builder.Append("<a");
         for(int i = 0; i < AttributeCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $" a{i}=\"v\"");
+            _ = builder.Append(CultureInfo.InvariantCulture, $" a{i}=\"v\"");
         }
 
-        builder.Append(" a0=\"duplicate\"/>");
+        _ = builder.Append(" a0=\"duplicate\"/>");
 
         XmlReadError error = XmlAdversarialParsing.ParseRefusedWithBalancedPool(Encoding.UTF8.GetBytes(builder.ToString()));
 

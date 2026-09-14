@@ -1,13 +1,10 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Verifiable.Core.Did.Methods.WebVh;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
+using Verifiable.Cryptography.EventLogs;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Resolver;

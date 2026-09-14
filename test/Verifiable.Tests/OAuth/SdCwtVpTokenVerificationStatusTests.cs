@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Net.Http;
-using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
@@ -18,7 +13,6 @@ using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-
 using StatusListType = Verifiable.Core.StatusList.StatusList;
 
 namespace Verifiable.Tests.OAuth;
@@ -119,11 +113,11 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
 
         Assert.IsNotNull(parsed.Credential.Status,
             "Section 6.3's Status structure rides CWT claim key 65535, so the verifier must surface a status claim.");
-        Assert.IsNotNull(parsed.Credential.Status!.StatusList,
+        Assert.IsNotNull(parsed.Credential.Status.StatusList,
             "Section 6.3: the status_list mechanism's StatusListInfo must decode into a resolvable reference.");
-        Assert.AreEqual(CredentialIndex, parsed.Credential.Status.StatusList!.Value.Index,
+        Assert.AreEqual(CredentialIndex, parsed.Credential.Status.StatusList.Value.Index,
             "Section 6.3: idx is REQUIRED and must reach the verifier as the issued non-negative index.");
-        Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList!.Value.Uri,
+        Assert.AreEqual(StatusListUri, parsed.Credential.Status.StatusList.Value.Uri,
             "Section 6.3: uri is REQUIRED and must reach the verifier as the issued Status List Token URI.");
         Assert.HasCount(1, parsed.Credential.Status.Mechanisms,
             "The Status structure named exactly one mechanism, so exactly one is surfaced.");
@@ -153,7 +147,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
 
         Assert.IsNotNull(parsed.Credential.Status,
             "identifier_list is a status mechanism the issuer stated, so the credential carries a status claim.");
-        Assert.IsNull(parsed.Credential.Status!.StatusList,
+        Assert.IsNull(parsed.Credential.Status.StatusList,
             "identifier_list carries no status_list mechanism, so there is no reference the verifier can resolve.");
         Assert.HasCount(1, parsed.Credential.Status.Mechanisms,
             "The Status structure named exactly one mechanism, so exactly one is surfaced.");
@@ -267,7 +261,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
 
         Assert.IsNull(outcome.RefusalDetail,
             "The entry reads 0x00 VALID, so the Response URI answers OID4VP 1.0 Section 8.2's success.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(outcome.State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(outcome.State,
             "A presentation whose credential status was determined and accepted reaches the verified terminal state.");
         var verified = (PresentationVerifiedState)outcome.State;
 
@@ -275,7 +269,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
             "Section 8.3 step 2 resolves the Status List Token from the provided URI exactly once for the one status claim presented.");
         Assert.IsNotNull(verified.CredentialStatuses,
             "The outcome the verifier read is surfaced on the verified state.");
-        Assert.IsTrue(verified.CredentialStatuses![EmployeeCwtQueryId].IsValid,
+        Assert.IsTrue(verified.CredentialStatuses[EmployeeCwtQueryId].IsValid,
             "Section 7.1: an unset entry reads 0x00 VALID, so the credential the SD-CWT presented is valid.");
     }
 
@@ -309,11 +303,11 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
         Assert.Contains("returned status 400", outcome.RefusalDetail!, StringComparison.Ordinal,
             "RFC 6749 Section 4.1.2.1's error shape is answered as HTTP 400, not as an HTTP 500 Verifier fault.");
 
-        (string wireError, string _) = OAuthErrorAssertions.ReadOAuthErrorBody(outcome.RefusalDetail!);
+        (string wireError, _) = OAuthErrorAssertions.ReadOAuthErrorBody(outcome.RefusalDetail!);
         Assert.AreEqual(OAuthErrors.AccessDenied, wireError,
             "RFC 6749 Section 4.1.2.1's access_denied is the code for a request the relying party denied.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(outcome.State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(outcome.State,
             "The refused presentation leaves the verifier's flow in its failed terminal state.");
         var failed = (VerifierFlowFailedState)outcome.State;
 
@@ -366,7 +360,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
         Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
             "An undeterminable credential status is invalid_request, not the access_denied a policy refusal answers.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(outcome.State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(outcome.State,
             "The rejected presentation leaves the verifier's flow in its failed terminal state.");
         var failed = (VerifierFlowFailedState)outcome.State;
 
@@ -416,15 +410,15 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
 
         Assert.IsNull(outcome.RefusalDetail,
             "The SHOULD admits a relying party that evaluates the mechanism itself, so the Response URI answers the success.");
-        Assert.IsInstanceOfType<PresentationVerifiedState>(outcome.State,
+        _ = Assert.IsInstanceOfType<PresentationVerifiedState>(outcome.State,
             "A presentation whose unevaluable status the relying party chose to surface reaches the verified terminal state.");
         var verified = (PresentationVerifiedState)outcome.State;
 
         Assert.IsTrue(verified.Credentials.TryGetValue(EmployeeCwtQueryId, out VpCredentialClaims? credential),
             "The verified credentials are keyed by the DCQL credential query identifier the vp_token is keyed by.");
-        Assert.IsNotNull(credential!.Status,
+        Assert.IsNotNull(credential.Status,
             "The status the issuer stated is surfaced so the relying party can evaluate the mechanism out of band.");
-        Assert.IsNull(credential.Status!.StatusList,
+        Assert.IsNull(credential.Status.StatusList,
             "identifier_list carries no status_list mechanism, so there is no reference on the surfaced claim.");
         Assert.HasCount(1, credential.Status.Mechanisms,
             "The Status structure named exactly one mechanism, so exactly one is surfaced.");
@@ -471,7 +465,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
         Assert.AreEqual(OAuthErrors.InvalidRequest, wireError,
             "RFC 6749 Section 4.1.2.1: an otherwise malformed request is invalid_request.");
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(outcome.State,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(outcome.State,
             "The refused presentation leaves the verifier's flow in its failed terminal state.");
         var failed = (VerifierFlowFailedState)outcome.State;
 
@@ -517,11 +511,11 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
 
             Assert.IsNotNull(claim,
                 "The wired extraction must read CWT claim key 65535 out of the issuer-signed claims, or Section 8.3 step 1 never runs.");
-            Assert.IsNotNull(claim!.StatusList,
+            Assert.IsNotNull(claim.StatusList,
                 "Section 6.3's status_list mechanism must decode into the reference the status step resolves.");
-            Assert.AreEqual(CredentialIndex, claim.StatusList!.Value.Index,
+            Assert.AreEqual(CredentialIndex, claim.StatusList.Value.Index,
                 "The seam must read the issued idx unchanged.");
-            Assert.AreEqual(StatusListUri, claim.StatusList!.Value.Uri,
+            Assert.AreEqual(StatusListUri, claim.StatusList.Value.Uri,
                 "The seam must read the issued uri unchanged.");
         }
         finally
@@ -648,7 +642,7 @@ internal sealed class SdCwtVpTokenVerificationStatusTests
 
             using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
                 .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-            jarResponse.EnsureSuccessStatusCode();
+            _ = jarResponse.EnsureSuccessStatusCode();
             string compactJar = await jarResponse.Content
                 .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 

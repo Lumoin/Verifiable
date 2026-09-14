@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 
 namespace Verifiable.Tests.JCose;
@@ -127,7 +122,7 @@ internal sealed class JAdESCrossComponentResolutionTests
 
         var violation = FindViolation<JAdESReferencesValidationDataConsistencyViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESRefsFamilyDigestSurface.CertificateReferences, violation!.Surface);
+        Assert.AreEqual(JAdESRefsFamilyDigestSurface.CertificateReferences, violation.Surface);
         Assert.AreEqual(JAdESReferenceMaterialKind.Certificate, violation.MaterialKind);
         Assert.Contains("JA-A.1.1-12", violation.RequirementId);
     }
@@ -180,7 +175,7 @@ internal sealed class JAdESCrossComponentResolutionTests
 
         var violation = FindViolation<JAdESReferencesValidationDataConsistencyViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(JAdESRefsFamilyDigestSurface.RevocationReferences, violation!.Surface);
+        Assert.AreEqual(JAdESRefsFamilyDigestSurface.RevocationReferences, violation.Surface);
         Assert.AreEqual(JAdESReferenceMaterialKind.Crl, violation.MaterialKind);
         Assert.Contains("JA-A.1.2-35", violation.RequirementId);
     }

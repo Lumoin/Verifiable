@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
-using System.Linq;
+using Verifiable.Core.Assessment;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Client;
-using Verifiable.Core.Assessment;
 using Verifiable.OAuth.Server.Pipeline;
 using Verifiable.OAuth.Validation;
 using Verifiable.Tests.TestInfrastructure;
@@ -88,7 +87,7 @@ internal sealed class AuthCodeFlowTests
             store: [],
             httpException: new OperationCanceledException());
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
         {
             _ = await AuthCodeFlowHandlers.HandleParAsync(
                 new Dictionary<string, string>(),
@@ -104,7 +103,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleParAsyncReturnsBadRequestWhenServerReturnsProtocolError()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            store: new Dictionary<string, FlowState>(),
+            store: [],
             parResponse: /*lang=json,strict*/ "{\"error\":\"invalid_client\"}");
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
@@ -124,7 +123,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleParAsyncReturnsInternalErrorWhenResponseIsMalformed()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            store: new Dictionary<string, FlowState>(),
+            store: [],
             parResponse: "<html>502 Bad Gateway</html>");
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleParAsync(
@@ -209,7 +208,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenMissingParameters()
     {
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, FlowState>());
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration([]);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string> { [OAuthRequestParameterNames.Code] = "abc" },
@@ -225,7 +224,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleCallbackAsyncReturnsBadRequestWhenFlowNotFound()
     {
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, FlowState>());
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration([]);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
@@ -248,7 +247,7 @@ internal sealed class AuthCodeFlowTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:x", 60));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
 
@@ -273,7 +272,7 @@ internal sealed class AuthCodeFlowTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:y", 60));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
 
@@ -289,7 +288,7 @@ internal sealed class AuthCodeFlowTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(AuthCodeFlowEndpointOutcome.Ok, result.Outcome);
-        Assert.IsInstanceOfType<AuthorizationCodeReceivedState>(store[flowId],
+        _ = Assert.IsInstanceOfType<AuthorizationCodeReceivedState>(store[flowId],
             "Callback success must replace ParCompleted with AuthorizationCodeReceived in the store.");
     }
 
@@ -297,7 +296,7 @@ internal sealed class AuthCodeFlowTests
     [TestMethod]
     public async Task HandleTokenAsyncReturnsBadRequestWhenFlowIdMissing()
     {
-        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(new Dictionary<string, FlowState>());
+        (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration([]);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleTokenAsync(
             new Dictionary<string, string>(),
@@ -315,7 +314,7 @@ internal sealed class AuthCodeFlowTests
     {
         var store = new Dictionary<string, FlowState>();
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store, parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:z", 60));
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
 
         string flowId = GetSingleFlowId(store);
 
@@ -339,10 +338,10 @@ internal sealed class AuthCodeFlowTests
             parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:happy", 60),
             tokenResponse: OAuthJsonResponseFixtures.BuildTokenJson("at.abc", "Bearer", 3600, "rt.xyz"));
 
-        await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await AuthCodeFlowHandlers.HandleParAsync(new Dictionary<string, string>(), DefaultRedirectUri, infrastructure, registration, TestContext.CancellationToken).ConfigureAwait(false);
         string flowId = GetSingleFlowId(store);
 
-        await AuthCodeFlowHandlers.HandleCallbackAsync(
+        _ = await AuthCodeFlowHandlers.HandleCallbackAsync(
             new Dictionary<string, string>
             {
                 [OAuthRequestParameterNames.Code] = "code-happy",
@@ -363,7 +362,7 @@ internal sealed class AuthCodeFlowTests
         Assert.IsNotNull(result.Body);
         Assert.AreEqual("at.abc", result.Body["access_token"]);
         Assert.AreEqual("Bearer", result.Body["token_type"]);
-        Assert.IsInstanceOfType<TokenReceivedState>(store[flowId],
+        _ = Assert.IsInstanceOfType<TokenReceivedState>(store[flowId],
             "Token exchange success must persist TokenReceived in the store.");
     }
 
@@ -372,7 +371,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleRevocationAsyncReturnsBadRequestWhenEndpointMissing()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            new Dictionary<string, FlowState>(),
+            [],
             useDefaultRevocationEndpoint: false);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleRevocationAsync(
@@ -390,7 +389,7 @@ internal sealed class AuthCodeFlowTests
     public async Task HandleRevocationAsyncReturnsOkWhenEndpointPresent()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            new Dictionary<string, FlowState>());
+            []);
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.HandleRevocationAsync(
             new Dictionary<string, string> { ["token"] = "some-token" },
@@ -406,7 +405,7 @@ internal sealed class AuthCodeFlowTests
     public async Task RefreshAsyncReturnsOkWithNewTokens()
     {
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(
-            new Dictionary<string, FlowState>(),
+            [],
             tokenResponse: OAuthJsonResponseFixtures.BuildTokenJson("at.new", "Bearer", 3600, "rt.new"));
 
         AuthCodeFlowEndpointResult result = await AuthCodeFlowHandlers.RefreshAsync(
@@ -433,7 +432,7 @@ internal sealed class AuthCodeFlowTests
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
             parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:pkce1", 60));
 
-        await AuthCodeFlowHandlers.HandleParAsync(
+        _ = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
             DefaultRedirectUri,
             infrastructure,
@@ -470,10 +469,10 @@ internal sealed class AuthCodeFlowTests
         (OAuthClientInfrastructure infrastructure2, ClientRegistration registration2) = CreateInfrastructureAndRegistration(store2,
             parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:u2", 60));
 
-        await AuthCodeFlowHandlers.HandleParAsync(
+        _ = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(), DefaultRedirectUri, infrastructure1, registration1,
             TestContext.CancellationToken).ConfigureAwait(false);
-        await AuthCodeFlowHandlers.HandleParAsync(
+        _ = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(), DefaultRedirectUri, infrastructure2, registration2,
             TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -499,7 +498,7 @@ internal sealed class AuthCodeFlowTests
 
         DateTimeOffset before = TimeProvider.GetUtcNow();
 
-        await AuthCodeFlowHandlers.HandleParAsync(
+        _ = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
             DefaultRedirectUri,
             infrastructure,
@@ -528,7 +527,7 @@ internal sealed class AuthCodeFlowTests
         (OAuthClientInfrastructure infrastructure, ClientRegistration registration) = CreateInfrastructureAndRegistration(store,
             parResponse: OAuthJsonResponseFixtures.BuildParJson("urn:ietf:params:oauth:request_uri:obs", 60));
 
-        await AuthCodeFlowHandlers.HandleParAsync(
+        _ = await AuthCodeFlowHandlers.HandleParAsync(
             new Dictionary<string, string>(),
             DefaultRedirectUri,
             infrastructure,
@@ -568,7 +567,7 @@ internal sealed class AuthCodeFlowTests
         };
 
         OAuthClientInfrastructure infrastructure = OAuthClientInfrastructure.Create(
-            sendFormPostAsync: async (endpoint, _, _, _, __) =>
+            sendFormPostAsync: (endpoint, _, _, _, __) =>
             {
                 if(httpException is not null)
                 {
@@ -579,7 +578,7 @@ internal sealed class AuthCodeFlowTests
                 string body = isTokenEndpoint
                     ? tokenResponse ?? string.Empty
                     : parResponse ?? string.Empty;
-                return new HttpResponseData { Body = body, StatusCode = 200 };
+                return ValueTask.FromResult(new HttpResponseData { Body = body, StatusCode = 200 });
             },
             saveStateAsync: (state, _, _) =>
             {

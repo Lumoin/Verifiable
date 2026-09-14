@@ -64,7 +64,7 @@ internal sealed class CoseKeyEc2BuildKeyMaterialTests
         using IMemoryOwner<byte> y = BaseMemoryPool.Shared.Rent(32);
         CoseKey coseKey = new(kty: CoseKeyTypes.Ec2, curve: CoseKeyCurves.P256, y: y.Memory);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
     }
 
 
@@ -79,7 +79,7 @@ internal sealed class CoseKeyEc2BuildKeyMaterialTests
         using IMemoryOwner<byte> x = BaseMemoryPool.Shared.Rent(32);
         CoseKey coseKey = new(kty: CoseKeyTypes.Ec2, curve: CoseKeyCurves.P256, x: x.Memory);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
     }
 
 
@@ -92,7 +92,7 @@ internal sealed class CoseKeyEc2BuildKeyMaterialTests
     {
         CoseKey coseKey = new(kty: CoseKeyTypes.Okp, curve: CoseKeyCurves.Ed25519);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
     }
 
 
@@ -105,6 +105,6 @@ internal sealed class CoseKeyEc2BuildKeyMaterialTests
     {
         CoseKey coseKey = new(kty: CoseKeyTypes.Symmetric);
 
-        Assert.ThrowsExactly<NotSupportedException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<NotSupportedException>(() => coseKey.ToPublicKeyMemory(BaseMemoryPool.Shared));
     }
 }

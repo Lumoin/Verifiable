@@ -1,11 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -17,11 +14,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -217,7 +209,7 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        uint policyHandle = await StartPolicySessionAsync(device, registry, pool).ConfigureAwait(false);
+        uint policyHandle = await StartPolicySessionAsync(device, pool).ConfigureAwait(false);
         try
         {
             ITpmCommandInput input = await BuildInputAsync(device, pool, registry, command).ConfigureAwait(false);
@@ -364,7 +356,7 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateRegistry();
 
-        uint policyHandle = await StartPolicySessionAsync(device, registry, pool).ConfigureAwait(false);
+        uint policyHandle = await StartPolicySessionAsync(device, pool).ConfigureAwait(false);
         try
         {
             ITpmCommandInput input = BuildCompliantInput(command);
@@ -634,7 +626,7 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
         TpmResponseRegistry registry = CreateRegistry();
 
         await DefineIndexAsync(
-            device, pool, registry, TpmRh.TPM_RH_OWNER, NvExtendEmptyAuthIndexHandle, ExtendAttributes, (ushort)Sha256DigestSize, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
+            device, pool, registry, TpmRh.TPM_RH_OWNER, NvExtendEmptyAuthIndexHandle, ExtendAttributes, Sha256DigestSize, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
 
         uint sessionHandle = await StartUnboundHmacSessionAsync(device, registry, pool).ConfigureAwait(false);
         try
@@ -900,7 +892,7 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
 
         Assert.AreEqual(baseline, trackingPool.OutstandingCount, "The unloaded-handle refusal cell releases every carrier its parse rented.");
 
-        uint policyHandle = await StartPolicySessionAsync(device, registry, pool).ConfigureAwait(false);
+        uint policyHandle = await StartPolicySessionAsync(device, pool).ConfigureAwait(false);
         try
         {
             ITpmCommandInput policyInput = await BuildInputAsync(device, pool, registry, HierarchySlotCommand.Clear).ConfigureAwait(false);
@@ -1090,7 +1082,7 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
         try
         {
             using TpmSession session = new(new TpmHandle(sessionHandle), started.NonceTPM, HmacSessionAlg, TestEntropy.NewCounterStream(), pool);
-            session.SessionAttributes |= (TpmaSession.CONTINUE_SESSION | extraAttributes);
+            session.SessionAttributes |= TpmaSession.CONTINUE_SESSION | extraAttributes;
 
             byte[] cpHash = await ComputeCpHashAsync(input.CommandCode, HandleNameBytes(cpHashNameHandle), cpHashParameterBytes, pool).ConfigureAwait(false);
 
@@ -1463,10 +1455,9 @@ internal sealed class TpmInHouseSimulatorHierarchySlotTableTests
 
     /// <summary>Starts a policy session (TPM 2.0 Library Part 3, clause 23.3) and returns its loaded handle.</summary>
     /// <param name="device">The TPM device.</param>
-    /// <param name="registry">The response codec registry.</param>
     /// <param name="pool">The memory pool.</param>
     /// <returns>The started policy session's handle.</returns>
-    private async Task<uint> StartPolicySessionAsync(TpmDevice device, TpmResponseRegistry registry, BaseMemoryPool pool)
+    private async Task<uint> StartPolicySessionAsync(TpmDevice device, BaseMemoryPool pool)
     {
         TpmResult<StartAuthSessionResponse> policyStartResult = await device.StartPolicySessionAsync(HmacSessionAlg, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(policyStartResult.IsSuccess, $"StartAuthSession (policy) failed: '{policyStartResult.ResponseCode}'.");

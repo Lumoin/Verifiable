@@ -1,7 +1,5 @@
 using Lumoin.Base;
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -181,10 +179,10 @@ public static class AcdcCesr
         var body = new StringBuilder();
         foreach((string label, object? value) in message)
         {
-            body.Append(CesrFieldMapCodec.EncodeLabel(label));
+            _ = body.Append(CesrFieldMapCodec.EncodeLabel(label));
 
             object? fieldValue = label == AcdcMessageFields.Version && value is string version ? CesrVersionPrimitive.ProtocolAndVersion(version) : value;
-            body.Append(CesrFieldMapCodec.EncodeValue(fieldValue, pool));
+            _ = body.Append(CesrFieldMapCodec.EncodeValue(fieldValue, pool));
         }
 
         string bodyText = body.ToString();

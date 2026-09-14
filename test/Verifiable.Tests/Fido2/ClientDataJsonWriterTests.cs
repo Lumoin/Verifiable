@@ -121,7 +121,7 @@ internal sealed class ClientDataJsonWriterTests
     {
         var destination = new ArrayBufferWriter<byte>();
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => ClientDataJsonWriter.Write(null!, destination));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => ClientDataJsonWriter.Write(null!, destination));
     }
 
 
@@ -131,6 +131,6 @@ internal sealed class ClientDataJsonWriterTests
     {
         var clientData = new ClientData(WellKnownClientDataTypes.Get, "c", "o");
 
-        Assert.ThrowsExactly<ArgumentNullException>(() => ClientDataJsonWriter.Write(clientData, null!));
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => ClientDataJsonWriter.Write(clientData, null!));
     }
 }

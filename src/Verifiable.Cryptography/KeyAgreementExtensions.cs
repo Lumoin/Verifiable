@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;

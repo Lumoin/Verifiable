@@ -429,17 +429,17 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
 
         string? resolvedDid = null;
         string? resolvedKid = null;
-        ResolveDidVerificationKeyDelegate resolver = (did, kid, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string did, string? kid, CancellationToken _)
         {
             resolvedDid = did;
             resolvedKid = kid;
 
             return ValueTask.FromResult<PublicKeyMemory?>(subjectPublic);
-        };
+        }
 
         SelfIssuedIdTokenValidationResult result = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
-            resolver,
+resolver,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -471,12 +471,12 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             expiresAt: TimeProvider.GetUtcNow().AddMinutes(5), issuedAt: TimeProvider.GetUtcNow(),
             subJwk: subJwk).ConfigureAwait(false);
 
-        ResolveDidVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3) =>
             ValueTask.FromResult<PublicKeyMemory?>(subjectPublic);
 
         SelfIssuedIdTokenValidationResult result = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
-            resolver,
+resolver,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -507,11 +507,11 @@ internal sealed class SiopSelfIssuedIdTokenValidationTests
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
-        ResolveDidVerificationKeyDelegate unresolvable = (_, _, _) =>
+        static ValueTask<PublicKeyMemory?> unresolvable(string _1, string? _2, CancellationToken _3) =>
             ValueTask.FromResult<PublicKeyMemory?>(null);
         SelfIssuedIdTokenValidationResult unresolvedResult = await SelfIssuedIdTokenValidation.ValidateAsync(
             idToken, ClientId, RequestNonce, AllowedAlgorithms, TimeProvider.GetUtcNow(),
-            unresolvable,
+unresolvable,
             TestSetup.Base64UrlDecoder, TestSetup.Base64UrlEncoder, Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -84,7 +84,7 @@ public sealed class CapabilityInvocationMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="verificationReferenceId"/> is <c>null</c>.
     /// </exception>
-    public CapabilityInvocationMethod(string verificationReferenceId): base(verificationReferenceId)
+    public CapabilityInvocationMethod(string verificationReferenceId) : base(verificationReferenceId)
     {
     }
 
@@ -99,7 +99,7 @@ public sealed class CapabilityInvocationMethod: VerificationMethodReference
     /// <exception cref="System.ArgumentNullException">
     /// Thrown when <paramref name="embeddedVerification"/> is <c>null</c>.
     /// </exception>
-    public CapabilityInvocationMethod(VerificationMethod embeddedVerification): base(embeddedVerification)
+    public CapabilityInvocationMethod(VerificationMethod embeddedVerification) : base(embeddedVerification)
     {
     }
 }

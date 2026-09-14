@@ -1,7 +1,4 @@
-using System;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -38,7 +35,7 @@ public readonly record struct PolicyParametersInput(uint PolicySession, ReadOnly
     /// </summary>
     public ReadOnlyMemory<byte> ParametersHash
     {
-        get => field;
+        get;
         init => field = EnsureWithinDigestBound(value);
     } = EnsureWithinDigestBound(ParametersHash);
 

@@ -1,6 +1,3 @@
-using System;
-using System.Buffers;
-
 namespace Verifiable.Fido2.Ctap.Authenticator.Custody;
 
 /// <summary>

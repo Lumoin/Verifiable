@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.OAuth.Client;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -43,7 +38,7 @@ internal static class OAuthTestTransport
         {
             foreach((string name, string value) in headers.Values)
             {
-                request.Headers.TryAddWithoutValidation(name, value);
+                _ = request.Headers.TryAddWithoutValidation(name, value);
             }
         }
 

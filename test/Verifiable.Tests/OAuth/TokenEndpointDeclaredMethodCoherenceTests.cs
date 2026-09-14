@@ -1,10 +1,8 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.Net.Http;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth;
@@ -415,7 +413,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
             AuthCodeFlowEndpointResult tokenResult = await client.AuthCode.ExchangeTokenAsync(
-                registration, flowId, new ExchangeContext(),
+                registration, flowId, [],
                 new ClientAssertionOptions
                 {
                     SigningKeyId = SigningKeyId,
@@ -961,7 +959,7 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
 
         hosted.Registrations[segment] = updated;
         hosted.Registrations[updated.ClientId] = updated;
-        hosted.Server.UpdateClient(previous, updated, new ExchangeContext());
+        hosted.Server.UpdateClient(previous, updated, []);
 
         material.Registration = updated;
     }
@@ -977,13 +975,13 @@ internal sealed class TokenEndpointDeclaredMethodCoherenceTests
     {
         IReadOnlyDictionary<string, string> jwk = DpopJwkUtilities.ToJwk(publicKey, alg, TestSetup.Base64UrlEncoder);
         StringBuilder sb = new();
-        sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
+        _ = sb.Append('{').Append('"').Append(WellKnownJwkMemberNames.Keys).Append("\":[{");
         foreach(KeyValuePair<string, string> member in jwk)
         {
-            sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
+            _ = sb.Append('"').Append(member.Key).Append("\":\"").Append(member.Value).Append("\",");
         }
 
-        sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
+        _ = sb.Append('"').Append(WellKnownJwkMemberNames.Kid).Append("\":\"").Append(kid).Append("\"}]}");
 
         return sb.ToString();
     }

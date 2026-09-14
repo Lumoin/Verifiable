@@ -53,6 +53,11 @@ internal static class XAdESGrammar
             XmlSignatureReadFailure.DuplicateCoreChild => XAdESReadFailure.DuplicateCoreChild,
             XmlSignatureReadFailure.MissingRequiredChild => XAdESReadFailure.MissingRequiredChild,
             XmlSignatureReadFailure.UnknownCoreElement => XAdESReadFailure.UnknownCoreElement,
+
+            //These three are produced elsewhere in the leaf, never by the six primitives an XAdES reader calls.
+            XmlSignatureReadFailure.MissingSignedInfo or XmlSignatureReadFailure.InvalidChildOrder
+                or XmlSignatureReadFailure.InvalidHmacOutputLength =>
+                    throw new InvalidOperationException($"Grammar primitives an XAdES reader calls must not produce {error.Failure}."),
             _ => throw new InvalidOperationException($"Grammar primitives an XAdES reader calls must not produce {error.Failure}.")
         };
 

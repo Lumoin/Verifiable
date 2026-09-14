@@ -1,10 +1,7 @@
-using System.Buffers;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -67,7 +64,7 @@ internal class HwTpmRandomTests
 
     [TestMethod]
     public async Task ExecutorReturnsRequestedBytes()
-    {        
+    {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         var registry = new TpmResponseRegistry();
 

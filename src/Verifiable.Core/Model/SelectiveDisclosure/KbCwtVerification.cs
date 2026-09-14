@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core.StatusList;
 using Verifiable.Cryptography;
 using Verifiable.JCose;

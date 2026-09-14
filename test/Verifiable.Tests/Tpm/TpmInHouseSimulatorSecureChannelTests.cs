@@ -1,10 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -12,11 +12,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -170,7 +165,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
 
         Assert.IsNotNull(capturedCommand, "The capturing wrapper must have observed the outgoing PolicySecret command.");
         ParsePolicySecretOverSessionCommand(
-            capturedCommand!, out ReadOnlyMemory<byte> nonceCaller, out byte sessionAttributes,
+            capturedCommand, out ReadOnlyMemory<byte> nonceCaller, out byte sessionAttributes,
             out ReadOnlyMemory<byte> suppliedHmac, out ReadOnlyMemory<byte> rawParameterArea);
 
         BaseMemoryPool oraclePool = BaseMemoryPool.Shared;
@@ -425,7 +420,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
                     //Resend the FIRST call's exact wire bytes directly against the simulator: the session's stored
                     //nonceTPM has since rolled twice (once per genuine call), so the replay's HMAC no longer
                     //matches.
-                    TpmResult<TpmResponse> replayResult = await simulator.SubmitAsync(firstCommand!, pool, TestContext.CancellationToken).ConfigureAwait(false);
+                    TpmResult<TpmResponse> replayResult = await simulator.SubmitAsync(firstCommand, pool, TestContext.CancellationToken).ConfigureAwait(false);
                     using(TpmResponse replayResponse = replayResult.Value)
                     {
                         var reader = new TpmReader(replayResponse.AsReadOnlySpan());
@@ -565,7 +560,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
             secretResult.Value.Dispose();
 
             Assert.IsNotNull(capturedPolicySecretCommand, "The capturing wrapper must have observed the PolicySecret command.");
-            uint sessionHandle = ReadPolicySecretAuthorizingSessionHandle(capturedPolicySecretCommand!);
+            uint sessionHandle = ReadPolicySecretAuthorizingSessionHandle(capturedPolicySecretCommand);
             Assert.AreEqual(
                 (uint)TpmRh.TPM_RH_PW, sessionHandle,
                 "The explicit low-protection opt-out must send a genuine TPM_RS_PW password session.");
@@ -715,7 +710,7 @@ internal sealed class TpmInHouseSimulatorSecureChannelTests
         BinaryPrimitives.WriteUInt32BigEndian(endorsementName, (uint)TpmRh.TPM_RH_ENDORSEMENT);
 
         Span<byte> predicted = stackalloc byte[DigestSize];
-        TpmPolicyDigest.ExtendForSecret(current, endorsementName, ReadOnlySpan<byte>.Empty, SessionAlg, predicted, BaseMemoryPool.Shared);
+        _ = TpmPolicyDigest.ExtendForSecret(current, endorsementName, ReadOnlySpan<byte>.Empty, SessionAlg, predicted, BaseMemoryPool.Shared);
 
         return actualDigest.SequenceEqual(predicted);
     }

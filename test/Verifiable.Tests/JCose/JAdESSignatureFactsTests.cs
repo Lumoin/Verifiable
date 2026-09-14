@@ -1,14 +1,9 @@
-using System;
 using System.Buffers;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
-using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -45,7 +40,7 @@ internal sealed class JAdESSignatureFactsTests
         Assert.HasCount(1, facts.AlgorithmUses);
         Assert.AreEqual(WellKnownJwaValues.Es256, facts.AlgorithmUses[0].Algorithm.Oid);
         Assert.IsTrue(facts.TryGetAttribute("iat", out SignatureAttributeFacts? iatAttribute), "iat is mandatory from the outset and must be reported as a signed attribute.");
-        Assert.IsTrue(iatAttribute!.IsWellFormed);
+        Assert.IsTrue(iatAttribute.IsWellFormed);
         Assert.IsNotNull(facts.ClaimedSigningTime);
     }
 

@@ -1,9 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tpm.Infrastructure.Commands;
 
@@ -155,7 +151,7 @@ public sealed class QuoteInput: ITpmCommandInput, IDisposable
         qualifyingData.CopyTo(owner.Memory.Span);
 
         return new QuoteInput(
-            signHandle, owner, owner.Memory.Slice(0, qualifyingData.Length), signatureScheme, schemeHashAlg, pcrSelection);
+            signHandle, owner, owner.Memory[..qualifyingData.Length], signatureScheme, schemeHashAlg, pcrSelection);
     }
 
     private QuoteInput(

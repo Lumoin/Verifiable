@@ -1,15 +1,12 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
-using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Server;
-using Verifiable.Server.Routing;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
 using Verifiable.OAuth.Siop.Wallet;
@@ -71,7 +68,7 @@ internal sealed class SiopFlowIntegrationTests
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsFalse(string.IsNullOrWhiteSpace(requestHandle));
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         //=== Step 2: the Wallet mints a JWK-Thumbprint Self-Issued ID Token bound to the
         //transaction (aud = RP client_id, nonce = the transaction nonce). ===
@@ -98,7 +95,7 @@ internal sealed class SiopFlowIntegrationTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //=== Step 4: 200 and the terminal verified state with the expected subject + nonce. ===
@@ -161,10 +158,10 @@ internal sealed class SiopFlowIntegrationTests
                 [OAuthRequestParameterNames.IdToken] = idToken,
                 [OAuthRequestParameterNames.State] = requestHandle
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreNotEqual((int)HttpStatusCode.OK, response.StatusCode, response.Body);
-        Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopVerifierFlowFailedState>(host.GetFlowState(requestHandle).State);
     }
 }

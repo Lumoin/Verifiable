@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Jwt
 {
     /// <summary>
@@ -134,15 +132,15 @@ namespace Verifiable.Jwt
         /// <returns>The equivalent static instance of <paramref name="jsonAttribute"/>, or the original instance if none match.</returns>
         public static string GetCanonicalizedValue(string jsonAttribute) => jsonAttribute switch
         {
-            string _ when IsCrv(jsonAttribute) => Crv,
-            string _ when IsD(jsonAttribute) => D,
-            string _ when IsE(jsonAttribute) => E,
-            string _ when IsK(jsonAttribute) => K,
-            string _ when IsKty(jsonAttribute) => Kty,
-            string _ when IsN(jsonAttribute) => N,
-            string _ when IsX(jsonAttribute) => X,
-            string _ when IsY(jsonAttribute) => Y,
-            string _ => jsonAttribute
+            string when IsCrv(jsonAttribute) => Crv,
+            string when IsD(jsonAttribute) => D,
+            string when IsE(jsonAttribute) => E,
+            string when IsK(jsonAttribute) => K,
+            string when IsKty(jsonAttribute) => Kty,
+            string when IsN(jsonAttribute) => N,
+            string when IsX(jsonAttribute) => X,
+            string when IsY(jsonAttribute) => Y,
+            string => jsonAttribute
         };
 
 

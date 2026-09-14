@@ -1,14 +1,10 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -97,7 +93,7 @@ internal sealed class TpmVirtualDeviceTests
 
         //A header-only failure frame: 10 bytes carrying TPM_RC_FAILURE in the response code.
         Assert.AreEqual(HeaderSize, response.Length);
-        uint responseCode = BinaryPrimitives.ReadUInt32BigEndian(bytes.Slice(6));
+        uint responseCode = BinaryPrimitives.ReadUInt32BigEndian(bytes[6..]);
         Assert.AreEqual((uint)TpmRcConstants.TPM_RC_FAILURE, responseCode);
     }
 

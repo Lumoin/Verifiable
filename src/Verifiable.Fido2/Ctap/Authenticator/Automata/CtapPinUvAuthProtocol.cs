@@ -1,8 +1,5 @@
-using System;
 using System.Buffers;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
@@ -131,7 +128,7 @@ public sealed record CtapPinUvAuthProtocol(
 
 
     /// <summary>Resolves a registered crypto delegate of type <typeparamref name="TFunction"/> by its own type as the registry key.</summary>
-    private static TFunction Resolve<TFunction>() where TFunction: Delegate =>
+    private static TFunction Resolve<TFunction>() where TFunction : Delegate =>
         CryptographicKeyFactory.GetFunction<TFunction>(typeof(TFunction))
             ?? throw new InvalidOperationException(
                 $"No {typeof(TFunction).Name} has been registered. Call CryptographicKeyFactory.RegisterFunction during application startup.");

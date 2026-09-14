@@ -1,6 +1,4 @@
-using Lumoin.Base;
 using Lumoin.Veritas.Canonicalization;
-using Lumoin.Veritas.Core;
 using Lumoin.Veritas.Json.Stj;
 using Lumoin.Veritas.JsonLd;
 using Microsoft.Extensions.Caching.Memory;
@@ -8,7 +6,6 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using Verifiable.Core;
-using VeritasContextResolver = Lumoin.Veritas.LinkedData.ContextResolverDelegate;
 using Verifiable.Core.Model.Credentials;
 using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Json;
@@ -284,20 +281,20 @@ internal static class CanonicalizationTestUtilities
         {
             //The bridge carries the per-call ExchangeContext into every remote @context fetch;
             //a null resolver resolves nothing, and expansion fails on the first remote context.
-            VeritasContextResolver resolveContext = async (uri, resolveCancellation) =>
+            async ValueTask<Utf8String?> resolveContext(Uri uri, CancellationToken resolveCancellation)
             {
                 string? resolved = contextResolver == null
                     ? null
                     : await contextResolver(uri, context, resolveCancellation).ConfigureAwait(false);
 
                 return resolved == null ? null : Utf8StringInterner.Shared.Intern(resolved);
-            };
+            }
 
             var document = StjJsonAdapter.Parse(Utf8StringInterner.Shared.Intern(json));
             var expanded = await JsonLdExpansionTree.ExpandAsync(
                 document,
                 baseUrl: null,
-                resolveContext,
+resolveContext,
                 StjJsonAdapter.Parse,
                 cancellationToken).ConfigureAwait(false);
 
@@ -452,7 +449,7 @@ internal static class CanonicalizationTestUtilities
 
             //Fetch from remote.
             var response = await httpClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
+            _ = response.EnsureSuccessStatusCode();
 
             var contextJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
@@ -475,7 +472,7 @@ internal static class CanonicalizationTestUtilities
             if(contextCache != null)
             {
                 var cacheOptions = new MemoryCacheEntryOptions().SetAbsoluteExpiration(TimeSpan.FromHours(24));
-                contextCache.Set(uriString, contextJson, cacheOptions);
+                _ = contextCache.Set(uriString, contextJson, cacheOptions);
             }
 
             return contextJson;

@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.JCose;
 
 namespace Verifiable.Core.SecurityEvents;
@@ -57,7 +55,7 @@ public static class SecurityEventTokenParsing
         {
             int i => DateTimeOffset.FromUnixTimeSeconds(i),
             long l => DateTimeOffset.FromUnixTimeSeconds(l),
-            decimal d when d >= long.MinValue && d <= long.MaxValue => DateTimeOffset.FromUnixTimeSeconds((long)d),
+            decimal d when d is >= long.MinValue and <= long.MaxValue => DateTimeOffset.FromUnixTimeSeconds((long)d),
             _ => null
         };
     }

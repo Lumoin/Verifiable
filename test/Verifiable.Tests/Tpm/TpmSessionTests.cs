@@ -1,14 +1,8 @@
-using System;
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -43,7 +37,7 @@ internal sealed class TpmSessionTests
         const int DigestSize = 32;
         byte[] expectedPattern = new byte[DigestSize];
         Array.Fill(expectedPattern, (byte)0x7E);
-        FillEntropyDelegate fixedPattern = destination => expectedPattern.AsSpan().CopyTo(destination);
+        void fixedPattern(Span<byte> destination) => expectedPattern.AsSpan().CopyTo(destination);
 
         StartAuthSessionInput input = StartAuthSessionInput.CreateBoundUnsaltedHmacSession(
             BindHandle, TpmAlgIdConstants.TPM_ALG_SHA256, fixedPattern, BaseMemoryPool.Shared);
@@ -108,7 +102,7 @@ internal sealed class TpmSessionTests
         Assert.AreEqual(sessionAlg, session.HashAlgorithm, "The session must report its hash algorithm.");
 
         //TPMS_AUTH_COMMAND: sessionHandle(4) + nonceCaller(2 + digest) + sessionAttributes(1) + hmac(2 + digest).
-        int expectedAuthSize = sizeof(uint) + (sizeof(ushort) + digestSize) + sizeof(byte) + (sizeof(ushort) + digestSize);
+        int expectedAuthSize = sizeof(uint) + sizeof(ushort) + digestSize + sizeof(byte) + sizeof(ushort) + digestSize;
         Assert.AreEqual(expectedAuthSize, session.GetAuthCommandSize(), "Bound HMAC session auth-command size must account for a full-digest nonce and HMAC.");
     }
 
@@ -133,7 +127,7 @@ internal sealed class TpmSessionTests
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
 
-        await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
             await TpmSession.CreateBoundAsync(
                 new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], null!, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
     }
@@ -144,7 +138,7 @@ internal sealed class TpmSessionTests
         Tpm2bNonce nonceTpm = Tpm2bNonce.CreateRandom(32, TestEntropy.NewCounterStream(), BaseMemoryPool.Shared);
         try
         {
-            await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentNullException>(async () =>
                 await TpmSession.CreateBoundAsync(
                     new TpmHandle(0x02000000u), new byte[] { 0x01 }, new byte[32], nonceTpm, TpmAlgIdConstants.TPM_ALG_SHA256, TestEntropy.NewCounterStream(), null!, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
         }

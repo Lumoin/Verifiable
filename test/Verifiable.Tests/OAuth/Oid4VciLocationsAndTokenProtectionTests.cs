@@ -1,11 +1,8 @@
-using System.Buffers;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Text.Json;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
+using System.Text.Json;
 using Verifiable.Core;
-using Verifiable.Cryptography;
+using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.AuthCode;
 using Verifiable.OAuth.AuthCode.States;
@@ -13,8 +10,6 @@ using Verifiable.OAuth.Client;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
-using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -68,7 +63,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         ConfigureAuthorizationServersMetadata(host);
 
         ServerHttpResponse parResponse = await DispatchParAsync(
@@ -90,7 +85,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         ConfigureAuthorizationServersMetadata(host);
 
         ServerHttpResponse parResponse = await DispatchParAsync(
@@ -116,7 +111,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
         ConfigureAuthorizationServersMetadata(host);
 
@@ -153,7 +148,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //§13.10: keep the plain-bearer credential token within the long-lived threshold.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
         ConfigureAuthorizationServersMetadata(host);
@@ -188,7 +183,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
         //No authorization_servers metadata is contributed: the AS is the issuer.
 
@@ -218,7 +213,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //Longer than the §13.10 five-minute threshold and NOT sender-constrained.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(10));
 
@@ -253,7 +248,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = host.RegisterDpopClient(
             ClientId, ClientBaseUri, PolicyProfile.Rfc6749WithPkce, AuthCodeCapabilities);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //Exactly the §13.10 threshold — not "longer than 5 minutes", so it is not long lived.
         host.SetAccessTokenLifetime(material, TimeSpan.FromMinutes(5));
 
@@ -287,8 +282,8 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         //Default HAIP profile — DPoP is required and the default access-token lifetime is one
         //hour, which is long lived per §13.10. The token issues because it is sender-constrained.
         using VerifierKeyMaterial material = host.RegisterDpopClient(ClientId, ClientBaseUri);
-        host.EnableDpop();
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.EnableDpop();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         host.Server.OAuth().ResolveCredentialAuthorizationAsync =
             (details, subject, registration, context, ct) =>
                 ValueTask.FromResult(GrantAllRequested(details));
@@ -314,7 +309,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         ParCompletedState parCompleted = (ParCompletedState)fixture.ClientFlowStore[flowId];
         string requestUri = parCompleted.Par.RequestUri.ToString();
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -423,7 +418,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         return await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -453,12 +448,12 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
         };
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodePar, "POST",
-            parFields, new ExchangeContext(),
+            parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
         string requestUri = ExtractFromBody(parResponse.Body, "request_uri");
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeAuthorize, WellKnownHttpMethods.Get,
@@ -487,7 +482,7 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
 
         return await host.DispatchAtEndpointAsync(
             segment, WellKnownEndpointNames.AuthCodeToken, "POST",
-            tokenFields, new ExchangeContext(),
+            tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -507,8 +502,8 @@ internal sealed class Oid4VciLocationsAndTokenProtectionTests
             parsed[pair[..eq]] = Uri.UnescapeDataString(pair[(eq + 1)..]);
         }
 
-        parsed.TryGetValue(OAuthRequestParameterNames.Code, out string? code);
-        parsed.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
+        _ = parsed.TryGetValue(OAuthRequestParameterNames.Code, out string? code);
+        _ = parsed.TryGetValue(OAuthRequestParameterNames.Iss, out string? iss);
 
         return (code!, iss);
     }

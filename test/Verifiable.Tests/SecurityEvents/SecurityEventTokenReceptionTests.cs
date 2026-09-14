@@ -1,8 +1,3 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
 using Verifiable.Core.SecurityEvents;
 using Verifiable.Cryptography;
@@ -62,8 +57,7 @@ internal sealed class SecurityEventTokenReceptionTests
 
         string compact = await IssueAsync(transmitterPrivate, SessionRevoked()).ConfigureAwait(false);
 
-        IsSecurityEventTokenJtiSeenDelegate alwaysSeen =
-            (jti, context, cancellationToken) => ValueTask.FromResult(true);
+        static ValueTask<bool> alwaysSeen(string jti, ExchangeContext context, CancellationToken cancellationToken) => ValueTask.FromResult(true);
 
         SsfDeliveryDecision decision = await ReceiveAsync(compact, transmitterPublic, isJtiSeen: alwaysSeen).ConfigureAwait(false);
 
@@ -112,7 +106,7 @@ internal sealed class SecurityEventTokenReceptionTests
             expectedIssuer: "https://impostor.example/",
             expectedAudience: Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-            TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
+            TestSetup.Base64UrlDecoder, NeverSeen, [], Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Rejected, decision.Outcome);
@@ -135,7 +129,7 @@ internal sealed class SecurityEventTokenReceptionTests
             expectedIssuer: Issuer,
             expectedAudience: "https://other.example/",
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-            TestSetup.Base64UrlDecoder, NeverSeen, new ExchangeContext(), Pool,
+            TestSetup.Base64UrlDecoder, NeverSeen, [], Pool,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(SsfDeliveryOutcome.Rejected, decision.Outcome);
@@ -219,6 +213,6 @@ internal sealed class SecurityEventTokenReceptionTests
         await SecurityEventTokenReception.ReceiveAsync(
             compact, publicKey, Issuer, Audience,
             SecurityEventTestJson.DeserializePart, SecurityEventTestJson.DeserializePart,
-            TestSetup.Base64UrlDecoder, isJtiSeen ?? NeverSeen, new ExchangeContext(), Pool,
+            TestSetup.Base64UrlDecoder, isJtiSeen ?? NeverSeen, [], Pool,
             expectedVerificationState, TestContext.CancellationToken).ConfigureAwait(false);
 }

@@ -138,7 +138,7 @@ internal sealed class DidDocumentTests
         //Build a custom service type selector that maps known service types
         //to their strongly-typed counterparts.
         var defaultSelector = ServiceTypeSelectors.Default;
-        ServiceTypeSelector serviceSelector = serviceType => serviceType switch
+        Type serviceSelector(string serviceType) => serviceType switch
         {
             "OpenIdConnectVersion1.0Service" => typeof(OpenIdConnectVersion1),
             "SocialWebInboxService" => typeof(SocialWebInboxService),
@@ -150,7 +150,7 @@ internal sealed class DidDocumentTests
         //adds the default one — STJ uses first-match order for converters.
         var options = new JsonSerializerOptions();
         options.Converters.Insert(0, new ServiceConverter(serviceSelector));
-        options.ApplyVerifiableDefaults();
+        _ = options.ApplyVerifiableDefaults();
         //ServiceConverter.Read calls options.GetTypeInfo for derived service types.
         //The test-internal types (OpenIdConnectVersion1 etc.) must be reachable via
         //the resolver — combine the library context with the test context.
@@ -164,19 +164,19 @@ internal sealed class DidDocumentTests
         Assert.IsNotNull(deserializedDidDocument?.Service);
         Assert.IsNotNull(reserializedDidDocument);
 
-        Assert.HasCount(8, deserializedDidDocument!.Service!, "Service count does not match.");
+        Assert.HasCount(8, deserializedDidDocument.Service, "Service count does not match.");
 
-        Assert.IsInstanceOfType<OpenIdConnectVersion1>(deserializedDidDocument!.Service![0], "Service type does not match.");
-        Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![1], "Service type does not match.");
-        Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![2], "Service type does not match.");
-        Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![3], "Service type does not match.");
-        Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![4], "Service type does not match.");
-        Assert.IsInstanceOfType<VerifiableCredentialService>(deserializedDidDocument!.Service![5], "Service type does not match.");
-        Assert.IsInstanceOfType<SocialWebInboxService>(deserializedDidDocument!.Service![6], "Service type does not match.");
-        Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![7], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<OpenIdConnectVersion1>(deserializedDidDocument.Service[0], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[1], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[2], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[3], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[4], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<VerifiableCredentialService>(deserializedDidDocument.Service[5], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<SocialWebInboxService>(deserializedDidDocument.Service[6], "Service type does not match.");
+        _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[7], "Service type does not match.");
 
-        Assert.HasCount(3, deserializedDidDocument!.VerificationMethod!, "Verification method count does not match.");
-        Assert.HasCount(3, deserializedDidDocument!.Authentication!, "Authentication count does not match.");
+        Assert.HasCount(3, deserializedDidDocument.VerificationMethod, "Verification method count does not match.");
+        Assert.HasCount(3, deserializedDidDocument.Authentication, "Authentication count does not match.");
 
         bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(MultiServiceTestDocument, reserializedDidDocument);
         Assert.IsTrue(areJsonElementsEqual, "MultiServiceTestDocument did not pass roundtrip test.");
@@ -202,7 +202,7 @@ internal sealed class DidDocumentTests
         Assert.IsNotNull(deserializedDidDocument?.Context);
         Assert.IsNotNull(deserializedDidDocument?.Service);
         Assert.IsNotNull(reserializedDidDocument);
-        Assert.IsInstanceOfType<Service>(deserializedDidDocument!.Service![0]);
+        _ = Assert.IsInstanceOfType<Service>(deserializedDidDocument.Service[0]);
 
         bool areJsonElementsEqual = JsonSerializationUtilities.CompareJsonElements(didDocumentFileContents, reserializedDidDocument);
         Assert.IsTrue(areJsonElementsEqual, $"File \"{didDocumentFilename}\" did not pass roundtrip test.");

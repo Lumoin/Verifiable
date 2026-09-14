@@ -1,10 +1,7 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Core.Model.Credentials;
-using Verifiable.Foundation;
 
 namespace Verifiable.Core.Model.DataIntegrity;
 

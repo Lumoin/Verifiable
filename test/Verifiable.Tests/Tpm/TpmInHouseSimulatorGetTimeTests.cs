@@ -1,11 +1,10 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -13,12 +12,6 @@ using Verifiable.Tpm.Extensions.Hierarchy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -512,7 +505,7 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
         Assert.IsTrue(attest.ExtraData.Span.SequenceEqual(Nonce.Memory.Span), "extraData must echo the caller's qualifyingData nonce.");
         Assert.IsNotNull(attest.Attested.Time);
 
-        TpmsTimeAttestInfo timeInfo = attest.Attested.Time!.Value;
+        TpmsTimeAttestInfo timeInfo = attest.Attested.Time.Value;
         Assert.IsGreaterThan(0ul, timeInfo.Time.Time, "Time must be real: > 0 after at least CreatePrimary and GetTime have each advanced it by one quantum.");
         Assert.IsGreaterThan(0ul, timeInfo.Time.ClockInfo.Clock, "Clock must be real: > 0 after Startup, CreatePrimary, and GetTime have each advanced it by one quantum.");
         Assert.AreEqual(1u, timeInfo.Time.ClockInfo.ResetCount, "A fresh simulator's single Startup(CLEAR) is exactly one TPM Reset (Part 1, clause 33.4).");
@@ -1249,13 +1242,13 @@ internal sealed class TpmInHouseSimulatorGetTimeTests
                 TpmRcConstants.TPM_RC_SUCCESS, result.IsSuccess ? TpmRcConstants.TPM_RC_SUCCESS : result.ResponseCode,
                 "An audit-claiming sign session succeeds (TPM 2.0 Library Part 1, clause 17.1).");
 
-            (TpmCcConstants Code, byte[] Command, byte[] Response) audited = wire[^1];
-            byte auditedAttributes = ReadResponseSessionAttributes(audited.Response, outHandleCount: 0, sessionIndex: 1);
+            (TpmCcConstants Code, byte[] Command, byte[] Response) = wire[^1];
+            byte auditedAttributes = ReadResponseSessionAttributes(Response, outHandleCount: 0, sessionIndex: 1);
             Assert.AreEqual(
                 (byte)(TpmaSession.CONTINUE_SESSION | TpmaSession.AUDIT | TpmaSession.AUDIT_EXCLUSIVE), auditedAttributes,
                 "The response echoes audit SET and auditExclusive SET (the session's first use as an audit session), with auditReset CLEAR (TPM 2.0 Library Part 2, clause 8.4, Table 38).");
 
-            byte[] responseParameters = ReadResponseParameters(audited.Response, outHandleCount: 0);
+            byte[] responseParameters = ReadResponseParameters(Response, outHandleCount: 0);
             byte[] cpHash = await ComputeCpHashAsync(TpmCcConstants.TPM_CC_GetTime, handleNames, SerializeCommandParameters(getTimeInput, handleCount: 2), pool).ConfigureAwait(false);
             byte[] rpHash = await ComputeRpHashAsync(TpmCcConstants.TPM_CC_GetTime, responseParameters, pool).ConfigureAwait(false);
             byte[] expectedDigest = await ExtendAuditDigestAsync(priorDigest: null, cpHash, rpHash, pool).ConfigureAwait(false);

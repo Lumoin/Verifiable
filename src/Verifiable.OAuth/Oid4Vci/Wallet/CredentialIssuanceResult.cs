@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.OAuth.Oid4Vci.Wallet;

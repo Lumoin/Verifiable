@@ -1,8 +1,6 @@
-using ModelContextProtocol.Server;
-using System;
-using System.ComponentModel;
-using System.Threading.Tasks;
 using Lumoin.Base;
+using ModelContextProtocol.Server;
+using System.ComponentModel;
 using Verifiable.Cryptography;
 
 namespace Verifiable;
@@ -49,7 +47,7 @@ internal sealed class VerifiableMcpServer
     {
         var result = await VerifiableOperations.GetTpmInfoAsJsonAsync(Pool, Rng).ConfigureAwait(false);
 
-        return result.IsSuccess ? result.Value! : result.Error!;
+        return result.IsSuccess ? result.Value : result.Error;
     }
 
 
@@ -61,7 +59,7 @@ internal sealed class VerifiableMcpServer
 
         return result.IsSuccess
             ? $"TPM information saved to '{result.Value}'."
-            : result.Error!;
+            : result.Error;
     }
 
 
@@ -124,7 +122,7 @@ internal sealed class VerifiableMcpServer
             ? await VerifiableOperations.EmitObservedCbomAsync(Pool, TimeProvider, includeEventProvenance: events).ConfigureAwait(false)
             : VerifiableOperations.EmitDeclarativeCbom(TimeProvider);
 
-        return result.IsSuccess ? result.Value! : result.Error!;
+        return result.IsSuccess ? result.Value : result.Error;
     }
 
 
@@ -148,7 +146,7 @@ internal sealed class VerifiableMcpServer
             userVerification: userVerification, authenticatorAttachment: authenticatorAttachment)
             .ConfigureAwait(false);
 
-        return result.IsSuccess ? result.Value! : result.Error!;
+        return result.IsSuccess ? result.Value : result.Error;
     }
 
 
@@ -170,7 +168,7 @@ internal sealed class VerifiableMcpServer
             storedSignCount, userVerification, userHandlePath)
             .ConfigureAwait(false);
 
-        return result.IsSuccess ? result.Value! : result.Error!;
+        return result.IsSuccess ? result.Value : result.Error;
     }
 
 
@@ -180,6 +178,6 @@ internal sealed class VerifiableMcpServer
     {
         var result = VerifiableOperations.CreateFido2Challenge(Pool, TimeProvider, byteLength);
 
-        return result.IsSuccess ? result.Value! : result.Error!;
+        return result.IsSuccess ? result.Value : result.Error;
     }
 }

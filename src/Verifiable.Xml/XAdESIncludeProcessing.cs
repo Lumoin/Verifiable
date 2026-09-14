@@ -1,6 +1,5 @@
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Base;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Foundation;
 
 namespace Verifiable.Xml;
@@ -121,7 +120,7 @@ public static class XAdESIncludeProcessing
 
                     using(digestInput)
                     {
-                        output.AddRange(digestInput.AsReadOnlySpan());
+                        _ = output.AddRange(digestInput.AsReadOnlySpan());
                     }
 
                     continue;
@@ -137,7 +136,7 @@ public static class XAdESIncludeProcessing
                         return false;
                     }
 
-                    output.AddRange(canonicalOctets.AsReadOnlySpan());
+                    _ = output.AddRange(canonicalOctets.AsReadOnlySpan());
                 }
                 finally
                 {

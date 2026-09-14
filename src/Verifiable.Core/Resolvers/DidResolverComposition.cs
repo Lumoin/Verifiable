@@ -1,12 +1,9 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Verifiable.Core.Did.Methods;
-using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Did.Methods.Cheqd;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Peer;
 using Verifiable.Core.Did.Methods.Web;
+using Verifiable.Core.OutboundFetch;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Resolvers;

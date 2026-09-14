@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -107,7 +105,7 @@ internal sealed class LoopbackKestrelDiagnostics: ILoggerProvider
         /// <summary>No scoped state is tracked by this logger; every call answers with no disposable scope.</summary>
         /// <typeparam name="TState">The scope state's type.</typeparam>
         /// <param name="state">The scope state.</param>
-        public IDisposable? BeginScope<TState>(TState state) where TState: notnull => null;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
 
         /// <summary>Only <see cref="LogLevel.Warning"/> and above are captured — the abort-naming Kestrel diagnostics, not routine request tracing.</summary>

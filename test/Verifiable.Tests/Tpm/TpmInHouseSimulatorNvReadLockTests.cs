@@ -1,9 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tests.TestInfrastructure;
@@ -14,11 +12,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -199,8 +192,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> beforeResult = await ReadIndexAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, OrdinaryDataSize).ConfigureAwait(false);
@@ -237,8 +230,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -265,7 +258,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> correctResult = await ReadLockAsync(
             device, pool, registry, PlainIndexHandle, PlainIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -290,7 +283,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> firstResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -320,7 +313,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -349,7 +342,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -379,7 +372,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> unlockedResult = await ReadIndexAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, OrdinaryDataSize).ConfigureAwait(false);
@@ -410,7 +403,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreatePolicyRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -448,7 +441,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
         byte[] nameBefore = await ReadIndexNameAsync(device, ReadLockIndexHandle).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
@@ -473,7 +466,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, ReadLockIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -498,7 +491,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, WithoutOwnerReadIndexHandle, ReadStclearWithoutOwnerReadAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, WithoutOwnerReadIndexHandle, ReadStclearWithoutOwnerReadAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> correctResult = await ReadLockAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, WithoutOwnerReadIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -522,7 +515,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
@@ -546,7 +539,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
             device, pool, registry, MismatchedAuthHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -569,7 +562,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, WithoutAuthReadIndexHandle, ReadStclearWithoutAuthReadAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, WithoutAuthReadIndexHandle, ReadStclearWithoutAuthReadAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> correctResult = await ReadLockAsync(
             device, pool, registry, WithoutAuthReadIndexHandle, WithoutAuthReadIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -594,7 +587,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
@@ -617,7 +610,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, NonDaIndexHandle, NonDaReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, NonDaIndexHandle, NonDaReadStclearAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
@@ -644,7 +637,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadResponse> beforeResult = await ReadIndexAsync(
@@ -687,7 +680,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
@@ -711,7 +704,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 1, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
@@ -738,7 +731,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 0, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
@@ -761,7 +754,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinFailIndexHandle, PinFailReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinFailIndexHandle, pinCount: 1, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
@@ -787,7 +780,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PinPassIndexHandle, PinPassReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
         await WritePinCounterParametersAsync(device, pool, registry, PinPassIndexHandle, pinCount: PinLimit, PinLimit).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockAsync(
@@ -811,8 +804,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -842,8 +835,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -874,8 +867,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateCertifyRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
         using CreatePrimaryResponse signingKey = await CreateSigningPrimaryAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
@@ -910,7 +903,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateCertifyRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
         using CreatePrimaryResponse signingKey = await CreateSigningPrimaryAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
@@ -943,8 +936,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateCertifyRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
         using CreatePrimaryResponse signingKey = await CreateSigningPrimaryAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
@@ -991,8 +984,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreatePolicyRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1053,8 +1046,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreatePolicyRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1109,8 +1102,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1135,7 +1128,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, CounterIndexHandle, CounterReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, CounterIndexHandle, CounterIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1163,7 +1156,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, BitsIndexHandle, BitsReadStclearAttributes, EightOctetDataSize).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, BitsIndexHandle, BitsIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1192,8 +1185,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1229,8 +1222,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1263,8 +1256,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> lockResult = await ReadLockAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1295,8 +1288,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await WriteIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth, StoredData).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
             device, pool, registry, ReadLockIndexHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1325,7 +1318,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
             device, pool, registry, (uint)TpmRh.TPM_RH_OWNER, ReadLockIndexHandle, ReadOnlyMemory<byte>.Empty).ConfigureAwait(false);
@@ -1350,7 +1343,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
         uint counterBefore = await ReadLockoutCounterAsync(device, registry, pool).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
@@ -1375,7 +1368,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
             device, pool, registry, MismatchedAuthHandle, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1397,7 +1390,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, WithoutAuthReadIndexHandle, ReadStclearWithoutAuthReadAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, WithoutAuthReadIndexHandle, ReadStclearWithoutAuthReadAttributes).ConfigureAwait(false);
 
         TpmResult<NvReadLockResponse> result = await ReadLockOverHmacAsync(
             device, pool, registry, WithoutAuthReadIndexHandle, WithoutAuthReadIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1419,7 +1412,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawDecryptCode = await ReadLockOverHmacHandFramedAsync(
             device, pool, registry, ReadLockIndexHandle, CorrectAuth, TpmaSession.DECRYPT).ConfigureAwait(false);
@@ -1447,7 +1440,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         TpmRcConstants rawEncryptCode = await ReadLockOverHmacHandFramedAsync(
             device, pool, registry, ReadLockIndexHandle, CorrectAuth, TpmaSession.ENCRYPT).ConfigureAwait(false);
@@ -1479,7 +1472,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         TpmResponseRegistry registry = CreateNvRegistry();
         _ = registry.Register(TpmCcConstants.TPM_CC_GetSessionAuditDigest, TpmResponseCodec.GetSessionAuditDigest);
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
 
         (byte[] response, uint sessionHandle, byte[] cpHash) = await ReadLockOverHmacHandFramedForAuditAsync(
             device, pool, registry, ReadLockIndexHandle, CorrectAuth).ConfigureAwait(false);
@@ -1534,8 +1527,8 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
-        await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, PlainIndexHandle, PlainAttributes).ConfigureAwait(false);
 
         long baseline = trackingPool.OutstandingCount;
 
@@ -1570,7 +1563,7 @@ internal sealed class TpmInHouseSimulatorNvReadLockTests
         using TpmDevice device = TpmDevice.Create(simulator.SubmitAsync, BaseMemoryPool.Shared, TestEntropy.NewCounterStream());
         TpmResponseRegistry registry = CreateNvRegistry();
 
-        await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
+        _ = await DefineIndexAsync(device, pool, registry, ReadLockIndexHandle, ReadStclearAttributes).ConfigureAwait(false);
         ReadOnlyMemory<byte> indexName = await ReadIndexNameAsync(device, ReadLockIndexHandle).ConfigureAwait(false);
         ReadOnlyMemory<byte>[] handleNames = [indexName, indexName];
 

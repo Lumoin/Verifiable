@@ -1,6 +1,4 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
@@ -127,12 +125,12 @@ public static class SdTokenDcqlAdapter
             var availablePaths = new HashSet<CredentialPath>(token.DisclosurePaths.Paths);
             foreach(CredentialPath path in token.IssuerSignedClaims.Keys)
             {
-                availablePaths.Add(path);
+                _ = availablePaths.Add(path);
             }
 
             foreach(CredentialPath path in token.DisclosureInteriorClaims.Keys)
             {
-                availablePaths.Add(path);
+                _ = availablePaths.Add(path);
             }
 
             string? credentialType = token.IssuerSignedClaims.TryGetValue(evidence.Vct, out object? vct) ? vct as string : null;
@@ -204,7 +202,7 @@ public static class SdTokenDcqlAdapter
     {
         if(akaVctsPath is not CredentialPath path || !token.IssuerSignedClaims.TryGetValue(path, out object? akaVcts))
         {
-            return new HashSet<string>();
+            return [];
         }
 
         var result = new HashSet<string>(StringComparer.Ordinal);
@@ -214,7 +212,7 @@ public static class SdTokenDcqlAdapter
             {
                 if(item is string type)
                 {
-                    result.Add(type);
+                    _ = result.Add(type);
                 }
             }
         }
@@ -308,7 +306,7 @@ public static class SdTokenDcqlAdapter
                     CredentialPath candidate = current.Append(segment.KeyValue!);
                     if(IsAvailable(credential, candidate))
                     {
-                        next.Add(candidate);
+                        _ = next.Add(candidate);
                     }
                 }
                 else if(segment.IsIndex)
@@ -316,14 +314,14 @@ public static class SdTokenDcqlAdapter
                     CredentialPath candidate = current.Append(segment.IndexValue!.Value);
                     if(IsAvailable(credential, candidate))
                     {
-                        next.Add(candidate);
+                        _ = next.Add(candidate);
                     }
                 }
                 else
                 {
                     foreach(CredentialPath child in ImmediateArrayChildren(credential, current))
                     {
-                        next.Add(child);
+                        _ = next.Add(child);
                     }
                 }
             }

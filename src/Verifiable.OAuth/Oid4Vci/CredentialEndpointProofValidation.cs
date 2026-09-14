@@ -1,6 +1,4 @@
-using System.Buffers;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
@@ -59,7 +57,7 @@ internal static class CredentialEndpointProofValidation
         string expectedAudience = await ResolveAudienceAsync(server, registration, context, cancellationToken)
             .ConfigureAwait(false);
 
-        request.Proofs.TryGetValue(
+        _ = request.Proofs.TryGetValue(
             Oid4VciCredentialParameterNames.JwtProofType, out IReadOnlyList<string>? jwtProofs);
 
         bool hasJwtProofs = jwtProofs is not null && jwtProofs.Count > 0;

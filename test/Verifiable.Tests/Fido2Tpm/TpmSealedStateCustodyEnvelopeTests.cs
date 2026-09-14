@@ -1,7 +1,4 @@
-using System;
 using System.Buffers;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Fido2.Ctap.Authenticator.Custody;
 using Verifiable.Fido2.Tpm.Ctap.Authenticator.Custody;
 using Verifiable.Tests.TestInfrastructure;
@@ -11,7 +8,6 @@ using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.Seal;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Fido2Tpm;
 

@@ -1,12 +1,11 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Extensions.DictionaryAttack;
@@ -14,12 +13,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -662,14 +655,14 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
             Sha384NvIndexHandle, TpmAlgIdConstants.TPM_ALG_SHA384, DaProtectedAttributes | TpmaNv.TPMA_NV_WRITTEN, Sha384AuthPolicy,
             (ushort)WrittenData.Length, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
-            attest.Attested.Nv!.IndexName.Span.SequenceEqual(expectedIndexName),
+            attest.Attested.Nv.IndexName.Span.SequenceEqual(expectedIndexName),
             "The attested indexName must equal the Name transcribed over the Index's OWN nameAlg and authPolicy.");
 
         byte[] fixedShapeName = await ComputeNvIndexNameAsync(
             Sha384NvIndexHandle, DefaultNameAlg, DaProtectedAttributes | TpmaNv.TPMA_NV_WRITTEN, ReadOnlyMemory<byte>.Empty,
             (ushort)WrittenData.Length, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsFalse(
-            attest.Attested.Nv!.IndexName.Span.SequenceEqual(fixedShapeName),
+            attest.Attested.Nv.IndexName.Span.SequenceEqual(fixedShapeName),
             "A Name computed from a fixed SHA-256 nameAlg and an Empty Policy is a different Name, so attesting it would be attesting an Index that does not exist.");
     }
 
@@ -766,7 +759,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
             Assert.AreEqual(TpmStConstants.TPM_ST_ATTEST_NV, attest.Type);
             Assert.IsNotNull(attest.Attested.Nv);
             Assert.IsTrue(
-                attest.Attested.Nv!.IndexName.Span.SequenceEqual(indexName),
+                attest.Attested.Nv.IndexName.Span.SequenceEqual(indexName),
                 "The attested indexName must equal the Index's Name even when its own authorization slot is proven over an HMAC session rather than a password.");
         }
         finally
@@ -899,7 +892,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
             TpmsAttest attest = nvCertify.CertifyInfo.AttestationData;
             Assert.IsNotNull(attest.Attested.Nv);
             Assert.IsTrue(
-                attest.Attested.Nv!.IndexName.Span.SequenceEqual(indexName),
+                attest.Attested.Nv.IndexName.Span.SequenceEqual(indexName),
                 "The attested indexName must equal the Index's real Name even when both authorization slots are real HMAC sessions.");
 
             Assert.IsFalse(
@@ -957,7 +950,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
             TpmsAttest attest = matchingResponse.CertifyInfo.AttestationData;
             Assert.IsNotNull(attest.Attested.Nv);
             Assert.IsTrue(
-                attest.Attested.Nv!.IndexName.Span.SequenceEqual(indexName),
+                attest.Attested.Nv.IndexName.Span.SequenceEqual(indexName),
                 "The attested indexName must equal the Index's real Name when the real session sits at the sign slot instead of the Index slot.");
         }
 
@@ -1132,7 +1125,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
             using NvCertifyResponse response = result.Value;
             TpmsAttest attest = response.CertifyInfo.AttestationData;
             Assert.IsNotNull(attest.Attested.Nv);
-            uint attestedPinCount = BinaryPrimitives.ReadUInt32BigEndian(attest.Attested.Nv!.NvContents[..sizeof(uint)]);
+            uint attestedPinCount = BinaryPrimitives.ReadUInt32BigEndian(attest.Attested.Nv.NvContents[..sizeof(uint)]);
             Assert.AreEqual(
                 expectedPinCount, attestedPinCount,
                 $"pinCount must be {expectedPinCount} after {expectedPinCount} successful mixed-session certifies - a double update would already read {expectedPinCount * 2}.");
@@ -1372,7 +1365,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
         using NvCertifyResponse okResponse = okResult.Value;
         TpmsAttest attest = okResponse.CertifyInfo.AttestationData;
         Assert.IsNotNull(attest.Attested.Nv);
-        uint attestedPinCount = BinaryPrimitives.ReadUInt32BigEndian(attest.Attested.Nv!.NvContents[..sizeof(uint)]);
+        uint attestedPinCount = BinaryPrimitives.ReadUInt32BigEndian(attest.Attested.Nv.NvContents[..sizeof(uint)]);
         Assert.AreEqual(
             1u, attestedPinCount,
             "pinCount must be exactly ONE after exactly one successful authorization - a double count would prove the refused userWithAuth-CLEAR attempt had already moved it.");
@@ -1854,7 +1847,7 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
         TpmsAttest attest = nvCertify.CertifyInfo.AttestationData;
         Assert.IsNotNull(attest.Attested.Nv);
 
-        return attest.Attested.Nv!.IndexName.Span.ToArray();
+        return attest.Attested.Nv.IndexName.Span.ToArray();
     }
 
     /// <summary>
@@ -2014,12 +2007,12 @@ internal sealed class TpmInHouseSimulatorNvCertifyTests
             NvIndexHandle, DefaultNameAlg, DaProtectedAttributes | TpmaNv.TPMA_NV_WRITTEN, ReadOnlyMemory<byte>.Empty,
             (ushort)WrittenData.Length, pool, TestContext.CancellationToken).ConfigureAwait(false);
         Assert.IsTrue(
-            attest.Attested.Nv!.IndexName.Span.SequenceEqual(expectedIndexName),
+            attest.Attested.Nv.IndexName.Span.SequenceEqual(expectedIndexName),
             "The attested indexName must equal the Index's Name recomputed from its public-area fields.");
 
-        Assert.AreEqual(offset, attest.Attested.Nv!.Offset, "The attested offset must equal the requested offset.");
+        Assert.AreEqual(offset, attest.Attested.Nv.Offset, "The attested offset must equal the requested offset.");
         Assert.IsTrue(
-            attest.Attested.Nv!.NvContents.SequenceEqual(expectedWindow),
+            attest.Attested.Nv.NvContents.SequenceEqual(expectedWindow),
             "The attested nvContents must equal the octets this test wrote at the requested offset/size.");
 
         byte[] expectedSignerQn = await ComputeQualifiedNameAsync(

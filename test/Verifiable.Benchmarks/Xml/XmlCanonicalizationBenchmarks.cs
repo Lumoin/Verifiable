@@ -1,6 +1,6 @@
+using BenchmarkDotNet.Attributes;
 using System.Globalization;
 using System.Text;
-using BenchmarkDotNet.Attributes;
 using Verifiable.Xml;
 
 namespace Verifiable.Benchmarks.Xml;
@@ -60,13 +60,13 @@ internal class XmlCanonicalizationBenchmarks
     private static byte[] BuildWideAttributeDocument()
     {
         var builder = new StringBuilder(WideAttributeCount * 16);
-        builder.Append("<doc");
+        _ = builder.Append("<doc");
         for(int i = WideAttributeCount - 1; i >= 0; --i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $" a{i:D5}=\"v{i}\"");
+            _ = builder.Append(CultureInfo.InvariantCulture, $" a{i:D5}=\"v{i}\"");
         }
 
-        builder.Append("/>");
+        _ = builder.Append("/>");
 
         return Encoding.UTF8.GetBytes(builder.ToString());
     }
@@ -77,19 +77,19 @@ internal class XmlCanonicalizationBenchmarks
     private static byte[] BuildWideNamespaceDocument()
     {
         var builder = new StringBuilder(WideNamespaceDeclarationCount * 40);
-        builder.Append("<root");
+        _ = builder.Append("<root");
         for(int i = 0; i < WideNamespaceDeclarationCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $" xmlns:p{i:D4}=\"urn:cost:ns:{i}\"");
+            _ = builder.Append(CultureInfo.InvariantCulture, $" xmlns:p{i:D4}=\"urn:cost:ns:{i}\"");
         }
 
-        builder.Append('>');
+        _ = builder.Append('>');
         for(int i = 0; i < WideNamespaceChildCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $"<p{i % WideNamespaceDeclarationCount:D4}:c/>");
+            _ = builder.Append(CultureInfo.InvariantCulture, $"<p{i % WideNamespaceDeclarationCount:D4}:c/>");
         }
 
-        builder.Append("</root>");
+        _ = builder.Append("</root>");
 
         return Encoding.UTF8.GetBytes(builder.ToString());
     }
@@ -100,13 +100,13 @@ internal class XmlCanonicalizationBenchmarks
     private static byte[] BuildSiblingSpreadDocument()
     {
         var builder = new StringBuilder(SiblingSpreadCount * 44);
-        builder.Append("<root>");
+        _ = builder.Append("<root>");
         for(int i = 0; i < SiblingSpreadCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $"<p{i:D5}:c xmlns:p{i:D5}=\"urn:cost:sibling:{i}\"/>");
+            _ = builder.Append(CultureInfo.InvariantCulture, $"<p{i:D5}:c xmlns:p{i:D5}=\"urn:cost:sibling:{i}\"/>");
         }
 
-        builder.Append("</root>");
+        _ = builder.Append("</root>");
 
         return Encoding.UTF8.GetBytes(builder.ToString());
     }
@@ -125,18 +125,18 @@ internal class XmlCanonicalizationBenchmarks
         };
 
         var builder = new StringBuilder(ParseDeclarationCount * 48);
-        builder.Append("<root");
+        _ = builder.Append("<root");
         for(int i = 0; i < ParseDeclarationCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $" xmlns:p{i:D5}=\"urn:cost:parse:{i}\"");
+            _ = builder.Append(CultureInfo.InvariantCulture, $" xmlns:p{i:D5}=\"urn:cost:parse:{i}\"");
         }
 
         for(int i = 0; i < ParseDeclarationCount; ++i)
         {
-            builder.Append(CultureInfo.InvariantCulture, $" p{i:D5}:a=\"v\"");
+            _ = builder.Append(CultureInfo.InvariantCulture, $" p{i:D5}:a=\"v\"");
         }
 
-        builder.Append("/>");
+        _ = builder.Append("/>");
         declarationHeavyDocument = Encoding.UTF8.GetBytes(builder.ToString());
     }
 
@@ -145,7 +145,7 @@ internal class XmlCanonicalizationBenchmarks
     [Benchmark]
     public void WideDocumentCanonicalizesUnderTheChosenEntryPoint()
     {
-        XmlNodeTable.TryParse(document, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
+        _ = XmlNodeTable.TryParse(document, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
         using(table)
         {
             if(table is null)
@@ -169,7 +169,7 @@ internal class XmlCanonicalizationBenchmarks
     [Benchmark]
     public void DeclarationHeavyStartTagParses()
     {
-        XmlNodeTable.TryParse(declarationHeavyDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
+        _ = XmlNodeTable.TryParse(declarationHeavyDocument, BaseMemoryPool.Shared, out XmlNodeTable? table, out _);
         using(table)
         {
         }

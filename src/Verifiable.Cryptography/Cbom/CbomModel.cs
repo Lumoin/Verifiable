@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Verifiable.Cryptography.Cbom;
 
 /// <summary>

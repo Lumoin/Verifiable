@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net.Http;
 using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.JCose;
@@ -124,7 +123,7 @@ internal sealed class TransportTraceMetadataTests
         using HttpClient client = LoopbackTls.CreateSingleHopPinnedHttpClient(host.Certificate);
         SendFormPostDelegate guardedFormPost = GuardedHttpClientTransport.BuildGuardedFormPost(client);
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(TestHostShell.LoopbackOutboundFetchPolicy);
 
         HttpResponseData response = await guardedFormPost(
@@ -189,7 +188,7 @@ internal sealed class TransportTraceMetadataTests
 
         using TraceTreeCapture capture = new();
         using Activity root = new(nameof(CapturedSpansFormOneConnectedTreeWithHostAttributionAndEvent));
-        root.Start();
+        _ = root.Start();
 
         Uri hostBaseAddress;
         HttpResponseData response;
@@ -202,7 +201,7 @@ internal sealed class TransportTraceMetadataTests
                     //enabled. The event proves attachment under the server span; the echoed
                     //Activity.Id (W3C traceparent format) proves the server processed the
                     //request inside the client root's trace.
-                    Activity.Current?.AddEvent(new ActivityEvent(HandlerEventName));
+                    _ = (Activity.Current?.AddEvent(new ActivityEvent(HandlerEventName)));
                     string? serverTraceParent = Activity.Current?.Id;
 
                     return Task.FromResult(new MinimalHttpResponse

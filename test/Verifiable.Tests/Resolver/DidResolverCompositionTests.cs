@@ -1,19 +1,14 @@
-using System;
-using System.Buffers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Peer;
+using Verifiable.Core.Did.Methods.Web;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
-using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Cryptography;
-using Verifiable.Foundation;
 using Verifiable.Json;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -118,7 +113,7 @@ internal sealed class DidResolverCompositionTests
 
     private async Task<DidResolutionResult> Resolve(DidResolver resolver, string did)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetOutboundFetchPolicy(OutboundFetchPolicy.SecureDefault);
 
         return await resolver.ResolveAsync(did, context, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
@@ -131,7 +126,7 @@ internal sealed class DidResolverCompositionTests
     {
         string aliceJson = SerializeDocument(AliceWebDid);
 
-        OutboundTransportDelegate webTransport = (request, context, cancellationToken) =>
+        ValueTask<OutboundResponse> webTransport(OutboundRequest request, ExchangeContext context, CancellationToken cancellationToken)
         {
             bool isAlice = string.Equals(request.Target.AbsoluteUri, AliceWebUrl, StringComparison.Ordinal);
 
@@ -140,14 +135,14 @@ internal sealed class DidResolverCompositionTests
                 StatusCode = isAlice ? 200 : 404,
                 Body = isAlice ? new TaggedMemory<byte>(Encoding.UTF8.GetBytes(aliceJson), BufferTags.Json) : TaggedMemory<byte>.Empty
             });
-        };
+        }
 
-        DidMethodResolverDelegate extension = (did, options, context, cancellationToken) =>
+        ValueTask<DidResolutionResult> extension(string did, DidResolutionOptions options, ExchangeContext context, CancellationToken cancellationToken) =>
             ValueTask.FromResult(DidResolutionResult.SuccessUrl(ExtensionUrl));
 
         return DidResolverComposition.Build(
             Pool,
-            webTransport,
+webTransport,
             new WebDidDocumentDeserializer(DeserializeDocument),
             new PeerDidDocumentDeserializer(DeserializeDocument),
             additionalMethods: [(ExtensionMethodPrefix, extension)]);

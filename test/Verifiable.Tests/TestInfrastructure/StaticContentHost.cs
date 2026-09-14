@@ -1,16 +1,11 @@
-using System;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
+using System.Security.Cryptography.X509Certificates;
 
 namespace Verifiable.Tests.TestInfrastructure;
 
@@ -90,7 +85,7 @@ internal sealed class StaticContentHost: IAsyncDisposable
 
         //A single explicit HTTPS Listen call — no UseUrls — so there is no plaintext fallback on
         //this host at all.
-        builder.WebHost.ConfigureKestrel(options =>
+        _ = builder.WebHost.ConfigureKestrel(options =>
             LoopbackKestrel.ConfigureLoopbackListener(options, certificate));
 
         WebApplication app = builder.Build();
@@ -158,10 +153,10 @@ internal sealed class StaticContentHost: IAsyncDisposable
         public async Task ProcessRequestAsync(HttpContext context)
         {
             HttpResponse httpResponse = context.Response;
-            string path = context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty;
+            string path = context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty;
 
-            Interlocked.Increment(ref totalRequests);
-            RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
+            _ = Interlocked.Increment(ref totalRequests);
+            _ = RequestCounts.AddOrUpdate(path, 1, static (_, count) => count + 1);
 
             if(!HttpMethods.IsGet(context.Request.Method))
             {

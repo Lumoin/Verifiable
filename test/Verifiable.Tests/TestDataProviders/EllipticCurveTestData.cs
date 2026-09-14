@@ -48,13 +48,13 @@ namespace Verifiable.Tests.TestDataProviders
         /// <summary>
         /// The DID supported elliptic curves. These are used to generate keys for testing.
         /// </summary>
-        public static IList<string> HumanReadableEllipticCurveConstants => new List<string>(
+        public static IList<string> HumanReadableEllipticCurveConstants =>
         [
             EllipticP256,
             EllipticP384,
             EllipticP521,
             EllipticSecP256k1
-        ]);
+        ];
 
         /// <summary>
         /// Provides the elliptic curve test data as DynamicData for MSTest.

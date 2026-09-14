@@ -1,7 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
 using Verifiable.Cbor;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
@@ -237,12 +235,12 @@ internal sealed class CtapGetInfoResponseCborReaderTests
         CtapGetInfoResponse decoded = CtapGetInfoResponseCborReader.Read(writerBuffer.WrittenSpan.ToArray());
 
         Assert.IsNotNull(decoded.Options);
-        Assert.IsNull(decoded.Options!.Ep);
-        Assert.IsNull(decoded.Options!.ResidentKey);
-        Assert.IsNull(decoded.Options!.Platform);
-        Assert.IsNull(decoded.Options!.Uv);
-        Assert.IsNull(decoded.Options!.BioEnroll);
-        Assert.IsNull(decoded.Options!.UvBioEnroll);
+        Assert.IsNull(decoded.Options.Ep);
+        Assert.IsNull(decoded.Options.ResidentKey);
+        Assert.IsNull(decoded.Options.Platform);
+        Assert.IsNull(decoded.Options.Uv);
+        Assert.IsNull(decoded.Options.BioEnroll);
+        Assert.IsNull(decoded.Options.UvBioEnroll);
     }
 
 

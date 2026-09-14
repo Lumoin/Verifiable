@@ -1,11 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -186,6 +181,7 @@ public static class EuIdentityVerificationMethodMapping
         EuIdentityVerificationMethod.Eidas1Cd => WellKnownOids.QcIdentMethodEidas1Cd,
         EuIdentityVerificationMethod.Eidas2Acd => WellKnownOids.QcIdentMethodEidas2Acd,
         EuIdentityVerificationMethod.Eidas2B => WellKnownOids.QcIdentMethodEidas2B,
+        EuIdentityVerificationMethod.None => throw new ArgumentOutOfRangeException(nameof(method), method, "Only the four EN 319 412-5 identification methods have an object identifier."),
         _ => throw new ArgumentOutOfRangeException(nameof(method), method, "Only the four EN 319 412-5 identification methods have an object identifier.")
     };
 }

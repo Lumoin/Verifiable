@@ -1,6 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
-using System.Text;
+using System.Buffers;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Cbor.Mdoc;

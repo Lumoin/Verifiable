@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Core.Model.Did;
 
 namespace Verifiable.DidComm;

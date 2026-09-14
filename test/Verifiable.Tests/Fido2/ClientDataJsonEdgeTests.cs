@@ -2,8 +2,6 @@ using System.Text;
 using Verifiable.Fido2;
 using Verifiable.Json;
 
-using static Verifiable.Tests.Fido2.Fido2TestVectors;
-
 namespace Verifiable.Tests.Fido2;
 
 /// <summary>
@@ -44,7 +42,7 @@ internal sealed class ClientDataJsonEdgeTests
         byte[] bom = [0xEF, 0xBB, 0xBF];
         byte[] withBom = [.. bom, .. withoutBom];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(withBom));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(withBom));
     }
 
 
@@ -129,6 +127,6 @@ internal sealed class ClientDataJsonEdgeTests
         string deeplyNestedArray = Fido2TestVectors.BuildDeeplyNestedArray(depth: 70);
         string json = "{\"type\":\"webauthn.get\",\"challenge\":\"c\",\"origin\":\"o\",\"deep\":" + deeplyNestedArray + "}";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => ClientDataJsonReader.Read(Encoding.UTF8.GetBytes(json)));
     }
 }

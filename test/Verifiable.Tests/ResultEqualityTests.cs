@@ -93,7 +93,7 @@ internal sealed class ResultEqualityTests
     [TestMethod]
     public void EqualsWithDifferentTypeReturnsFalse()
     {
-        object differentType = new object();
+        object differentType = new();
 
         Assert.IsFalse(SuccessResult1.Equals(differentType));
     }

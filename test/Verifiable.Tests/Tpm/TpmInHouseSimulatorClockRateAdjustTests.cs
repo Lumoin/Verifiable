@@ -1,20 +1,12 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -661,7 +653,7 @@ internal sealed class TpmInHouseSimulatorClockRateAdjustTests
 
         var body = new List<byte>();
         AppendUInt32(body, (uint)TpmRh.TPM_RH_OWNER);
-        body.Add((byte)0x03);
+        body.Add(0x03);
 
         TpmRcConstants code = await SubmitFramedAsync(simulator, pool, TpmStConstants.TPM_ST_NO_SESSIONS, [.. body]).ConfigureAwait(false);
 

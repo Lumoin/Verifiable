@@ -1,4 +1,3 @@
-using System;
 using Verifiable.JCose;
 
 namespace Verifiable.Fido2.Ctap;

@@ -1,5 +1,4 @@
 using Verifiable.Tpm.Automata;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -216,9 +215,9 @@ internal sealed class TpmClockRateTests
     /// <param name="rawValue">The raw signed octet cast to the step type.</param>
     [TestMethod]
     [DataRow((sbyte)4, DisplayName = "4 is one past the fastest step Table 19 lists")]
-    [DataRow((sbyte)(-4), DisplayName = "-4 is one past the slowest step Table 19 lists")]
+    [DataRow((sbyte)-4, DisplayName = "-4 is one past the slowest step Table 19 lists")]
     [DataRow((sbyte)127, DisplayName = "the most positive INT8 is outside Table 19")]
-    [DataRow((sbyte)(-128), DisplayName = "the most negative INT8 is outside Table 19")]
+    [DataRow((sbyte)-128, DisplayName = "the most negative INT8 is outside Table 19")]
     public void AnUndefinedStepIsRefusedAndChangesNothing(sbyte rawValue)
     {
         TpmClockRate nominal = TpmClockRate.Nominal;
@@ -238,17 +237,17 @@ internal sealed class TpmClockRateTests
     /// <param name="rawValue">The raw signed octet offered to the predicate.</param>
     /// <param name="isDefinedExpected">Whether Table 19 lists that value.</param>
     [TestMethod]
-    [DataRow((sbyte)(-3), true, DisplayName = "-3 is TPM_CLOCK_COARSE_SLOWER")]
-    [DataRow((sbyte)(-2), true, DisplayName = "-2 is TPM_CLOCK_MEDIUM_SLOWER")]
-    [DataRow((sbyte)(-1), true, DisplayName = "-1 is TPM_CLOCK_FINE_SLOWER")]
+    [DataRow((sbyte)-3, true, DisplayName = "-3 is TPM_CLOCK_COARSE_SLOWER")]
+    [DataRow((sbyte)-2, true, DisplayName = "-2 is TPM_CLOCK_MEDIUM_SLOWER")]
+    [DataRow((sbyte)-1, true, DisplayName = "-1 is TPM_CLOCK_FINE_SLOWER")]
     [DataRow((sbyte)0, true, DisplayName = "0 is TPM_CLOCK_NO_CHANGE")]
     [DataRow((sbyte)1, true, DisplayName = "1 is TPM_CLOCK_FINE_FASTER")]
     [DataRow((sbyte)2, true, DisplayName = "2 is TPM_CLOCK_MEDIUM_FASTER")]
     [DataRow((sbyte)3, true, DisplayName = "3 is TPM_CLOCK_COARSE_FASTER")]
     [DataRow((sbyte)4, false, DisplayName = "4 is outside Table 19")]
-    [DataRow((sbyte)(-4), false, DisplayName = "-4 is outside Table 19")]
+    [DataRow((sbyte)-4, false, DisplayName = "-4 is outside Table 19")]
     [DataRow((sbyte)127, false, DisplayName = "the most positive INT8 is outside Table 19")]
-    [DataRow((sbyte)(-128), false, DisplayName = "the most negative INT8 is outside Table 19")]
+    [DataRow((sbyte)-128, false, DisplayName = "the most negative INT8 is outside Table 19")]
     public void ClockAdjustMembershipAdmitsTable19Alone(sbyte rawValue, bool isDefinedExpected)
     {
         var candidate = (TpmClockAdjustConstants)rawValue;

@@ -1,15 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Cryptography.Pki.Xml;
 
@@ -425,7 +418,7 @@ public static class TrustedListXmlParser
             else
             {
                 List<QualifierCondition> children = [.. ReadLeafConditions(item.Element), .. nestedChildren[item.Element]];
-                nestedChildren.Remove(item.Element);
+                _ = nestedChildren.Remove(item.Element);
 
                 QualifierAssertion assertion = QualifierAssertionMapping.FromWireValue((string?)item.Element.Attribute("assert") ?? "all") ?? QualifierAssertion.All;
                 string? description = item.Element.Element(Sie + "Description")?.Value;

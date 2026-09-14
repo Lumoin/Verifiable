@@ -1,7 +1,6 @@
 using System.Diagnostics;
-using Verifiable.Foundation.Automata;
 using Verifiable.Cryptography;
-using Verifiable.OAuth.Server;
+using Verifiable.Foundation.Automata;
 
 namespace Verifiable.OAuth.Siop.Server.States;
 

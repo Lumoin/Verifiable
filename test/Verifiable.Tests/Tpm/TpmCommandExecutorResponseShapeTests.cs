@@ -1,16 +1,10 @@
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
+using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -47,7 +41,7 @@ internal sealed class TpmCommandExecutorResponseShapeTests
     [TestMethod]
     public async Task DeviceAnsweringABareSuccessHeaderToASignDigestCodecReturnsTpmErrorFailure()
     {
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             byte[] frame = BuildNoSessionsFrame((uint)TpmRcConstants.TPM_RC_SUCCESS, ReadOnlySpan<byte>.Empty);
 
@@ -83,7 +77,7 @@ internal sealed class TpmCommandExecutorResponseShapeTests
     {
         const uint SequenceHandle = 0x8000_1234u;
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             byte[] handleBytes = new byte[sizeof(uint)];
             BinaryPrimitives.WriteUInt32BigEndian(handleBytes, SequenceHandle);
@@ -118,7 +112,7 @@ internal sealed class TpmCommandExecutorResponseShapeTests
     [TestMethod]
     public async Task DeviceAnsweringATruncatedSignatureToASignDigestCodecReturnsSize()
     {
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             //Three octets: nowhere near a complete TPMT_SIGNATURE (sigAlg UINT16 + a hash algorithm UINT16 at
             //minimum), so the parser underruns partway through the second field.
@@ -157,7 +151,7 @@ internal sealed class TpmCommandExecutorResponseShapeTests
     {
         const uint LoadedObjectHandle = 0x8000_5678u;
 
-        ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
+        static ValueTask<TpmResult<TpmResponse>> Handler(ReadOnlyMemory<byte> command, BaseMemoryPool handlerPool, CancellationToken cancellationToken)
         {
             byte[] handleBytes = new byte[sizeof(uint)];
             BinaryPrimitives.WriteUInt32BigEndian(handleBytes, LoadedObjectHandle);
@@ -204,8 +198,8 @@ internal sealed class TpmCommandExecutorResponseShapeTests
         int total = HeaderSize + parameters.Length;
         byte[] frame = new byte[total];
 
-        frame[0] = (byte)(TpmStNoSessions >> 8);
-        frame[1] = (byte)(TpmStNoSessions & 0xFF);
+        frame[0] = TpmStNoSessions >> 8;
+        frame[1] = TpmStNoSessions & 0xFF;
         frame[2] = (byte)(total >> 24);
         frame[3] = (byte)(total >> 16);
         frame[4] = (byte)(total >> 8);

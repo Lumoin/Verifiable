@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Text;
 using Verifiable.Acdc;
 using Verifiable.Cryptography;
@@ -88,7 +87,7 @@ internal sealed class AcdcReaderTests
     [TestMethod]
     public void RejectsUnexpectedTopLevelField()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
             """{"v":"v","t":"acm","d":"d","i":"i","s":"s","zz":"y"}""")));
     }
 
@@ -99,7 +98,7 @@ internal sealed class AcdcReaderTests
     [TestMethod]
     public void RejectsFieldsOutOfCanonicalOrder()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
             """{"v":"v","d":"d","t":"acm","i":"i","s":"s"}""")));
     }
 
@@ -110,7 +109,7 @@ internal sealed class AcdcReaderTests
     [TestMethod]
     public void RejectsMissingRequiredField()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
             """{"v":"v","t":"acm","d":"d","i":"i"}""")));
     }
 
@@ -121,7 +120,7 @@ internal sealed class AcdcReaderTests
     [TestMethod]
     public void RejectsBothAttributeAndAggregate()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
             """{"v":"v","t":"acm","d":"d","i":"i","s":"s","a":"a","A":"A"}""")));
     }
 
@@ -157,8 +156,8 @@ internal sealed class AcdcReaderTests
         Assert.IsNotNull(acdc.Aggregate, "The aggregate section is read into the typed message.");
         Assert.AreEqual("EAggregateIdentifier", acdc.Aggregate.Agid);
         Assert.HasCount(2, acdc.Aggregate.Blocks);
-        Assert.IsInstanceOfType<CompactAggregateBlock>(acdc.Aggregate.Blocks[0], "The first block is blinded to its SAID.");
-        Assert.IsInstanceOfType<ExpandedAggregateBlock>(acdc.Aggregate.Blocks[1], "The second block is revealed as its detail.");
+        _ = Assert.IsInstanceOfType<CompactAggregateBlock>(acdc.Aggregate.Blocks[0], "The first block is blinded to its SAID.");
+        _ = Assert.IsInstanceOfType<ExpandedAggregateBlock>(acdc.Aggregate.Blocks[1], "The second block is revealed as its detail.");
     }
 
 
@@ -168,7 +167,7 @@ internal sealed class AcdcReaderTests
     [TestMethod]
     public void RejectsFixedFieldMessageType()
     {
-        Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
+        _ = Assert.ThrowsExactly<AcdcException>(() => AcdcReader.Read(Decode(
             """{"v":"v","t":"act","d":"d","i":"i","s":"s"}""")));
     }
 

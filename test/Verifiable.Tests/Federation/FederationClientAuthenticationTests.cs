@@ -99,7 +99,7 @@ internal sealed class FederationClientAuthenticationTests
     public void MissingJtiIsRejected()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Jti);
+        _ = payload.Remove(WellKnownJwtClaimNames.Jti);
 
         Assert.IsFalse(Validate(payload).IsValid, "jti is required for replay defense.");
     }
@@ -109,7 +109,7 @@ internal sealed class FederationClientAuthenticationTests
     public void MissingExpirationIsRejected()
     {
         JwtPayload payload = ValidPayload();
-        payload.Remove(WellKnownJwtClaimNames.Exp);
+        _ = payload.Remove(WellKnownJwtClaimNames.Exp);
 
         Assert.IsFalse(Validate(payload).IsValid, "exp is required.");
     }

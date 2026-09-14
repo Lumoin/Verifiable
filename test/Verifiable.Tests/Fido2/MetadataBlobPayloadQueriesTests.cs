@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
 using Verifiable.JCose;
@@ -262,7 +261,7 @@ internal sealed class MetadataBlobPayloadQueriesTests
         using MetadataBlob blob = ParseSingleEntryBlob(entryJson);
         MetadataBlobPayloadEntry entry = blob.Payload.Entries[0];
         Assert.IsNotNull(entry.AttestationRootCertificates);
-        Assert.IsEmpty(entry.AttestationRootCertificates!);
+        Assert.IsEmpty(entry.AttestationRootCertificates);
 
         IReadOnlyList<PkiCertificateMemory> anchors = MetadataBlobPayloadQueries.GetAttestationTrustAnchors(entry, BaseMemoryPool.Shared);
 

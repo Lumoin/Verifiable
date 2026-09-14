@@ -244,7 +244,7 @@ internal sealed class XmlSignatureWrappingAttackTests
             Assert.IsFalse(isBound, "A decoy sharing the honest SignedProperties' own Id must make the reference ambiguous.");
             Assert.AreEqual(XAdESProcessingFailure.SignedPropertiesReferenceDereferenceFailed, error.Failure);
             Assert.IsNotNull(error.InnerProcessingError);
-            Assert.AreEqual(XmlSignatureProcessingFailure.DuplicateId, error.InnerProcessingError!.Value.Failure);
+            Assert.AreEqual(XmlSignatureProcessingFailure.DuplicateId, error.InnerProcessingError.Value.Failure);
         }
     }
 }

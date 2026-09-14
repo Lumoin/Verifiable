@@ -45,7 +45,7 @@ internal class CommandParsingTests
     public void ParseDidCreateWithShortExtraParamParsesCorrectly()
     {
         var rootCommand = VerifiableCliTestHelpers.BuildTestableRootCommand(
-            out var createIdArg, out var createParamArg, out var extraParamOpt,
+            out _, out _, out var extraParamOpt,
             out _, out _, out _, out _, out _, out _, out _);
 
         ParseResult result = rootCommand.Parse("did create 789 param -e shortForm");

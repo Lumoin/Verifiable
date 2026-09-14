@@ -219,7 +219,7 @@ internal sealed class FederationKeyResolverTests
             Subject = issuer,
             IssuedAt = now,
             ExpiresAt = now.AddHours(1),
-            Payload = new UnverifiedJwtPayload(payloadDict)
+            Payload = new(payloadDict)
         };
 
         TrustChain chain = new() { Statements = [issuerEc] };

@@ -1,8 +1,5 @@
-using System;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -51,8 +48,7 @@ internal sealed class SignVerifyEventTests
             //every other test running in parallel (MSTest parallelizes at class scope), so a second event of the
             //same CLR type — from an unrelated concurrent test — is expected and must not fail this assertion.
             Assert.Contains(
-                (SignatureProducedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.P256
+                e => e.Algorithm == CryptoAlgorithm.P256
                     && e.Backend == "System.Security.Cryptography"
                     && e.DataLength == TestData.Length
                     && e.SignatureLength == signatureLength,
@@ -88,8 +84,7 @@ internal sealed class SignVerifyEventTests
             //See the sign-side test above for why this asserts via a single combined predicate rather than
             //pulling one element from the shared, process-wide static subject.
             Assert.Contains(
-                (VerificationCompletedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.P256
+                e => e.Algorithm == CryptoAlgorithm.P256
                     && e.Backend == "System.Security.Cryptography"
                     && e.Outcome == VerificationOutcome.Valid
                     && e.DataLength == TestData.Length,
@@ -119,8 +114,7 @@ internal sealed class SignVerifyEventTests
             int signatureLength = signature.AsReadOnlySpan().Length;
 
             Assert.Contains(
-                (SignatureProducedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.Ed25519
+                e => e.Algorithm == CryptoAlgorithm.Ed25519
                     && e.Backend == "Org.BouncyCastle.Cryptography"
                     && e.DataLength == TestData.Length
                     && e.SignatureLength == signatureLength,
@@ -154,8 +148,7 @@ internal sealed class SignVerifyEventTests
             Assert.IsTrue(isVerified);
 
             Assert.Contains(
-                (VerificationCompletedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.Ed25519
+                e => e.Algorithm == CryptoAlgorithm.Ed25519
                     && e.Backend == "Org.BouncyCastle.Cryptography"
                     && e.Outcome == VerificationOutcome.Valid,
                 observed.OfType<VerificationCompletedEvent>(),
@@ -191,8 +184,7 @@ internal sealed class SignVerifyEventTests
             Assert.IsFalse(isVerified);
 
             Assert.Contains(
-                (VerificationCompletedEvent e) =>
-                    e.Algorithm == CryptoAlgorithm.P256
+                e => e.Algorithm == CryptoAlgorithm.P256
                     && e.Backend == "System.Security.Cryptography"
                     && e.Outcome == VerificationOutcome.Invalid
                     && e.DataLength == tampered.Length,

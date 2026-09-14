@@ -1,8 +1,7 @@
+using Lumoin.Base;
 using System.Buffers;
 using System.Collections.Frozen;
-using System.Collections.Generic;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.Cesr.Text;
 using Verifiable.Cryptography;
 
@@ -271,7 +270,7 @@ public static class CesrSaid
         }
 
         Span<byte> saidBytes = stackalloc byte[saidByteCount];
-        Encoding.ASCII.GetBytes(said, saidBytes);
+        _ = Encoding.ASCII.GetBytes(said, saidBytes);
 
         int start = 0;
         while(start <= serialization.Length - saidBytes.Length)

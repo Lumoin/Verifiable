@@ -1,14 +1,13 @@
+using Lumoin.Veritas.Cbor;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Collections.Frozen;
-using Lumoin.Veritas.Cbor;
-using System.Linq;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Cose;
 
@@ -369,7 +368,7 @@ internal sealed class CoseCounterSignatureTests
         var target = new CoseSignatureCountersignTarget("protected"u8.ToArray(), "signature"u8.ToArray());
         CountersignStructureInput input = new(IsAbbreviated: false, target.ProtectedHeader, SignProtected: null, ReadOnlyMemory<byte>.Empty, target.Signature, null);
 
-        Assert.ThrowsExactly<ArgumentException>(() => CoseSerialization.BuildCountersignStructure(input));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoseSerialization.BuildCountersignStructure(input));
     }
 
 
@@ -379,7 +378,7 @@ internal sealed class CoseCounterSignatureTests
         var target = new CoseSignatureCountersignTarget("protected"u8.ToArray(), "signature"u8.ToArray());
         CountersignStructureInput input = new(IsAbbreviated: true, target.ProtectedHeader, SignProtected: ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty, target.Signature, null);
 
-        Assert.ThrowsExactly<ArgumentException>(() => CoseSerialization.BuildCountersignStructure(input));
+        _ = Assert.ThrowsExactly<ArgumentException>(() => CoseSerialization.BuildCountersignStructure(input));
     }
 
 
@@ -401,7 +400,7 @@ internal sealed class CoseCounterSignatureTests
         IReadOnlyDictionary<int, object> protectedHeader = CoseSerialization.ParseProtectedHeader(counterSignature.Component.ProtectedHeader.AsReadOnlySpan());
         Assert.AreEqual(WellKnownCoseAlgorithms.Es256, protectedHeader[CoseHeaderParameters.Alg]);
         Assert.IsNotNull(counterSignature.Component.UnprotectedHeader);
-        Assert.IsTrue(((byte[])counterSignature.Component.UnprotectedHeader![CoseHeaderParameters.Kid]).AsSpan().SequenceEqual("11"u8));
+        Assert.IsTrue(((byte[])counterSignature.Component.UnprotectedHeader[CoseHeaderParameters.Kid]).AsSpan().SequenceEqual("11"u8));
         Assert.HasCount(64, counterSignature.Component.Signature.AsReadOnlySpan().ToArray());
 
         using EncodedCoseCounterSignature reEncoded = CoseSerialization.WriteCounterSignatureV2(counterSignature, BaseMemoryPool.Shared);
@@ -424,7 +423,7 @@ internal sealed class CoseCounterSignatureTests
 
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.CounterSignature));
+        writer.WriteTag(new CborTag(CoseTags.CounterSignature));
         writer.WriteEncodedValue(untagged);
         byte[] tagged = writerBuffer.WrittenSpan.ToArray();
 
@@ -523,8 +522,8 @@ internal sealed class CoseCounterSignatureTests
         using CounterSignatureV2 counterSignature = CoseSerialization.ReadCounterSignatureV2(oracle, BaseMemoryPool.Shared);
 
         Assert.IsNotNull(counterSignature.Component.UnprotectedHeader, "Labels 7/9 must be UNDERSTOOD as present -- decoded into the unprotected header map, never rejected.");
-        Assert.IsTrue(label7Value.AsSpan().SequenceEqual((byte[])counterSignature.Component.UnprotectedHeader![CoseHeaderParameters.CounterSignature]));
-        Assert.IsTrue(label9Value.AsSpan().SequenceEqual((byte[])counterSignature.Component.UnprotectedHeader![CoseHeaderParameters.CounterSignature0]));
+        Assert.IsTrue(label7Value.AsSpan().SequenceEqual((byte[])counterSignature.Component.UnprotectedHeader[CoseHeaderParameters.CounterSignature]));
+        Assert.IsTrue(label9Value.AsSpan().SequenceEqual((byte[])counterSignature.Component.UnprotectedHeader[CoseHeaderParameters.CounterSignature0]));
 
         using EncodedCoseCounterSignature reEncoded = CoseSerialization.WriteCounterSignatureV2(counterSignature, BaseMemoryPool.Shared);
         Assert.IsTrue(oracle.AsSpan().SequenceEqual(reEncoded.AsReadOnlySpan()),
@@ -578,7 +577,7 @@ internal sealed class CoseCounterSignatureTests
         byte[] untagged = BuildRfc9338AppendixA11CounterSignatureValueBytes();
         var writerBuffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(writerBuffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.CounterSignature));
+        writer.WriteTag(new CborTag(CoseTags.CounterSignature));
         writer.WriteEncodedValue(untagged);
         byte[] tagged = writerBuffer.WrittenSpan.ToArray();
 
@@ -586,7 +585,7 @@ internal sealed class CoseCounterSignatureTests
             CoseHeaderParameters.CounterSignatureVersion2, tagged, BaseMemoryPool.Shared);
 
         Assert.IsTrue(result.IsSuccess, "Label 11 with a leading tag 19 must be accepted (read-accept).");
-        Assert.IsInstanceOfType<CounterSignatureV2>(result.CounterSignature);
+        _ = Assert.IsInstanceOfType<CounterSignatureV2>(result.CounterSignature);
     }
 
 
@@ -602,7 +601,7 @@ internal sealed class CoseCounterSignatureTests
             CoseHeaderParameters.Countersignature0Version2, valueBytes, BaseMemoryPool.Shared);
 
         Assert.IsTrue(result.IsSuccess);
-        Assert.IsInstanceOfType<CounterSignature0V2>(result.CounterSignature);
+        _ = Assert.IsInstanceOfType<CounterSignature0V2>(result.CounterSignature);
     }
 
 
@@ -633,7 +632,7 @@ internal sealed class CoseCounterSignatureTests
     {
         byte[] valueBytes = BuildRfc9338AppendixA11CounterSignatureValueBytes();
 
-        Assert.ThrowsExactly<System.Diagnostics.UnreachableException>(() =>
+        _ = Assert.ThrowsExactly<System.Diagnostics.UnreachableException>(() =>
             CoseSerialization.ParseCounterSignatureHeaderValue(CoseHeaderParameters.Alg, valueBytes, BaseMemoryPool.Shared));
     }
 
@@ -644,7 +643,7 @@ internal sealed class CoseCounterSignatureTests
     {
         byte[] valueBytes = BuildRfc9338AppendixA11CounterSignatureValueBytes();
 
-        Assert.ThrowsExactly<System.Diagnostics.UnreachableException>(() =>
+        _ = Assert.ThrowsExactly<System.Diagnostics.UnreachableException>(() =>
             CoseSerialization.ParseCounterSignatureHeaderValue(999, valueBytes, BaseMemoryPool.Shared));
     }
 
@@ -671,7 +670,7 @@ internal sealed class CoseCounterSignatureTests
         writer.WriteEndArray();
         byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => CoseSerialization.ReadCounterSignatureV2(oracle, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => CoseSerialization.ReadCounterSignatureV2(oracle, BaseMemoryPool.Shared));
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.CounterSignatureVersion2, oracle, BaseMemoryPool.Shared);
@@ -691,7 +690,7 @@ internal sealed class CoseCounterSignatureTests
         writer.WriteEndIndefiniteByteString();
         byte[] oracle = writerBuffer.WrittenSpan.ToArray();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => CoseSerialization.ReadCounterSignature0V2(oracle, BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<InvalidOperationException>(() => CoseSerialization.ReadCounterSignature0V2(oracle, BaseMemoryPool.Shared));
 
         using CoseCounterSignatureParseResult result = CoseSerialization.ParseCounterSignatureHeaderValue(
             CoseHeaderParameters.Countersignature0Version2, oracle, BaseMemoryPool.Shared);
@@ -829,7 +828,7 @@ internal sealed class CoseCounterSignatureTests
         EncodedCoseProtectedHeader counterSignerProtectedHeader = EncodedCoseProtectedHeader.FromBytes(
             CoseSerialization.SerializeProtectedHeader(new Dictionary<int, object>()), metered.Pool);
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await CoseCounterSign.CountersignFullAsync(
                 target, counterSignerProtectedHeader, null, ReadOnlyMemory<byte>.Empty, CoseSerialization.BuildCountersignStructure,
                 x25519PrivateKey, metered.Pool, TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
@@ -870,7 +869,7 @@ internal sealed class CoseCounterSignatureTests
             FrozenDictionary<string, object>? context = null, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Simulated signing-delegate failure (test-only).");
 
-        await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<InvalidOperationException>(async () =>
             await CoseCounterSign.CountersignFullAsync(
                 target, counterSignerProtectedHeader, null, ReadOnlyMemory<byte>.Empty, CoseSerialization.BuildCountersignStructure,
                 counterSignerPrivateKey, ThrowingSigningDelegate, metered.Pool, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
@@ -902,7 +901,7 @@ internal sealed class CoseCounterSignatureTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(async () =>
             await CoseCounterSign.CountersignFullAsync(
                 target, counterSignerProtectedHeader, null, ReadOnlyMemory<byte>.Empty, CoseSerialization.BuildCountersignStructure,
                 counterSignerPrivateKey, MicrosoftCryptographicFunctionsAdapter.SignP256Async, metered.Pool, cancellationToken: cts.Token).ConfigureAwait(false)).ConfigureAwait(false);

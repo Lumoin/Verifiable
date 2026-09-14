@@ -11,8 +11,8 @@ namespace Verifiable.Tests.Cryptography
     {
         [TestMethod]
         public void CompressionDecompressionShouldBeInverseIfOnTheCurve()
-        {            
-            var curveTypeGen = Gen.Enum<EllipticCurveTypes>().Where(curve => curve != EllipticCurveTypes.None && curve != EllipticCurveTypes.Curve25519);
+        {
+            var curveTypeGen = Gen.Enum<EllipticCurveTypes>().Where(curve => curve is not (EllipticCurveTypes.None or EllipticCurveTypes.Curve25519));
 
             //Generator for random elliptic curve points.
             var pointGen = Gen.Byte.Array[32].SelectMany(x => Gen.Byte.Array[32], (x, y) => (X: x, Y: y));
@@ -23,7 +23,7 @@ namespace Verifiable.Tests.Cryptography
                 {
                     return (curveType, point.X, point.Y);
                 });
-            
+
             testDataGen.Sample(testData =>
             {
                 var curveType = testData.curveType;

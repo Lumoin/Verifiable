@@ -1,5 +1,5 @@
-using System.Buffers;
 using Microsoft.Extensions.Time.Testing;
+using System.Buffers;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -81,7 +81,7 @@ internal sealed class CredentialProofKeyReferenceTests
         IReadOnlyList<PkiCertificateMemory> anchors = ParseAnchor(chain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(anchors);
             context.SetValidationTime(NowInstant);
 
@@ -121,7 +121,7 @@ internal sealed class CredentialProofKeyReferenceTests
         IReadOnlyList<PkiCertificateMemory> foreignAnchors = ParseAnchor(otherChain);
         try
         {
-            ExchangeContext context = new();
+            ExchangeContext context = [];
             context.SetX509TrustAnchors(foreignAnchors);
             context.SetValidationTime(NowInstant);
 
@@ -152,7 +152,7 @@ internal sealed class CredentialProofKeyReferenceTests
         string proof = await MintX5cProofAsync(chain).ConfigureAwait(false);
 
         CredentialProofValidationResult result = await ValidateAsync(
-            proof, x509Verification: null, context: new ExchangeContext()).ConfigureAwait(false);
+            proof, x509Verification: null, context: []).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialProofValidationFailureReason.KeyReferenceUnresolved, result.FailureReason);
     }
@@ -176,13 +176,12 @@ internal sealed class CredentialProofKeyReferenceTests
 
         //The wired resolver maps the expected kid to the holder public key — the issuer-side
         //dereference the deployment owns. A copy is returned because the validator disposes the key.
-        CredentialProofValidator.ResolveProofKeyDelegate resolver =
-            (kid, algorithm, context, ct) => string.Equals(kid, Kid, StringComparison.Ordinal)
+        ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) => string.Equals(kid, Kid, StringComparison.Ordinal)
                 ? ValueTask.FromResult<PublicKeyMemory?>(CopyPublicKey(holderPublic))
                 : ValueTask.FromResult<PublicKeyMemory?>(null);
 
         CredentialProofValidationResult result = await ValidateAsync(
-            proof, resolveProofKey: resolver, context: new ExchangeContext()).ConfigureAwait(false);
+            proof, resolveProofKey: resolver, context: []).ConfigureAwait(false);
 
         Assert.IsTrue(result.IsValid, $"kid proof must validate; got {result.FailureReason}.");
         Assert.AreEqual(Audience, result.Audience);
@@ -205,11 +204,10 @@ internal sealed class CredentialProofKeyReferenceTests
         string proof = await MintKidProofAsync(holderPrivate, "did:example:unknown#key-9").ConfigureAwait(false);
 
         //The resolver does not recognise the kid — it returns null, which is KeyReferenceUnresolved.
-        CredentialProofValidator.ResolveProofKeyDelegate resolver =
-            (kid, algorithm, context, ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
+        static ValueTask<PublicKeyMemory?> resolver(string kid, string algorithm, ExchangeContext context, CancellationToken ct) => ValueTask.FromResult<PublicKeyMemory?>(null);
 
         CredentialProofValidationResult result = await ValidateAsync(
-            proof, resolveProofKey: resolver, context: new ExchangeContext()).ConfigureAwait(false);
+            proof, resolveProofKey: resolver, context: []).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialProofValidationFailureReason.KeyReferenceUnresolved, result.FailureReason);
     }
@@ -230,7 +228,7 @@ internal sealed class CredentialProofKeyReferenceTests
         string proof = await MintKidProofAsync(holderPrivate, "did:example:holder-42#key-1").ConfigureAwait(false);
 
         CredentialProofValidationResult result = await ValidateAsync(
-            proof, resolveProofKey: null, context: new ExchangeContext()).ConfigureAwait(false);
+            proof, resolveProofKey: null, context: []).ConfigureAwait(false);
 
         Assert.AreEqual(CredentialProofValidationFailureReason.KeyReferenceUnresolved, result.FailureReason);
     }
@@ -285,7 +283,7 @@ internal sealed class CredentialProofKeyReferenceTests
             [WellKnownJwtClaimNames.Iat] = NowInstant.ToUnixTimeSeconds()
         };
 
-        UnsignedJwt unsigned = new(new JwtHeader(header), new JwtPayload(payload));
+        UnsignedJwt unsigned = new(new(header), new(payload));
         using JwsMessage jws = await unsigned.SignAsync(
             signingKey, HeaderSerializer, PayloadSerializer,
             TestSetup.Base64UrlEncoder, Pool, TestContext.CancellationToken).ConfigureAwait(false);
@@ -312,7 +310,7 @@ internal sealed class CredentialProofKeyReferenceTests
             isProofSigningAlgAcceptable: static _ => true,
             resolveProofKey,
             x509Verification,
-            context ?? new ExchangeContext(),
+            context ?? [],
             TestSetup.Base64UrlEncoder,
             TestSetup.Base64UrlDecoder,
             TimeProvider,

@@ -83,7 +83,7 @@ public ref struct XmlSpanReader
     /// Creates a reader over UTF-8 document octets.
     /// </summary>
     /// <param name="utf8Document">The document octets, without a byte order mark.</param>
-    public XmlSpanReader(ReadOnlySpan<byte> utf8Document): this(utf8Document, 0)
+    public XmlSpanReader(ReadOnlySpan<byte> utf8Document) : this(utf8Document, 0)
     {
     }
 
@@ -761,7 +761,7 @@ public ref struct XmlSpanReader
         {
             byte current = Document[position];
             bool isFirst = position == nameStart;
-            bool isLetter = (current >= (byte)'A' && current <= (byte)'Z') || (current >= (byte)'a' && current <= (byte)'z');
+            bool isLetter = current is (>= ((byte)'A') and <= ((byte)'Z')) or (>= ((byte)'a') and <= ((byte)'z'));
             bool isFollowCharacter = isLetter
                 || (current >= (byte)'0' && current <= (byte)'9')
                 || current is (byte)'.' or (byte)'_' or (byte)'-';
@@ -821,7 +821,7 @@ public ref struct XmlSpanReader
         }
 
         quote = Document[position];
-        if(quote != (byte)'"' && quote != (byte)'\'')
+        if(quote is not ((byte)'"') and not ((byte)'\''))
         {
             return Refuse(XmlReadFailure.MalformedMarkup, position);
         }

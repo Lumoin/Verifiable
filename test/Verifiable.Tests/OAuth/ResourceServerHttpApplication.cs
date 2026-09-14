@@ -1,16 +1,14 @@
-using System.Diagnostics;
-using System.Text;
-using System.Text.Json;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.ProtectedResource;
-using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -148,7 +146,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             return;
         }
 
-        ExchangeContext exchangeContext = new();
+        ExchangeContext exchangeContext = [];
 
         JwsAccessTokenValidationResult tokenResult = await JwsAccessTokenValidator.ValidateAsync(
             accessToken!,
@@ -168,8 +166,8 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
 
         if(!tokenResult.IsSuccess)
         {
-            Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, false);
-            Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenRejected));
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, false));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenRejected)));
             await WriteBearerChallengeAsync(
                 context, StatusCodes.Status401Unauthorized,
                 OAuthErrors.InvalidToken,
@@ -178,8 +176,8 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
             return;
         }
 
-        Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, true);
-        Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenValidated));
+        _ = (Activity.Current?.SetTag(ResourceServerTagNames.TokenValidated, true));
+        _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.TokenValidated)));
 
         JwsAccessTokenClaims claims = tokenResult.Claims!;
 
@@ -261,9 +259,9 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         if(RequiredScope is not null)
         {
             bool isScopeSatisfied = HasScope(claims.Scope, RequiredScope);
-            Activity.Current?.SetTag(ResourceServerTagNames.ScopeRequired, RequiredScope);
-            Activity.Current?.SetTag(ResourceServerTagNames.ScopeSatisfied, isScopeSatisfied);
-            Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.ScopeChecked));
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ScopeRequired, RequiredScope));
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ScopeSatisfied, isScopeSatisfied));
+            _ = (Activity.Current?.AddEvent(new ActivityEvent(ResourceServerEventNames.ScopeChecked)));
 
             if(!isScopeSatisfied)
             {
@@ -299,14 +297,14 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         HttpContext context, ResourceServerMetadataEndpoint metadataEndpoint)
     {
         IncomingRequest incomingRequest = new(
-            Path: context.Request.Path.HasValue ? context.Request.Path.Value! : string.Empty,
+            Path: context.Request.Path.HasValue ? context.Request.Path.Value : string.Empty,
             Method: context.Request.Method,
             Fields: new RequestFields(),
             Headers: RequestHeaders.Empty,
             RouteValues: RouteValues.Empty);
 
         ServerHttpResponse response = await metadataEndpoint.Server.DispatchAsync(
-            incomingRequest, new ExchangeContext(), context.RequestAborted).ConfigureAwait(false);
+            incomingRequest, [], context.RequestAborted).ConfigureAwait(false);
 
         context.Response.StatusCode = response.StatusCode;
         if(!string.IsNullOrEmpty(response.ContentType))
@@ -425,7 +423,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         context.Response.Headers.Append(WellKnownHttpHeaderNames.WwwAuthenticate, challenge);
         if(error is not null)
         {
-            Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, error);
+            _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, error));
         }
 
         return Task.CompletedTask;
@@ -447,25 +445,25 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         StringBuilder sb = new();
         if(MetadataEndpoint is { } metadataEndpoint)
         {
-            sb.Append(ProtectedResourceChallenge.BuildChallenge(
+            _ = sb.Append(ProtectedResourceChallenge.BuildChallenge(
                 WellKnownAuthenticationSchemes.DPoP, metadataEndpoint.MetadataUrl));
-            sb.Append(", ");
+            _ = sb.Append(", ");
         }
         else
         {
-            sb.Append(DpopScheme);
-            sb.Append(' ');
+            _ = sb.Append(DpopScheme);
+            _ = sb.Append(' ');
         }
 
-        sb.Append("error=\"").Append(error).Append('"');
+        _ = sb.Append("error=\"").Append(error).Append('"');
         if(SanitizeErrorDescription(errorDescription) is { Length: > 0 } sanitizedDescription)
         {
-            sb.Append(", error_description=\"").Append(sanitizedDescription).Append('"');
+            _ = sb.Append(", error_description=\"").Append(sanitizedDescription).Append('"');
         }
 
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         context.Response.Headers.Append(WellKnownHttpHeaderNames.WwwAuthenticate, sb.ToString());
-        Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, error);
+        _ = (Activity.Current?.SetTag(ResourceServerTagNames.ChallengeError, error));
 
         return Task.CompletedTask;
     }
@@ -489,7 +487,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         foreach(char c in description)
         {
             bool isAllowed = c is ' ' or '!' or (>= '#' and <= '[') or (>= ']' and <= '~');
-            sb.Append(isAllowed ? c : ' ');
+            _ = sb.Append(isAllowed ? c : ' ');
         }
 
         return sb.ToString();
@@ -559,7 +557,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         context.Response.StatusCode = StatusCodes.Status200OK;
         context.Response.ContentType = "application/json";
         context.Response.Headers.CacheControl = "no-store";
-        await context.Response.BodyWriter.WriteAsync(json, context.RequestAborted).ConfigureAwait(false);
+        _ = await context.Response.BodyWriter.WriteAsync(json, context.RequestAborted).ConfigureAwait(false);
     }
 
 
@@ -574,7 +572,7 @@ internal sealed class ResourceServerHttpApplication: IHttpApplication<HttpContex
         Memory<byte> destination = context.Response.BodyWriter.GetMemory(maxByteCount);
         int written = Encoding.UTF8.GetBytes(body, destination.Span);
         context.Response.BodyWriter.Advance(written);
-        await context.Response.BodyWriter.FlushAsync(context.RequestAborted).ConfigureAwait(false);
+        _ = await context.Response.BodyWriter.FlushAsync(context.RequestAborted).ConfigureAwait(false);
     }
 }
 

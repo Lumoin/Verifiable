@@ -67,13 +67,13 @@ public abstract class JoseDictionary: Dictionary<string, object>
     /// <summary>
     /// Creates an empty JOSE dictionary.
     /// </summary>
-    protected JoseDictionary(): base() { }
+    protected JoseDictionary() : base() { }
 
     /// <summary>
     /// Creates a JOSE dictionary with the specified initial capacity.
     /// </summary>
     /// <param name="capacity">The initial number of entries the dictionary can contain.</param>
-    protected JoseDictionary(int capacity): base(capacity) { }
+    protected JoseDictionary(int capacity) : base(capacity) { }
 
     /// <summary>
     /// Creates a JOSE dictionary populated from any key-value enumerable,
@@ -82,7 +82,7 @@ public abstract class JoseDictionary: Dictionary<string, object>
     /// <see cref="IDictionary{TKey,TValue}"/>.
     /// </summary>
     /// <param name="entries">The key-value pairs to copy.</param>
-    protected JoseDictionary(IEnumerable<KeyValuePair<string, object>> entries): base(entries) { }
+    protected JoseDictionary(IEnumerable<KeyValuePair<string, object>> entries) : base(entries) { }
 
 
     /// <summary>

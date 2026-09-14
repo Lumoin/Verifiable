@@ -1,6 +1,5 @@
-using System.Buffers;
 using Lumoin.Veritas.Cbor;
-using System.Linq;
+using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -103,7 +102,7 @@ internal sealed class Fido2CborDefaultsTests
 
         CborConformanceException conformanceException = Assert.IsInstanceOfType<CborConformanceException>(exception.InnerException);
         Assert.AreEqual(CborConformanceException.DuplicateMapKeyRule, conformanceException.RuleName);
-        Assert.Contains("duplicate", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("duplicate", exception.InnerException.Message, StringComparison.OrdinalIgnoreCase);
     }
 
 
@@ -117,7 +116,7 @@ internal sealed class Fido2CborDefaultsTests
         writer.WriteTextString("not-a-map");
         byte[] bytes = writerBuffer.WrittenSpan.ToArray();
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AttestationObjectCborReader.Parse(bytes));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AttestationObjectCborReader.Parse(bytes));
     }
 
 
@@ -128,7 +127,7 @@ internal sealed class Fido2CborDefaultsTests
         byte[] valid = Fido2AttestationTestVectors.EncodeAttestationObject(WellKnownWebAuthnAttestationFormats.Packed, EncodeEmptyMap(), [1, 2, 3, 4]);
         byte[] truncated = valid[..^2];
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AttestationObjectCborReader.Parse(truncated));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AttestationObjectCborReader.Parse(truncated));
     }
 
 
@@ -515,7 +514,7 @@ internal sealed class Fido2CborDefaultsTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<CertifiedAttestationResult>(result);
         var certified = (CertifiedAttestationResult)result;
         Assert.AreEqual(AttestationType.Unknown, certified.Type);
         Assert.HasCount(2, certified.TrustPath);

@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
-using Verifiable.Microsoft;
 using Verifiable.OAuth.Dpop;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -98,7 +96,7 @@ internal sealed class DpopProofValidatorTests
             header =>
             {
                 Dictionary<string, object> tampered = new(header);
-                tampered.Remove(WellKnownJoseHeaderNames.Jwk);
+                _ = tampered.Remove(WellKnownJoseHeaderNames.Jwk);
                 return tampered;
             }).ConfigureAwait(false);
 
@@ -155,8 +153,8 @@ internal sealed class DpopProofValidatorTests
         //valid as the trailing single-byte position, so randomly-generated
         //signatures ending in 'A' had no valid neighbour and threw
         //FormatException at decode time.
-        int signatureStart = proof.LastIndexOf('.') + 1;
-        int tamperIndex = signatureStart + (proof.Length - signatureStart) / 2;
+        int signatureStart = proof.LastIndexOf('.', StringComparison.Ordinal) + 1;
+        int tamperIndex = signatureStart + ((proof.Length - signatureStart) / 2);
         char tampered = proof[tamperIndex] == 'A' ? 'B' : 'A';
         string tamperedProof = string.Concat(
             proof.AsSpan(0, tamperIndex), tampered.ToString(), proof.AsSpan(tamperIndex + 1));

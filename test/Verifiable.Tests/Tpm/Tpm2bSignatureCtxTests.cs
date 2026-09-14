@@ -1,5 +1,3 @@
-using System;
-using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Tpm;
@@ -111,8 +109,8 @@ internal sealed class Tpm2bSignatureCtxTests
         }
 
         byte[] wire = new byte[sizeof(ushort) + payload.Length];
-        wire[0] = (byte)(Tpm2bSignatureCtx.MaxSize >> 8);
-        wire[1] = (byte)(Tpm2bSignatureCtx.MaxSize & 0xFF);
+        wire[0] = Tpm2bSignatureCtx.MaxSize >> 8;
+        wire[1] = Tpm2bSignatureCtx.MaxSize & 0xFF;
         payload.CopyTo(wire, sizeof(ushort));
 
         BaseMemoryPool pool = BaseMemoryPool.Shared;

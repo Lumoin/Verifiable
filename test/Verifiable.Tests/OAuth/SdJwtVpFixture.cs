@@ -1,8 +1,6 @@
-using System.Buffers;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers.Text;
 using System.Text;
-using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
 using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Core.StatusList;
@@ -13,7 +11,6 @@ using Verifiable.JCose.Eudi;
 using Verifiable.Json;
 using Verifiable.Json.Sd;
 using Verifiable.Json.StatusList;
-using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
@@ -307,7 +304,7 @@ internal static class SdJwtVpFixture
         string[] parts = issuerJws.Split('.');
         string payloadJson = Encoding.UTF8.GetString(Base64Url.DecodeFromChars(parts[1]));
 
-        int closingBrace = payloadJson.LastIndexOf('}');
+        int closingBrace = payloadJson.LastIndexOf('}', StringComparison.Ordinal);
         string appended = string.Concat(
             payloadJson.AsSpan(0, closingBrace),
             $",\"{claimName}\":{claimValueJson}}}");

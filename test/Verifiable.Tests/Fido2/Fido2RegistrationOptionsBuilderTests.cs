@@ -1,6 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.JCose;
 
@@ -219,7 +217,7 @@ internal sealed class Fido2RegistrationOptionsBuilderTests
             cancellationToken: TestContext.CancellationToken);
 
         Assert.IsNotNull(options.ExcludeCredentials);
-        Assert.IsEmpty(options.ExcludeCredentials!);
+        Assert.IsEmpty(options.ExcludeCredentials);
     }
 
 

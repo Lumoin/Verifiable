@@ -5,7 +5,6 @@ using System.Text;
 using System.Xml;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
-using Verifiable.Foundation;
 using Verifiable.Xml;
 
 namespace Verifiable.Tests.Xml;
@@ -67,10 +66,10 @@ public sealed class RsaPkcs1Sha256SignatureDescription: SignatureDescription
     /// <summary>Creates the description with the RSA/SHA-256/PKCS#1 formatter and deformatter algorithm names <see cref="CreateFormatter"/>/<see cref="CreateDeformatter"/> instantiate.</summary>
     public RsaPkcs1Sha256SignatureDescription()
     {
-        KeyAlgorithm = typeof(RSA).AssemblyQualifiedName!;
-        DigestAlgorithm = typeof(SHA256).AssemblyQualifiedName!;
-        FormatterAlgorithm = typeof(RSAPKCS1SignatureFormatter).AssemblyQualifiedName!;
-        DeformatterAlgorithm = typeof(RSAPKCS1SignatureDeformatter).AssemblyQualifiedName!;
+        KeyAlgorithm = typeof(RSA).AssemblyQualifiedName;
+        DigestAlgorithm = typeof(SHA256).AssemblyQualifiedName;
+        FormatterAlgorithm = typeof(RSAPKCS1SignatureFormatter).AssemblyQualifiedName;
+        DeformatterAlgorithm = typeof(RSAPKCS1SignatureDeformatter).AssemblyQualifiedName;
     }
 
 
@@ -126,8 +125,8 @@ public sealed class EcdsaSha256SignatureDescription: SignatureDescription
     /// <summary>Creates the description, setting <see cref="SignatureDescription.KeyAlgorithm"/> so <see cref="SignedXml.CheckSignature()"/>'s own key-type check succeeds.</summary>
     public EcdsaSha256SignatureDescription()
     {
-        KeyAlgorithm = typeof(ECDsa).AssemblyQualifiedName!;
-        DigestAlgorithm = typeof(SHA256).AssemblyQualifiedName!;
+        KeyAlgorithm = typeof(ECDsa).AssemblyQualifiedName;
+        DigestAlgorithm = typeof(SHA256).AssemblyQualifiedName;
     }
 
 
@@ -300,7 +299,7 @@ internal static class XmlSignatureInteropCorpusGenerator
             signedXml.KeyInfo!.AddClause(new KeyInfoX509Data(certificate));
 
             signedXml.ComputeSignature();
-            document.DocumentElement!.AppendChild(document.ImportNode(signedXml.GetXml(), deep: true));
+            _ = document.DocumentElement!.AppendChild(document.ImportNode(signedXml.GetXml(), deep: true));
 
             return new XmlSignatureInteropCase(name, Encoding.UTF8.GetBytes(document.OuterXml), XmlSignatureInteropShape.Enveloped, KeyTagFor(signatureMethodUri));
         }
@@ -334,7 +333,7 @@ internal static class XmlSignatureInteropCorpusGenerator
         signedXml.ComputeSignature();
 
         XmlDocument outputDocument = new();
-        outputDocument.AppendChild(outputDocument.ImportNode(signedXml.GetXml(), deep: true));
+        _ = outputDocument.AppendChild(outputDocument.ImportNode(signedXml.GetXml(), deep: true));
 
         return new XmlSignatureInteropCase(
             "EnvelopingRsaSha256C14N10KeyValue", Encoding.UTF8.GetBytes(outputDocument.OuterXml), XmlSignatureInteropShape.Enveloping, CryptoTags.RsaSha256Pkcs1Signature);
@@ -378,7 +377,7 @@ internal static class XmlSignatureInteropCorpusGenerator
         signedXml.ComputeSignature();
 
         XmlDocument outputDocument = new();
-        outputDocument.AppendChild(outputDocument.ImportNode(signedXml.GetXml(), deep: true));
+        _ = outputDocument.AppendChild(outputDocument.ImportNode(signedXml.GetXml(), deep: true));
 
         return new XmlSignatureInteropCase(
             "EnvelopingEcdsaSha256C14N10MultiReferenceX509Data", Encoding.UTF8.GetBytes(outputDocument.OuterXml), XmlSignatureInteropShape.Enveloping, CryptoTags.P256Signature);
@@ -409,7 +408,7 @@ internal static class XmlSignatureInteropCorpusGenerator
             signedXml.KeyInfo!.AddClause(new KeyInfoX509Data(certificate));
 
             signedXml.ComputeSignature();
-            document.DocumentElement!.AppendChild(document.ImportNode(signedXml.GetXml(), deep: true));
+            _ = document.DocumentElement!.AppendChild(document.ImportNode(signedXml.GetXml(), deep: true));
 
             return new XmlSignatureInteropCase(name, Encoding.UTF8.GetBytes(document.OuterXml), XmlSignatureInteropShape.DetachedSameDocument, KeyTagFor(signatureMethodUri));
         }

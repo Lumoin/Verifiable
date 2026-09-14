@@ -1,19 +1,15 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Cryptography.EventLogs;
 using Verifiable.Core.Did.Methods.Web;
 using Verifiable.Core.Model.Did;
 using Verifiable.Core.OutboundFetch;
 using Verifiable.Core.Resolvers;
 using Verifiable.Core.Transport;
 using Verifiable.Cryptography;
+using Verifiable.Cryptography.EventLogs;
 
 namespace Verifiable.Core.Did.Methods.WebVh;
 
@@ -380,6 +376,10 @@ public static class WebVhDidResolver
                     finalEntry = result.Entry;
                     switch(result.State)
                     {
+                        case EmptyLogState<WebVhState>:
+                            //The replayer has not yet applied an entry into this state; finalState and
+                            //isDeactivated keep whatever the prior iteration left them at.
+                            break;
                         case ActiveLogState<WebVhState> active:
                             finalState = active.Value;
                             states.Add(active.Value);
@@ -391,6 +391,10 @@ public static class WebVhDidResolver
                             states.Add(deactivated.Value);
                             entryLines.Add(result.Entry.CanonicalBytes);
                             isDeactivated = true;
+                            break;
+                        default:
+                            //No known log-state subtype matched; finalState and isDeactivated keep whatever the
+                            //prior iteration left them at.
                             break;
                     }
                 }
@@ -798,7 +802,7 @@ public static class WebVhDidResolver
 
         if(!HasServiceWithFragment(document, WellKnownWebVhValues.FilesServiceFragment))
         {
-            document.WithService(new Service
+            _ = document.WithService(new Service
             {
                 Id = DidUrl.Parse($"{did}{WellKnownWebVhValues.FilesServiceFragment}"),
                 Type = WellKnownServiceTypes.RelativeRef,
@@ -810,7 +814,7 @@ public static class WebVhDidResolver
         {
             //The LinkedVerifiablePresentation service carries the linked-vp @context that binds its type
             //semantics (did:webvh v1.0, whois LinkedVP Service); the #files relativeRef service does not.
-            document.WithService(new Service
+            _ = document.WithService(new Service
             {
                 Id = DidUrl.Parse($"{did}{WellKnownWebVhValues.WhoisServiceFragment}"),
                 Type = WellKnownServiceTypes.LinkedVerifiablePresentation,

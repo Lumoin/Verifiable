@@ -1,8 +1,4 @@
-using System;
-using System.Buffers;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -95,7 +91,7 @@ public enum PreservationOperationOutcome
 /// </para>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PreservationOperationContext<TRequest> where TRequest: PreservationRequest
+public sealed class PreservationOperationContext<TRequest> where TRequest : PreservationRequest
 {
     /// <summary>The request as the caller built it or as a parse produced it.</summary>
     public required TRequest Request { get; init; }
@@ -118,7 +114,7 @@ public sealed class PreservationOperationContext<TRequest> where TRequest: Prese
 /// carries; the caller disposes it. On failure it owns nothing.
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class PreservationOperationResult<TResponse>: IDisposable where TResponse: PreservationResponse
+public sealed class PreservationOperationResult<TResponse>: IDisposable where TResponse : PreservationResponse
 {
     /// <summary>How the peer disposed of the call; <see cref="PreservationOperationOutcome.Succeeded"/> is the only success.</summary>
     public required PreservationOperationOutcome Outcome { get; init; }

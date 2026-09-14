@@ -1,12 +1,8 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Verifiable.Cryptography.Pki;
 
@@ -324,6 +320,9 @@ public static class CAdESSignatureFacts
             SignatureTimestampClass.ContentTimestamp => CopyStatedOctets(context.Signature.SignedContent, pool),
             SignatureTimestampClass.SignatureTimestamp => CopyStatedOctets(context.Signature.SignatureValue, pool),
             SignatureTimestampClass.ValidationDataTimestamp => StateValidationDataTimestampCoverage(context, pool),
+
+            //An unclassified token and the archive time-stamp (resolved above) state no coverage here.
+            SignatureTimestampClass.Unknown or SignatureTimestampClass.ArchiveTimestamp => null,
             _ => null
         };
     }
@@ -490,8 +489,10 @@ public static class CAdESSignatureFacts
 
             //A content time-stamp covers the signed content and a signature time-stamp the signature value, and
             //the extraction block admits those two objects without consulting this filter at all, so neither class
-            //ever reaches here. An unforeseen class has shown nothing about a certificate, a revocation object or
-            //an earlier token either.
+            //ever reaches here. An unclassified token and the archive time-stamp (resolved above) have shown
+            //nothing about a certificate, a revocation object or an earlier token either.
+            SignatureTimestampClass.Unknown or SignatureTimestampClass.ContentTimestamp
+                or SignatureTimestampClass.SignatureTimestamp or SignatureTimestampClass.ArchiveTimestamp => false,
             _ => false
         };
     }
@@ -602,6 +603,11 @@ public static class CAdESSignatureFacts
                 ValidationObjectKind.Certificate => hashIndex.CertificatesHashIndex,
                 ValidationObjectKind.RevocationData => hashIndex.CrlsHashIndex,
                 ValidationObjectKind.TimestampToken => hashIndex.UnsignedAttributeValuesHashIndex,
+
+                //None of these kinds is ever named by an ats-hash-index-v3 entry.
+                ValidationObjectKind.Unknown or ValidationObjectKind.SignatureValue or ValidationObjectKind.Signature
+                    or ValidationObjectKind.SignedDataObject or ValidationObjectKind.SignatureAttribute
+                    or ValidationObjectKind.EvidenceRecord => [],
                 _ => []
             };
             if(entries.Count == 0)
@@ -1290,6 +1296,9 @@ public static class CAdESSignatureFacts
         SignatureTimestampClass.SignatureTimestamp => scope == SignatureAttributeScope.Unsigned,
         SignatureTimestampClass.ValidationDataTimestamp => scope == SignatureAttributeScope.Unsigned,
         SignatureTimestampClass.ArchiveTimestamp => scope == SignatureAttributeScope.Unsigned,
+
+        //An unclassified attribute is permitted in neither scope.
+        SignatureTimestampClass.Unknown => false,
         _ => false
     };
 
@@ -1582,7 +1591,7 @@ public static class CAdESSignatureFacts
                 break;
             }
 
-            firstMembers.ReadEncodedValue();
+            _ = firstMembers.ReadEncodedValue();
         }
 
         return explicitSequenceOf ? field.ReadSequence() : field;
@@ -1922,115 +1931,115 @@ public static class CAdESSignatureFacts
 
     /// <summary>One CMS attribute: its type object identifier and the DER of its first value.</summary>
     private sealed class CmsAttributeStructure
-{
-    /// <summary>Initializes a new <see cref="CmsAttributeStructure"/>.</summary>
-    /// <param name="oid">The attribute type object identifier.</param>
-    /// <param name="value">The DER-encoded first value, a slice of the Signed Data Object's bytes.</param>
-    public CmsAttributeStructure(string oid, ReadOnlyMemory<byte> value)
     {
-        Oid = oid;
-        Value = value;
+        /// <summary>Initializes a new <see cref="CmsAttributeStructure"/>.</summary>
+        /// <param name="oid">The attribute type object identifier.</param>
+        /// <param name="value">The DER-encoded first value, a slice of the Signed Data Object's bytes.</param>
+        public CmsAttributeStructure(string oid, ReadOnlyMemory<byte> value)
+        {
+            Oid = oid;
+            Value = value;
+        }
+
+        /// <summary>The attribute type object identifier.</summary>
+        public string Oid { get; }
+
+        /// <summary>The DER-encoded first value, a slice of the Signed Data Object's bytes.</summary>
+        public ReadOnlyMemory<byte> Value { get; }
     }
-
-    /// <summary>The attribute type object identifier.</summary>
-    public string Oid { get; }
-
-    /// <summary>The DER-encoded first value, a slice of the Signed Data Object's bytes.</summary>
-    public ReadOnlyMemory<byte> Value { get; }
-}
 
 
     /// <summary>The SignerInfo fields this binding reads.</summary>
     private sealed class CmsSignerStructure
-{
-    /// <summary>Initializes a new <see cref="CmsSignerStructure"/>.</summary>
-    /// <param name="issuerDer">The signer identifier's issuer name as raw DER; empty when the signer is identified by subject key identifier.</param>
-    /// <param name="serialNumber">The signer identifier's serial number as its DER INTEGER content octets; empty when the signer is identified by subject key identifier.</param>
-    /// <param name="subjectKeyIdentifier">The signer identifier's subject key identifier; empty when the signer is identified by issuer and serial number.</param>
-    /// <param name="digestAlgorithmOid">The digest algorithm the signer used over the signed attributes.</param>
-    /// <param name="signatureAlgorithmOid">The signature algorithm the signer used.</param>
-    /// <param name="signature">The signature field's octets, a slice of the Signed Data Object's bytes.</param>
-    /// <param name="signedAttributes">The signed attributes, in encoding order.</param>
-    /// <param name="unsignedAttributes">The unsigned attributes, in encoding order.</param>
-    public CmsSignerStructure(ReadOnlyMemory<byte> issuerDer, ReadOnlyMemory<byte> serialNumber, ReadOnlyMemory<byte> subjectKeyIdentifier, string digestAlgorithmOid, string signatureAlgorithmOid, ReadOnlyMemory<byte> signature, IReadOnlyList<CmsAttributeStructure> signedAttributes, IReadOnlyList<CmsAttributeStructure> unsignedAttributes)
     {
-        IssuerDer = issuerDer;
-        SerialNumber = serialNumber;
-        SubjectKeyIdentifier = subjectKeyIdentifier;
-        DigestAlgorithmOid = digestAlgorithmOid;
-        SignatureAlgorithmOid = signatureAlgorithmOid;
-        Signature = signature;
-        SignedAttributes = signedAttributes;
-        UnsignedAttributes = unsignedAttributes;
+        /// <summary>Initializes a new <see cref="CmsSignerStructure"/>.</summary>
+        /// <param name="issuerDer">The signer identifier's issuer name as raw DER; empty when the signer is identified by subject key identifier.</param>
+        /// <param name="serialNumber">The signer identifier's serial number as its DER INTEGER content octets; empty when the signer is identified by subject key identifier.</param>
+        /// <param name="subjectKeyIdentifier">The signer identifier's subject key identifier; empty when the signer is identified by issuer and serial number.</param>
+        /// <param name="digestAlgorithmOid">The digest algorithm the signer used over the signed attributes.</param>
+        /// <param name="signatureAlgorithmOid">The signature algorithm the signer used.</param>
+        /// <param name="signature">The signature field's octets, a slice of the Signed Data Object's bytes.</param>
+        /// <param name="signedAttributes">The signed attributes, in encoding order.</param>
+        /// <param name="unsignedAttributes">The unsigned attributes, in encoding order.</param>
+        public CmsSignerStructure(ReadOnlyMemory<byte> issuerDer, ReadOnlyMemory<byte> serialNumber, ReadOnlyMemory<byte> subjectKeyIdentifier, string digestAlgorithmOid, string signatureAlgorithmOid, ReadOnlyMemory<byte> signature, IReadOnlyList<CmsAttributeStructure> signedAttributes, IReadOnlyList<CmsAttributeStructure> unsignedAttributes)
+        {
+            IssuerDer = issuerDer;
+            SerialNumber = serialNumber;
+            SubjectKeyIdentifier = subjectKeyIdentifier;
+            DigestAlgorithmOid = digestAlgorithmOid;
+            SignatureAlgorithmOid = signatureAlgorithmOid;
+            Signature = signature;
+            SignedAttributes = signedAttributes;
+            UnsignedAttributes = unsignedAttributes;
+        }
+
+        /// <summary>The signer identifier's issuer name as raw DER; empty when the signer is identified by subject key identifier.</summary>
+        public ReadOnlyMemory<byte> IssuerDer { get; }
+
+        /// <summary>The signer identifier's serial number as its DER INTEGER content octets; empty when the signer is identified by subject key identifier.</summary>
+        public ReadOnlyMemory<byte> SerialNumber { get; }
+
+        /// <summary>The signer identifier's subject key identifier; empty when the signer is identified by issuer and serial number.</summary>
+        public ReadOnlyMemory<byte> SubjectKeyIdentifier { get; }
+
+        /// <summary>The digest algorithm the signer used over the signed attributes.</summary>
+        public string DigestAlgorithmOid { get; }
+
+        /// <summary>The signature algorithm the signer used.</summary>
+        public string SignatureAlgorithmOid { get; }
+
+        /// <summary>The signature field's octets, a slice of the Signed Data Object's bytes.</summary>
+        public ReadOnlyMemory<byte> Signature { get; }
+
+        /// <summary>The signed attributes, in encoding order.</summary>
+        public IReadOnlyList<CmsAttributeStructure> SignedAttributes { get; }
+
+        /// <summary>The unsigned attributes, in encoding order.</summary>
+        public IReadOnlyList<CmsAttributeStructure> UnsignedAttributes { get; }
     }
-
-    /// <summary>The signer identifier's issuer name as raw DER; empty when the signer is identified by subject key identifier.</summary>
-    public ReadOnlyMemory<byte> IssuerDer { get; }
-
-    /// <summary>The signer identifier's serial number as its DER INTEGER content octets; empty when the signer is identified by subject key identifier.</summary>
-    public ReadOnlyMemory<byte> SerialNumber { get; }
-
-    /// <summary>The signer identifier's subject key identifier; empty when the signer is identified by issuer and serial number.</summary>
-    public ReadOnlyMemory<byte> SubjectKeyIdentifier { get; }
-
-    /// <summary>The digest algorithm the signer used over the signed attributes.</summary>
-    public string DigestAlgorithmOid { get; }
-
-    /// <summary>The signature algorithm the signer used.</summary>
-    public string SignatureAlgorithmOid { get; }
-
-    /// <summary>The signature field's octets, a slice of the Signed Data Object's bytes.</summary>
-    public ReadOnlyMemory<byte> Signature { get; }
-
-    /// <summary>The signed attributes, in encoding order.</summary>
-    public IReadOnlyList<CmsAttributeStructure> SignedAttributes { get; }
-
-    /// <summary>The unsigned attributes, in encoding order.</summary>
-    public IReadOnlyList<CmsAttributeStructure> UnsignedAttributes { get; }
-}
 
 
     /// <summary>The SignedData fields this binding reads.</summary>
     private sealed class CmsStructure
-{
-    /// <summary>Initializes a new <see cref="CmsStructure"/>.</summary>
-    /// <param name="contentType">The encapsulated content type object identifier.</param>
-    /// <param name="content">The encapsulated content bytes, a slice of the Signed Data Object's bytes.</param>
-    /// <param name="hasContent">Whether the SignedData encapsulates its content at all.</param>
-    /// <param name="certificates">The DER of each X.509 certificate the structure carries.</param>
-    /// <param name="certificateRevocationLists">The DER of each certificate revocation list the structure carries.</param>
-    /// <param name="ocspResponses">The DER of each <c>BasicOCSPResponse</c> the structure carries.</param>
-    /// <param name="signer">The first SignerInfo.</param>
-    public CmsStructure(string contentType, ReadOnlyMemory<byte> content, bool hasContent, IReadOnlyList<ReadOnlyMemory<byte>> certificates, IReadOnlyList<ReadOnlyMemory<byte>> certificateRevocationLists, IReadOnlyList<ReadOnlyMemory<byte>> ocspResponses, CmsSignerStructure signer)
     {
-        ContentType = contentType;
-        Content = content;
-        HasContent = hasContent;
-        Certificates = certificates;
-        CertificateRevocationLists = certificateRevocationLists;
-        OcspResponses = ocspResponses;
-        Signer = signer;
+        /// <summary>Initializes a new <see cref="CmsStructure"/>.</summary>
+        /// <param name="contentType">The encapsulated content type object identifier.</param>
+        /// <param name="content">The encapsulated content bytes, a slice of the Signed Data Object's bytes.</param>
+        /// <param name="hasContent">Whether the SignedData encapsulates its content at all.</param>
+        /// <param name="certificates">The DER of each X.509 certificate the structure carries.</param>
+        /// <param name="certificateRevocationLists">The DER of each certificate revocation list the structure carries.</param>
+        /// <param name="ocspResponses">The DER of each <c>BasicOCSPResponse</c> the structure carries.</param>
+        /// <param name="signer">The first SignerInfo.</param>
+        public CmsStructure(string contentType, ReadOnlyMemory<byte> content, bool hasContent, IReadOnlyList<ReadOnlyMemory<byte>> certificates, IReadOnlyList<ReadOnlyMemory<byte>> certificateRevocationLists, IReadOnlyList<ReadOnlyMemory<byte>> ocspResponses, CmsSignerStructure signer)
+        {
+            ContentType = contentType;
+            Content = content;
+            HasContent = hasContent;
+            Certificates = certificates;
+            CertificateRevocationLists = certificateRevocationLists;
+            OcspResponses = ocspResponses;
+            Signer = signer;
+        }
+
+        /// <summary>The encapsulated content type object identifier.</summary>
+        public string ContentType { get; }
+
+        /// <summary>The encapsulated content bytes, a slice of the Signed Data Object's bytes.</summary>
+        public ReadOnlyMemory<byte> Content { get; }
+
+        /// <summary>Whether the SignedData encapsulates its content at all.</summary>
+        public bool HasContent { get; }
+
+        /// <summary>The DER of each X.509 certificate the structure carries.</summary>
+        public IReadOnlyList<ReadOnlyMemory<byte>> Certificates { get; }
+
+        /// <summary>The DER of each certificate revocation list the structure carries.</summary>
+        public IReadOnlyList<ReadOnlyMemory<byte>> CertificateRevocationLists { get; }
+
+        /// <summary>The DER of each <c>BasicOCSPResponse</c> the structure carries.</summary>
+        public IReadOnlyList<ReadOnlyMemory<byte>> OcspResponses { get; }
+
+        /// <summary>The first SignerInfo.</summary>
+        public CmsSignerStructure Signer { get; }
     }
-
-    /// <summary>The encapsulated content type object identifier.</summary>
-    public string ContentType { get; }
-
-    /// <summary>The encapsulated content bytes, a slice of the Signed Data Object's bytes.</summary>
-    public ReadOnlyMemory<byte> Content { get; }
-
-    /// <summary>Whether the SignedData encapsulates its content at all.</summary>
-    public bool HasContent { get; }
-
-    /// <summary>The DER of each X.509 certificate the structure carries.</summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> Certificates { get; }
-
-    /// <summary>The DER of each certificate revocation list the structure carries.</summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> CertificateRevocationLists { get; }
-
-    /// <summary>The DER of each <c>BasicOCSPResponse</c> the structure carries.</summary>
-    public IReadOnlyList<ReadOnlyMemory<byte>> OcspResponses { get; }
-
-    /// <summary>The first SignerInfo.</summary>
-    public CmsSignerStructure Signer { get; }
-}
 }

@@ -1,9 +1,5 @@
-using System.Collections.Generic;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core;
-using Verifiable.Server;
 
 namespace Verifiable.WebFinger;
 
@@ -190,7 +186,7 @@ public static class WebFingerEndpoints
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
 
             if(!string.IsNullOrEmpty(descriptor.Subject))
@@ -213,7 +209,7 @@ public static class WebFingerEndpoints
                 AppendLinksField(sb, descriptor.Links, ref first);
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -234,36 +230,36 @@ public static class WebFingerEndpoints
     private static void AppendNullableStringMapField(
         StringBuilder sb, string key, IReadOnlyDictionary<string, string?> map, ref bool first)
     {
-        if(!first) { sb.Append(','); }
+        if(!first) { _ = sb.Append(','); }
         first = false;
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, key);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool entryFirst = true;
         foreach(KeyValuePair<string, string?> entry in map)
         {
-            if(!entryFirst) { sb.Append(','); }
+            if(!entryFirst) { _ = sb.Append(','); }
             entryFirst = false;
 
-            sb.Append('"');
+            _ = sb.Append('"');
             JsonAppender.AppendEscapedString(sb, entry.Key);
-            sb.Append("\":");
+            _ = sb.Append("\":");
 
             if(entry.Value is null)
             {
-                sb.Append("null");
+                _ = sb.Append("null");
             }
             else
             {
-                sb.Append('"');
+                _ = sb.Append('"');
                 JsonAppender.AppendEscapedString(sb, entry.Value);
-                sb.Append('"');
+                _ = sb.Append('"');
             }
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -273,23 +269,23 @@ public static class WebFingerEndpoints
     /// </summary>
     private static void AppendLinksField(StringBuilder sb, IReadOnlyList<WebFingerLink> links, ref bool first)
     {
-        if(!first) { sb.Append(','); }
+        if(!first) { _ = sb.Append(','); }
         first = false;
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, WellKnownJrdMemberNames.Links);
-        sb.Append("\":[");
+        _ = sb.Append("\":[");
 
         bool linkFirst = true;
         foreach(WebFingerLink link in links)
         {
-            if(!linkFirst) { sb.Append(','); }
+            if(!linkFirst) { _ = sb.Append(','); }
             linkFirst = false;
 
             AppendLink(sb, link);
         }
 
-        sb.Append(']');
+        _ = sb.Append(']');
     }
 
 
@@ -301,7 +297,7 @@ public static class WebFingerEndpoints
     /// </summary>
     private static void AppendLink(StringBuilder sb, WebFingerLink link)
     {
-        sb.Append('{');
+        _ = sb.Append('{');
         bool first = true;
 
         JsonAppender.AppendStringField(sb, WellKnownJrdMemberNames.Rel, link.Rel, ref first);
@@ -326,7 +322,7 @@ public static class WebFingerEndpoints
             AppendNullableStringMapField(sb, WellKnownJrdMemberNames.Properties, link.Properties, ref first);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 
 
@@ -336,12 +332,12 @@ public static class WebFingerEndpoints
     /// </summary>
     private static void AppendTitlesField(StringBuilder sb, IReadOnlyDictionary<string, string> titles, ref bool first)
     {
-        if(!first) { sb.Append(','); }
+        if(!first) { _ = sb.Append(','); }
         first = false;
 
-        sb.Append('"');
+        _ = sb.Append('"');
         JsonAppender.AppendEscapedString(sb, WellKnownJrdMemberNames.Titles);
-        sb.Append("\":{");
+        _ = sb.Append("\":{");
 
         bool titleFirst = true;
         foreach(KeyValuePair<string, string> title in titles)
@@ -349,6 +345,6 @@ public static class WebFingerEndpoints
             JsonAppender.AppendStringField(sb, title.Key, title.Value, ref titleFirst);
         }
 
-        sb.Append('}');
+        _ = sb.Append('}');
     }
 }

@@ -1,12 +1,10 @@
-using System.Linq;
+using Microsoft.Extensions.Time.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.OAuth;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
@@ -288,7 +286,7 @@ internal sealed class ResourceServerChallengeTests
 
         //The event's MCP-Server OPRM-coherence invariant: the RS's trusted AS
         //must be one of the authorization_servers its own document advertises.
-        Assert.ThrowsExactly<ArgumentException>(() => new TestResourceServerShell(
+        _ = Assert.ThrowsExactly<ArgumentException>(() => new TestResourceServerShell(
             trustedIssuer: new Uri(Issuer),
             expectedAudience: Audience,
             resolveVerificationKey: BuildResolver(keys.PublicKey),

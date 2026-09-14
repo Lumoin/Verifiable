@@ -1,13 +1,12 @@
 using Verifiable.Core.Assessment;
 using Verifiable.Core.Did;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.Ebsi;
 using Verifiable.Core.Did.Methods.Keri;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Peer;
 using Verifiable.Core.Did.Methods.Web;
-using Verifiable.Json.Converters;
+using Verifiable.Core.Model.Did;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Did
@@ -15,23 +14,6 @@ namespace Verifiable.Tests.Did
     [TestClass]
     internal sealed class DidIdTests
     {
-        /// <summary>
-        /// All the known DID methods.
-        /// </summary>
-        private static DidMethodFactoryDelegate DidFactoryDelegate { get; } = did =>
-        {
-            return did switch
-            {
-                "did:key:" => new KeyDidMethod(did),
-                "did:web:" => new WebDidMethod(did),
-                "did:ebsi:" => new EbsiDidMethod(did),
-                "did:keri:" => new KeriDidMethod(did),
-                "did:plc:" => new PlaceholderDidMethod(did),
-                _ => new GenericDidMethod(did)
-            };
-        };
-
-
         [TestMethod]
         public void DidIdTest()
         {
@@ -73,7 +55,7 @@ namespace Verifiable.Tests.Did
         {
             string tamperedDid = requiredPrefix.InsertIgnorableCodePointAt(4) + "abc";
 
-            Assert.ThrowsExactly<ArgumentException>(() => construct(tamperedDid));
+            _ = Assert.ThrowsExactly<ArgumentException>(() => construct(tamperedDid));
         }
 
 
@@ -103,8 +85,8 @@ namespace Verifiable.Tests.Did
         [TestMethod]
         public void WebDidMethodConstructorRejectsDistinctWebRelatedMethodNames()
         {
-            Assert.ThrowsExactly<ArgumentException>(() => new WebDidMethod("did:webvh:example.com:abc"));
-            Assert.ThrowsExactly<ArgumentException>(() => new WebDidMethod("did:webplus:example.com"));
+            _ = Assert.ThrowsExactly<ArgumentException>(() => new WebDidMethod("did:webvh:example.com:abc"));
+            _ = Assert.ThrowsExactly<ArgumentException>(() => new WebDidMethod("did:webplus:example.com"));
         }
     }
 }

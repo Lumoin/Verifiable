@@ -1,8 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Ctap;
 
@@ -140,7 +136,7 @@ internal sealed class CtapNfcTransportTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
 
-        await Assert.ThrowsExactlyAsync<OperationCanceledException>(
+        _ = await Assert.ThrowsExactlyAsync<OperationCanceledException>(
             () => transport.TransceiveAsync(OpaquePayload, pool, cts.Token).AsTask()).ConfigureAwait(false);
 
         //Initial NFCCTAP_MSG, then the cancel variant of NFCCTAP_GETRESPONSE (named CLA/INS/cancel P1).
@@ -156,7 +152,7 @@ internal sealed class CtapNfcTransportTests
     [TestMethod]
     public async Task CardErrorThrowsWithStatusWord()
     {
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             ApduResponse response = BuildStatusOnlyResponse(0x6A, 0x80, pool);
@@ -178,7 +174,7 @@ internal sealed class CtapNfcTransportTests
     [TestMethod]
     public async Task TransportErrorThrowsWithErrorCode()
     {
-        ValueTask<ApduResult<ApduResponse>> Handler(
+        static ValueTask<ApduResult<ApduResponse>> Handler(
             ReadOnlyMemory<byte> commandApdu, BaseMemoryPool pool, CancellationToken cancellationToken)
         {
             return ValueTask.FromResult(ApduResult<ApduResponse>.TransportError(0x1234));

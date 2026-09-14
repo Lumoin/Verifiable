@@ -109,9 +109,9 @@ internal sealed class MetadataPolicyMergerTests
     public void EssentialMergesViaLogicalOr()
     {
         EntityTypeMetadataPolicy upstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Essential, (object)false)));
+            ("scope", (WellKnownMetadataPolicyOperators.Essential, false)));
         EntityTypeMetadataPolicy downstream = MakeBlock(
-            ("scope", (WellKnownMetadataPolicyOperators.Essential, (object)true)));
+            ("scope", (WellKnownMetadataPolicyOperators.Essential, true)));
 
         MetadataPolicyMergeResult result = MetadataPolicyMerger.Merge(upstream, downstream);
 

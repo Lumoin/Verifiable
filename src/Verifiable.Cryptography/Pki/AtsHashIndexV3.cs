@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -316,7 +314,7 @@ public sealed class AtsHashIndexV3: SensitiveMemory, IEquatable<AtsHashIndexV3>
                 throw new AsnContentException("A hash-index entry is a primitive OCTET STRING; clause 5.5.2 requires the ats-hash-index-v3 attribute value to be DER encoded.");
             }
 
-            if(entry.Length == 0 || entry.Length > MaximumHashIndexEntryLength)
+            if(entry.Length is 0 or > MaximumHashIndexEntryLength)
             {
                 throw new AsnContentException($"A hash-index entry holds between 1 and {MaximumHashIndexEntryLength} octets, the range a digest this library can compute occupies.");
             }

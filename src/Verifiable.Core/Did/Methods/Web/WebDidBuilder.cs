@@ -1,13 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Verifiable.Core.Model.Common;
-using Verifiable.Core.Model.Did.CryptographicSuites;
-using Verifiable.Core.Did.Methods;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods.Key;
+using Verifiable.Core.Model.Common;
+using Verifiable.Core.Model.Did;
+using Verifiable.Core.Model.Did.CryptographicSuites;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.JCose;
@@ -185,7 +179,7 @@ namespace Verifiable.Core.Did.Methods.Web
             //First transformation: Handle @context based on representation type.
             _ = With((didDocument, builder, buildState) =>
             {
-                switch(buildState!.RepresentationType)
+                switch(buildState.RepresentationType)
                 {
                     case DidRepresentationType.JsonLd:
                     case DidRepresentationType.JsonWithContext:
@@ -200,8 +194,11 @@ namespace Verifiable.Core.Did.Methods.Web
                         didDocument.Context = Context.FromIris(contextIris.ToArray());
                         break;
 
+                    case DidRepresentationType.None:
                     case DidRepresentationType.JsonWithoutContext:
-                        //No context needed for plain JSON representation.
+                    default:
+                        //No context is needed for plain JSON representation, when no representation type was
+                        //selected, or for a representation type outside the declared enum.
                         break;
                 }
 
@@ -213,7 +210,7 @@ namespace Verifiable.Core.Did.Methods.Web
                 var verificationMethods = new List<VerificationMethod>();
                 var fragmentGenerator = builder.FragmentGenerator;
 
-                for(int i = 0; i < buildState!.KeyInputs.Count; i++)
+                for(int i = 0; i < buildState.KeyInputs.Count; i++)
                 {
                     buildState.CurrentVerificationMethodIndex = i;
                     var keyInput = buildState.KeyInputs[i];
@@ -236,7 +233,7 @@ namespace Verifiable.Core.Did.Methods.Web
             //Third transformation: Set up DID identifier.
             .With((didDocument, builder, buildState) =>
             {
-                didDocument.Id = new WebDidMethod(CreateDidId(buildState!.WebDomain));
+                didDocument.Id = new WebDidMethod(CreateDidId(buildState.WebDomain));
 
                 return ValueTask.FromResult(didDocument);
             })
@@ -245,7 +242,7 @@ namespace Verifiable.Core.Did.Methods.Web
             {
                 var fragmentGenerator = builder.FragmentGenerator;
 
-                for(int i = 0; i < buildState!.KeyInputs.Count; i++)
+                for(int i = 0; i < buildState.KeyInputs.Count; i++)
                 {
                     buildState.CurrentVerificationMethodIndex = i;
                     var keyInput = buildState.KeyInputs[i];
@@ -254,7 +251,7 @@ namespace Verifiable.Core.Did.Methods.Web
                     string verificationMethodId = CreateVerificationMethodId(buildState.WebDomain, fragment);
 
                     //The signing/key-agreement relationship assignment is the shared standard step.
-                    didDocument.WithStandardVerificationRelationships(keyInput.PublicKey, verificationMethodId);
+                    _ = didDocument.WithStandardVerificationRelationships(keyInput.PublicKey, verificationMethodId);
                 }
 
                 return ValueTask.FromResult(didDocument);
@@ -298,6 +295,9 @@ namespace Verifiable.Core.Did.Methods.Web
             string effectiveDidCoreVersion = representationType switch
             {
                 DidRepresentationType.JsonWithoutContext => string.Empty, //Not used for this representation type.
+                DidRepresentationType.None => didCoreVersion ?? Context.DidCore10,
+                DidRepresentationType.JsonWithContext => didCoreVersion ?? Context.DidCore10,
+                DidRepresentationType.JsonLd => didCoreVersion ?? Context.DidCore10,
                 _ => didCoreVersion ?? Context.DidCore10 //Default to DID Core 1.0 when context is needed.
             };
 

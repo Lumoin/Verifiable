@@ -226,21 +226,21 @@ namespace Verifiable.Tests
         [TestMethod]
         public void ParseAbsoluteInvalidInputThrowsException()
         {
-            Assert.ThrowsExactly<ArgumentException>(() => DidUrl.ParseAbsolute("#key-1"));
+            _ = Assert.ThrowsExactly<ArgumentException>(() => DidUrl.ParseAbsolute("#key-1"));
         }
 
 
         [TestMethod]
         public void ParseFragmentInvalidInputThrowsException()
         {
-            Assert.ThrowsExactly<ArgumentException>(() => DidUrl.ParseFragment("did:example:123"));
+            _ = Assert.ThrowsExactly<ArgumentException>(() => DidUrl.ParseFragment("did:example:123"));
         }
 
 
         [TestMethod]
         public void ParseNullInputThrowsException()
         {
-            Assert.ThrowsExactly<ArgumentNullException>(() => DidUrl.Parse(null!));
+            _ = Assert.ThrowsExactly<ArgumentNullException>(() => DidUrl.Parse(null!));
         }
 
 
@@ -304,7 +304,7 @@ namespace Verifiable.Tests
             var absoluteDidUrl = DidUrl.ParseAbsolute("did:example:123#key-1");
             var baseDid = DidUrl.ParseAbsolute("did:example:456");
 
-            Assert.ThrowsExactly<InvalidOperationException>(() => absoluteDidUrl.Resolve(baseDid));
+            _ = Assert.ThrowsExactly<InvalidOperationException>(() => absoluteDidUrl.Resolve(baseDid));
         }
 
 

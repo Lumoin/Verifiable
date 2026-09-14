@@ -2,7 +2,6 @@ using Verifiable.Core.Dcql;
 using Verifiable.Core.Model.Dcql;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography.Pki;
-using Verifiable.JCose;
 
 namespace Verifiable.Tests.Dcql;
 
@@ -76,14 +75,14 @@ internal sealed class DcqlQueryTests
     [TestMethod]
     public void PatternSegmentKeyThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => PatternSegment.Key(null!));
+        _ = Assert.Throws<ArgumentNullException>(() => PatternSegment.Key(null!));
     }
 
 
     [TestMethod]
     public void PatternSegmentIndexThrowsOnNegative()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => PatternSegment.Index(-1));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(() => PatternSegment.Index(-1));
     }
 
 
@@ -120,7 +119,7 @@ internal sealed class DcqlQueryTests
     [TestMethod]
     public void ClaimPatternFromKeysThrowsOnEmpty()
     {
-        Assert.Throws<ArgumentException>(() => DcqlClaimPattern.FromKeys());
+        _ = Assert.Throws<ArgumentException>(() => DcqlClaimPattern.FromKeys());
     }
 
 

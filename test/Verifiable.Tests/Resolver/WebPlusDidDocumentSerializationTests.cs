@@ -55,8 +55,8 @@ internal sealed class WebPlusDidDocumentSerializationTests
     {
         DidDocument? document = JsonSerializerExtensions.Deserialize<DidDocument>(RootDidDocument, Options);
 
-        Assert.IsInstanceOfType<WebPlusDidDocument>(document);
-        var webPlus = (WebPlusDidDocument)document!;
+        _ = Assert.IsInstanceOfType<WebPlusDidDocument>(document);
+        var webPlus = (WebPlusDidDocument)document;
 
         Assert.AreEqual("uHiCa77-pRHbSiSIPSFO_EOlpw100j30VQnhWCXuwVMSA-w", webPlus.SelfHash);
         Assert.IsNull(webPlus.PrevDidDocumentSelfHash, "A root document has no prevDIDDocumentSelfHash.");
@@ -75,7 +75,7 @@ internal sealed class WebPlusDidDocumentSerializationTests
     {
         var (deserialized, reserialized) = JsonSerializationUtilities.PerformSerializationCycle<DidDocument>(RootDidDocument, Options);
 
-        Assert.IsInstanceOfType<WebPlusDidDocument>(deserialized);
+        _ = Assert.IsInstanceOfType<WebPlusDidDocument>(deserialized);
         Assert.IsTrue(
             JsonSerializationUtilities.CompareJsonElements(RootDidDocument, reserialized),
             $"did:webplus document roundtrip changed structure. Reserialized: {reserialized}");

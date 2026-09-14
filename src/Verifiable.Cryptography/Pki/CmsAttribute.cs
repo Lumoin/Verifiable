@@ -1,6 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -213,7 +211,7 @@ public sealed class CmsAttribute: SensitiveMemory, IEquatable<CmsAttribute>
             throw new ArgumentException("A CMS attribute value is one DER-encoded value (RFC 5652 §5.3).", parameterName);
         }
 
-        AsnDecoder.ReadEncodedValue(value, AsnEncodingRules.DER, out _, out _, out int bytesConsumed);
+        _ = AsnDecoder.ReadEncodedValue(value, AsnEncodingRules.DER, out _, out _, out int bytesConsumed);
         if(bytesConsumed != value.Length)
         {
             throw new AsnContentException("A CMS attribute value is exactly one DER-encoded value, with no trailing octets (RFC 5652 §5.3).");

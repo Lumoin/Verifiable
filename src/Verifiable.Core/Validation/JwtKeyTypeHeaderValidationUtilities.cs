@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.Core.Assessment;
 using Verifiable.JCose;
 
@@ -43,13 +41,13 @@ public static class DefaultJwtValidationClaims
 
 public static class JwtKeyTypeHeaderValidationUtilities
 {
-    private static List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> AlgCrvPairs { get; } = new()
-    {
+    private static List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> AlgCrvPairs { get; } =
+    [
         (WellKnownJwaValues.IsEs256, WellKnownCurveValues.IsP256),
         (WellKnownJwaValues.IsEs384, WellKnownCurveValues.IsP384),
         (WellKnownJwaValues.IsEs512, WellKnownCurveValues.IsP521),
         (WellKnownJwaValues.IsEs256K, WellKnownCurveValues.IsSecp256k1)
-    };
+    ];
 
 
     /// <summary>
@@ -105,11 +103,11 @@ public static class JwtKeyTypeHeaderValidationUtilities
 
         static List<Claim> BuildOkpClaims(Dictionary<string, object> headers)
         {
-            List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairsForOkp = new()
-            {
+            List<(Func<string, bool> IsAlg, Func<string, bool> IsCrv)> algCrvPairsForOkp =
+            [
                 (WellKnownJwaValues.IsEdDsa, WellKnownCurveValues.IsEd25519),
                 (str => true, WellKnownCurveValues.IsX25519)
-            };
+            ];
 
             List<Claim> result = ValidateOkp(headers, algCrvPairsForOkp);
             result.Add(new Claim(ClaimId.OkpKeyType, ClaimOutcome.Success));
@@ -127,27 +125,13 @@ public static class JwtKeyTypeHeaderValidationUtilities
     {
         ArgumentNullException.ThrowIfNull(jwtHeaders);
         ArgumentNullException.ThrowIfNull(algCrvPairs);
-        List<Claim> claims = new();
-
-        // Check for mandatory 'crv' field (Curve)
-        if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) && crvValue is string crv && !string.IsNullOrEmpty(crv))
-        {
-            claims.Add(new Claim(ClaimId.EcMissingCurve, ClaimOutcome.Success));
-        }
-        else
-        {
-            claims.Add(new Claim(ClaimId.EcMissingCurve, ClaimOutcome.Failure));
-        }
-
-        // Check for mandatory 'x' field (X Coordinate)
-        if(jwtHeaders.TryGetValue(WellKnownJwkMemberNames.X, out object? xValue) && xValue is string x && !string.IsNullOrEmpty(x))
-        {
-            claims.Add(new Claim(ClaimId.EcMissingXCoordinate, ClaimOutcome.Success));
-        }
-        else
-        {
-            claims.Add(new Claim(ClaimId.EcMissingXCoordinate, ClaimOutcome.Failure));
-        }
+        List<Claim> claims =
+        [
+            // Check for mandatory 'crv' field (Curve)
+            jwtHeaders.TryGetValue(WellKnownJwkMemberNames.Crv, out object? crvValue) && crvValue is string crv && !string.IsNullOrEmpty(crv) ? new Claim(ClaimId.EcMissingCurve, ClaimOutcome.Success) : new Claim(ClaimId.EcMissingCurve, ClaimOutcome.Failure),
+            // Check for mandatory 'x' field (X Coordinate)
+            jwtHeaders.TryGetValue(WellKnownJwkMemberNames.X, out object? xValue) && xValue is string x && !string.IsNullOrEmpty(x) ? new Claim(ClaimId.EcMissingXCoordinate, ClaimOutcome.Success) : new Claim(ClaimId.EcMissingXCoordinate, ClaimOutcome.Failure),
+        ];
 
         // Check for mandatory 'y' field (Y Coordinate), if required
         if(isYCoordinateMandatory)
@@ -223,7 +207,7 @@ public static class JwtKeyTypeHeaderValidationUtilities
         const int Rsa2048RawModulusBase64UrlEncodedLength = 342; //256 bytes * 4/3 ≈ 342 chars.
         const int Rsa4096RawModulusBase64UrlEncodedLength = 683; //512 bytes * 4/3 ≈ 683 chars.
 
-        if(nStr.Length == Rsa2048RawModulusBase64UrlEncodedLength || nStr.Length == Rsa4096RawModulusBase64UrlEncodedLength)
+        if(nStr.Length is Rsa2048RawModulusBase64UrlEncodedLength or Rsa4096RawModulusBase64UrlEncodedLength)
         {
             claims.Add(new Claim(ClaimId.RsaKeyValid, ClaimOutcome.Success));
             return claims;

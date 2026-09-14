@@ -1,13 +1,7 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Text.RegularExpressions;
-using Verifiable.Cryptography;
 using Verifiable.Tests.Foundation;
 using Verifiable.Tests.TestInfrastructure;
-using Verifiable.Tpm.Spec;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Structures;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -132,7 +126,7 @@ internal sealed class TpmtSensitiveTests
         BaseMemoryPool pool = BaseMemoryPool.Shared;
         using TpmtSensitive sensitive = RsaSensitive(pool, AuthValue, SeedValue);
 
-        int expected = sizeof(ushort) + (sizeof(ushort) + AuthValue.Length) + (sizeof(ushort) + SeedValue.Length) + (sizeof(ushort) + RsaPrime.Length);
+        int expected = sizeof(ushort) + sizeof(ushort) + AuthValue.Length + sizeof(ushort) + SeedValue.Length + sizeof(ushort) + RsaPrime.Length;
         Assert.AreEqual(expected, sensitive.SerializedSize, "The declared width is the selector plus authValue, seedValue and the arm, each size-prefixed.");
 
         byte[] octets = new byte[sensitive.SerializedSize];
@@ -402,7 +396,7 @@ internal sealed class TpmtSensitiveTests
         int start = text.IndexOf("private string DebuggerDisplay", StringComparison.Ordinal);
         Assert.IsGreaterThanOrEqualTo(0, start, $"'{filePath}' must declare a DebuggerDisplay getter.");
 
-        int end = text.LastIndexOf('}');
+        int end = text.LastIndexOf('}', StringComparison.Ordinal);
 
         return text[start..end];
     }

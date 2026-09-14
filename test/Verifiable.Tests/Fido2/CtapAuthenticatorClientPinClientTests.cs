@@ -1,7 +1,3 @@
-using System;
-using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
@@ -46,7 +42,7 @@ internal sealed class CtapAuthenticatorClientPinClientTests
             Transceive, CtapClientPinRequestCborWriter.Write, request, CtapClientPinResponseCborReader.Read, BaseMemoryPool.Shared, TestContext.CancellationToken);
 
         Assert.IsNotNull(capturedRequest);
-        Assert.AreEqual(WellKnownCtapCommands.ClientPin, capturedRequest![0]);
+        Assert.AreEqual(WellKnownCtapCommands.ClientPin, capturedRequest[0]);
         Assert.AreEqual(8, decoded.PinRetries);
     }
 
@@ -55,7 +51,7 @@ internal sealed class CtapAuthenticatorClientPinClientTests
     [TestMethod]
     public async Task ThrowsCtapCommandExceptionOnNonSuccessStatus()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes([WellKnownCtapStatusCodes.InvalidParameter], pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.SetPin);
@@ -71,11 +67,11 @@ internal sealed class CtapAuthenticatorClientPinClientTests
     [TestMethod]
     public async Task ThrowsFido2FormatExceptionOnEmptyResponse()
     {
-        ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
+        static ValueTask<PooledMemory> Transceive(ReadOnlyMemory<byte> request, BaseMemoryPool pool, CancellationToken cancellationToken) =>
             ValueTask.FromResult(PooledMemory.FromBytes(ReadOnlySpan<byte>.Empty, pool, Fido2BufferTags.CtapResponseEnvelope));
 
         var request = new CtapClientPinRequest(SubCommand: WellKnownCtapClientPinSubCommands.GetUvRetries);
-        await Assert.ThrowsExactlyAsync<Fido2FormatException>(
+        _ = await Assert.ThrowsExactlyAsync<Fido2FormatException>(
             () => CtapAuthenticatorClientPinClient.ClientPinAsync(
                 Transceive, CtapClientPinRequestCborWriter.Write, request, CtapClientPinResponseCborReader.Read, BaseMemoryPool.Shared, TestContext.CancellationToken).AsTask());
     }

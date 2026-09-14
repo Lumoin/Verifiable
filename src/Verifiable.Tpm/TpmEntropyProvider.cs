@@ -1,13 +1,9 @@
-using System;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Tpm.Automata;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm;
 
@@ -278,7 +274,7 @@ public sealed class TpmEntropyProvider
     //is a ref struct, so it is born and buried in this synchronous helper. Generic over the input type
     //so a value-type ITpmCommandInput is framed without boxing.
     private static void WriteSessionlessCommand<TInput>(Span<byte> destination, TInput input, int length)
-        where TInput: ITpmCommandInput
+        where TInput : ITpmCommandInput
     {
         var writer = new TpmWriter(destination);
         var header = new TpmHeader((ushort)TpmStConstants.TPM_ST_NO_SESSIONS, (uint)length, (uint)input.CommandCode);

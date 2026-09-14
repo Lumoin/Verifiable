@@ -1,12 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
@@ -74,7 +70,7 @@ internal sealed class KeriKeyEventLogReplayTests
                 Assert.IsTrue(result.IsSuccess, $"Every event must replay; error: '{result.Error}'.");
             }
 
-            Assert.IsInstanceOfType<ActiveLogState<KeriKeyState>>(results[^1].State);
+            _ = Assert.IsInstanceOfType<ActiveLogState<KeriKeyState>>(results[^1].State);
             KeriKeyState finalState = ((ActiveLogState<KeriKeyState>)results[^1].State).Value;
             var rotation = (KeriRotationEvent)entries[2].Operation!;
 
@@ -105,7 +101,7 @@ internal sealed class KeriKeyEventLogReplayTests
 
             string? error = results[^1].Error;
             Assert.IsFalse(results[^1].IsSuccess, "An inception signed by an unauthorized key must fail.");
-            Assert.IsInstanceOfType<EmptyLogState<KeriKeyState>>(results[^1].State, "No state may be established when the genesis signature fails.");
+            _ = Assert.IsInstanceOfType<EmptyLogState<KeriKeyState>>(results[^1].State, "No state may be established when the genesis signature fails.");
             Assert.IsTrue(error is not null && error.Contains("signing threshold", StringComparison.Ordinal), $"The error must report the unmet threshold; got '{error}'.");
         }
         finally
@@ -236,7 +232,7 @@ internal sealed class KeriKeyEventLogReplayTests
                 await ReplayAsync(entries, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsTrue(results[^1].IsSuccess, $"An inception signed by its non-transferable-coded key must verify; error: '{results[^1].Error}'.");
-            Assert.IsInstanceOfType<ActiveLogState<KeriKeyState>>(results[^1].State, "The inception establishes key state.");
+            _ = Assert.IsInstanceOfType<ActiveLogState<KeriKeyState>>(results[^1].State, "The inception establishes key state.");
         }
         finally
         {
@@ -276,7 +272,7 @@ internal sealed class KeriKeyEventLogReplayTests
 
             string? error = results[^1].Error;
             Assert.IsFalse(results[^1].IsSuccess, "A delegated event must fail closed in a single-KEL replay.");
-            Assert.IsInstanceOfType<EmptyLogState<KeriKeyState>>(results[^1].State, "No state may be established for an unanchored delegated inception.");
+            _ = Assert.IsInstanceOfType<EmptyLogState<KeriKeyState>>(results[^1].State, "No state may be established for an unanchored delegated inception.");
             Assert.IsTrue(error is not null && error.Contains("delegating seal", StringComparison.Ordinal), $"The error must report the missing delegating seal; got '{error}'.");
         }
         finally
@@ -337,7 +333,7 @@ internal sealed class KeriKeyEventLogReplayTests
 
             //Collect the delegator's anchored seals from its verified interaction and resolve the dip's seal from them.
             IReadOnlyList<KeriSeal> anchors = KeriSealReader.ReadList(KeriEventJson.DecodeFieldMap(delegatorIxn.Serialization)[KeriMessageFields.Anchors]);
-            DelegationSealResolver resolver = delegatedEvent => KeriDelegation.FindDelegationSeal(anchors, delegatedEvent);
+            KeriKeyEventSeal? resolver(KeriKeyEvent delegatedEvent) => KeriDelegation.FindDelegationSeal(anchors, delegatedEvent);
 
             var delegateeEntries = new List<LogEntry<KeriKeyEvent, CryptoProof>>
             {
@@ -347,11 +343,11 @@ internal sealed class KeriKeyEventLogReplayTests
             List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>> anchored =
                 await ReplayAsync(delegateeEntries, TestContext.CancellationToken, resolver).ConfigureAwait(false);
             Assert.IsTrue(anchored[^1].IsSuccess, $"The anchored delegated inception must verify; error: '{anchored[^1].Error}'.");
-            Assert.IsInstanceOfType<ActiveLogState<KeriKeyState>>(anchored[^1].State);
+            _ = Assert.IsInstanceOfType<ActiveLogState<KeriKeyState>>(anchored[^1].State);
             Assert.AreEqual(delegatorAid, ((ActiveLogState<KeriKeyState>)anchored[^1].State).Value.DelegatorPrefix, "The delegated key state is bound to its delegator.");
 
             //With a resolver that anchors nothing, the same delegated inception fails closed.
-            DelegationSealResolver emptyResolver = _ => null;
+            KeriKeyEventSeal? emptyResolver(KeriKeyEvent _) => null;
             List<LogReplayResult<KeriKeyState, KeriKeyEvent, CryptoProof>> unanchored =
                 await ReplayAsync(delegateeEntries, TestContext.CancellationToken, emptyResolver).ConfigureAwait(false);
             Assert.IsFalse(unanchored[^1].IsSuccess, "An unanchored delegated inception fails closed.");
@@ -669,7 +665,7 @@ internal sealed class KeriKeyEventLogReplayTests
     {
         int length = Encoding.UTF8.GetByteCount(text);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(text, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(text, owner.Memory.Span);
         disposables.Add(owner);
 
         return owner.Memory[..length];
@@ -681,7 +677,7 @@ internal sealed class KeriKeyEventLogReplayTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         using IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return await CesrSaid.ComputeAsync(owner.Memory[..length], Code, AgileDigest, BaseMemoryPool.Shared).ConfigureAwait(false);
     }
@@ -749,7 +745,7 @@ internal sealed class KeriKeyEventLogReplayTests
     {
         int length = Encoding.UTF8.GetByteCount(serialization);
         IMemoryOwner<byte> owner = BaseMemoryPool.Shared.Rent(length);
-        Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
+        _ = Encoding.UTF8.GetBytes(serialization, owner.Memory.Span);
 
         return new MintedEvent(owner, length, said);
     }

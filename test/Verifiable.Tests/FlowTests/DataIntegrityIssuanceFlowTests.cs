@@ -2,15 +2,12 @@ using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Verifiable.Core;
-using Verifiable.Core.Model.Credentials;
-using Verifiable.Core.Model.DataIntegrity;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods.Key;
 using Verifiable.Core.Did.Methods.Web;
-using Verifiable.Core.Resolvers;
+using Verifiable.Core.Model.Credentials;
+using Verifiable.Core.Model.DataIntegrity;
 using Verifiable.Cryptography;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -118,7 +115,7 @@ internal sealed class DataIntegrityIssuanceFlowTests
 
     //Canonicalization/signing here is in-memory; a default context yields the
     //secure-default SSRF policy and satisfies the policy-carrying parameter.
-    private static ExchangeContext EmptyContext { get; } = new();
+    private static ExchangeContext EmptyContext { get; } = [];
 
 
     /// <summary>

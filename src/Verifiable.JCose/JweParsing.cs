@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
@@ -130,7 +129,7 @@ public static class JweParsing
             //as it appeared on the wire, per RFC 7516 §5.1 step 14.
             int aadByteCount = Encoding.ASCII.GetByteCount(headerSpan);
             IMemoryOwner<byte> aadOwner = pool.Rent(aadByteCount);
-            Encoding.ASCII.GetBytes(headerSpan, aadOwner.Memory.Span);
+            _ = Encoding.ASCII.GetBytes(headerSpan, aadOwner.Memory.Span);
             aad = new AdditionalData(aadOwner, CryptoTags.AesGcmAad);
 
             using IMemoryOwner<byte> headerOwner = base64UrlDecoder(headerSpan.ToString(), pool);
@@ -148,7 +147,7 @@ public static class JweParsing
             ciphertext = DecodeCiphertext(ciphertextSpan.ToString(), base64UrlDecoder, pool);
             authTag = DecodeAuthTag(authTagSpan.ToString(), base64UrlDecoder, pool);
 
-            AeadMessage result = new AeadMessage(
+            AeadMessage result = new(
                 header, epk, iv, ciphertext, authTag, aad, expectedEncryption);
 
             //Ownership transferred to AeadMessage.

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Verifiable.Foundation.Automata;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Siop.Server.States;
 

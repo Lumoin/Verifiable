@@ -2,13 +2,11 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
 using Verifiable.Json;
-using Verifiable.Microsoft;
 using Verifiable.Tests.TestDataProviders;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -159,7 +157,7 @@ internal sealed class JAdESSignatureFullHouseFlowTests
             Assert.IsTrue(result.IsValid, $"Expected {format} to validate: {result.Failure?.Message}");
             Assert.IsNotNull(result.Verified);
 
-            JAdESProtectedHeaders decoded = result.Verified!.Value.Value.Headers;
+            JAdESProtectedHeaders decoded = result.Verified.Value.Value.Headers;
 
             Assert.AreEqual(WellKnownJwaValues.Es256, decoded.Algorithm);
             Assert.AreEqual(expectedContentType, decoded.ContentType);
@@ -170,30 +168,30 @@ internal sealed class JAdESSignatureFullHouseFlowTests
             Assert.AreEqual(TestClock.CanonicalEpoch.ToUnixTimeSeconds(), decoded.SigT?.Value.ToUnixTimeSeconds());
 
             Assert.IsNotNull(decoded.SignerCommitments);
-            Assert.HasCount(1, decoded.SignerCommitments!.Commitments);
+            Assert.HasCount(1, decoded.SignerCommitments.Commitments);
             Assert.AreEqual(expectedCommitmentId, decoded.SignerCommitments.Commitments[0].CommitmentId.Id);
 
             Assert.IsNotNull(decoded.SignatureProductionPlace);
-            Assert.AreEqual(expectedLocality, decoded.SignatureProductionPlace!.AddressLocality);
+            Assert.AreEqual(expectedLocality, decoded.SignatureProductionPlace.AddressLocality);
             Assert.AreEqual(expectedCountry, decoded.SignatureProductionPlace.AddressCountry);
 
             Assert.IsNotNull(decoded.SignerAttributes);
-            Assert.IsNotNull(decoded.SignerAttributes!.Claimed);
-            Assert.HasCount(1, decoded.SignerAttributes.Claimed!);
+            Assert.IsNotNull(decoded.SignerAttributes.Claimed);
+            Assert.HasCount(1, decoded.SignerAttributes.Claimed);
             var claimedAttribute = (JAdESQualifyingAttribute)decoded.SignerAttributes.Claimed[0];
             Assert.AreEqual(expectedClaimedMediaType, claimedAttribute.MediaType);
             Assert.AreEqual(expectedClaimedEncoding, claimedAttribute.Encoding);
 
             Assert.IsNotNull(decoded.PayloadTimestamps);
-            Assert.HasCount(1, decoded.PayloadTimestamps!.TstTokens);
+            Assert.HasCount(1, decoded.PayloadTimestamps.TstTokens);
             Assert.IsTrue(timestampTokenDerBytes.AsSpan().SequenceEqual(decoded.PayloadTimestamps.TstTokens[0].Val.Span));
             Assert.IsNull(decoded.PayloadTimestamps.CanonAlg);
 
             Assert.IsNotNull(decoded.SignaturePolicyIdentifier);
-            Assert.AreEqual(expectedPolicyId, decoded.SignaturePolicyIdentifier!.Id.Id);
+            Assert.AreEqual(expectedPolicyId, decoded.SignaturePolicyIdentifier.Id.Id);
 
             Assert.IsNotNull(result.Verified.Value.Value.UnsignedHeaders);
-            Assert.AreEqual(1, result.Verified.Value.Value.UnsignedHeaders!.Count);
+            Assert.AreEqual(1, result.Verified.Value.Value.UnsignedHeaders.Count);
             Assert.AreEqual(JAdESUnsignedHeaderElement.CounterSignatureKind, result.Verified.Value.Value.UnsignedHeaders[0].Kind);
         }
     }

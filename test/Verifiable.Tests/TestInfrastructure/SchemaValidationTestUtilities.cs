@@ -1,5 +1,3 @@
-using Lumoin.Base;
-using Lumoin.Veritas.Core;
 using Lumoin.Veritas.Json.Stj;
 using Lumoin.Veritas.JsonSchema;
 using System.Text.Json;
@@ -123,7 +121,7 @@ internal static class SchemaValidationTestUtilities
     //The declared dialect matches a supported version, ignoring an empty fragment.
     private static bool IsSupportedVersion(string declaredVersion)
     {
-        string normalized = declaredVersion.EndsWith('#') ? declaredVersion[..^1] : declaredVersion;
+        string normalized = declaredVersion.EndsWith('#', StringComparison.Ordinal) ? declaredVersion[..^1] : declaredVersion;
 
         return SupportedSchemaVersions.Contains(normalized, StringComparer.Ordinal);
     }

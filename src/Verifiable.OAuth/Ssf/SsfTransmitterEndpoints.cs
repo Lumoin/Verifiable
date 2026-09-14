@@ -5,7 +5,6 @@ using Verifiable.JCose;
 using Verifiable.OAuth.ProtectedResource;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Pipeline;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Ssf;
 
@@ -347,6 +346,17 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.InvalidRequest, "The Transmitter does not support multiple streams per Receiver.")),
                     SsfStreamWriteOutcome.Forbidden => (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.UnauthorizedClient, "The Receiver is not allowed to create a stream.")),
+
+                    //Accepted, InvalidProperties, and NotFound are not outcomes a create can produce,
+                    //but the delegate's declared return type still admits them, so they share the
+                    //generic-invalid response rather than a 500 for an outcome no create rule uses.
+                    SsfStreamWriteOutcome.Accepted => (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The Create Stream request is invalid.")),
+                    SsfStreamWriteOutcome.InvalidProperties => (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The Create Stream request is invalid.")),
+                    SsfStreamWriteOutcome.NotFound => (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The Create Stream request is invalid.")),
+
                     _ => (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "The Create Stream request is invalid."))
                 };
@@ -481,6 +491,17 @@ public static class SsfTransmitterEndpoints
                     SsfStreamWriteOutcome.NotFound => (null, ServerHttpResponse.NotFound()),
                     SsfStreamWriteOutcome.Forbidden => (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.UnauthorizedClient, "The Receiver is not allowed to update the stream.")),
+                    SsfStreamWriteOutcome.InvalidProperties => (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "A Transmitter-Supplied property is incorrect or the request is otherwise invalid.")),
+
+                    //Conflict is not an outcome an update can produce, but the delegate's declared
+                    //return type still admits it, so it shares the generic-invalid response rather
+                    //than a 500 for an outcome no update rule uses.
+                    SsfStreamWriteOutcome.Conflict => (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest,
+                        "A Transmitter-Supplied property is incorrect or the request is otherwise invalid.")),
+
                     _ => (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest,
                         "A Transmitter-Supplied property is incorrect or the request is otherwise invalid."))
@@ -533,6 +554,15 @@ public static class SsfTransmitterEndpoints
                     SsfStreamWriteOutcome.Success => (null, ServerHttpResponse.NoContent()),
                     SsfStreamWriteOutcome.Forbidden => (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.UnauthorizedClient, "The Receiver is not allowed to delete the stream.")),
+                    SsfStreamWriteOutcome.NotFound => (null, ServerHttpResponse.NotFound()),
+
+                    //Accepted, InvalidProperties, and Conflict are not outcomes a delete can produce,
+                    //but the delegate's declared return type still admits them, so they share
+                    //NotFound's response rather than a 500 for an outcome no delete rule uses.
+                    SsfStreamWriteOutcome.Accepted => (null, ServerHttpResponse.NotFound()),
+                    SsfStreamWriteOutcome.InvalidProperties => (null, ServerHttpResponse.NotFound()),
+                    SsfStreamWriteOutcome.Conflict => (null, ServerHttpResponse.NotFound()),
+
                     _ => (null, ServerHttpResponse.NotFound())
                 };
             },
@@ -645,6 +675,9 @@ public static class SsfTransmitterEndpoints
                     SsfStreamOperationOutcome.NotFound => (null, ServerHttpResponse.NotFound()),
                     SsfStreamOperationOutcome.Forbidden => (null, ServerHttpResponse.Forbidden(
                         OAuthErrors.UnauthorizedClient, "The Receiver is not allowed to update the stream status.")),
+                    SsfStreamOperationOutcome.TooManyRequests => (null, ServerHttpResponse.BadRequest(
+                        OAuthErrors.InvalidRequest, "The status update request is invalid.")),
+
                     _ => (null, ServerHttpResponse.BadRequest(
                         OAuthErrors.InvalidRequest, "The status update request is invalid."))
                 };
@@ -708,6 +741,13 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.UnauthorizedClient, "The Receiver is not allowed to add this subject.")),
                     SsfStreamOperationOutcome.TooManyRequests => (null, ServerHttpResponse.TooManyRequests(
                         OAuthErrors.InvalidRequest, "Too many subject requests; retry later.")),
+                    SsfStreamOperationOutcome.NotFound => (null, ServerHttpResponse.NotFound()),
+
+                    //Accepted is not an outcome an add can produce, but the delegate's declared
+                    //return type still admits it, so it shares NotFound's response rather than a
+                    //500 for an outcome no add rule uses.
+                    SsfStreamOperationOutcome.Accepted => (null, ServerHttpResponse.NotFound()),
+
                     _ => (null, ServerHttpResponse.NotFound())
                 };
             },
@@ -769,6 +809,13 @@ public static class SsfTransmitterEndpoints
                         OAuthErrors.UnauthorizedClient, "The Receiver is not allowed to remove this subject.")),
                     SsfStreamOperationOutcome.TooManyRequests => (null, ServerHttpResponse.TooManyRequests(
                         OAuthErrors.InvalidRequest, "Too many subject requests; retry later.")),
+                    SsfStreamOperationOutcome.NotFound => (null, ServerHttpResponse.NotFound()),
+
+                    //Accepted is not an outcome a remove can produce, but the delegate's declared
+                    //return type still admits it, so it shares NotFound's response rather than a
+                    //500 for an outcome no remove rule uses.
+                    SsfStreamOperationOutcome.Accepted => (null, ServerHttpResponse.NotFound()),
+
                     _ => (null, ServerHttpResponse.NotFound())
                 };
             },
@@ -830,6 +877,14 @@ public static class SsfTransmitterEndpoints
                     SsfStreamOperationOutcome.TooManyRequests => (null, ServerHttpResponse.TooManyRequests(
                         OAuthErrors.InvalidRequest,
                         "Verification requested more frequently than min_verification_interval permits.")),
+                    SsfStreamOperationOutcome.NotFound => (null, ServerHttpResponse.NotFound()),
+
+                    //Accepted and Forbidden are not outcomes a verification trigger can produce,
+                    //but the delegate's declared return type still admits them, so they share
+                    //NotFound's response rather than a 500 for an outcome no trigger rule uses.
+                    SsfStreamOperationOutcome.Accepted => (null, ServerHttpResponse.NotFound()),
+                    SsfStreamOperationOutcome.Forbidden => (null, ServerHttpResponse.NotFound()),
+
                     _ => (null, ServerHttpResponse.NotFound())
                 };
             },
@@ -880,6 +935,9 @@ public static class SsfTransmitterEndpoints
             SsfRequestAuthorization.Authorized => null,
             SsfRequestAuthorization.Forbidden => ServerHttpResponse.Forbidden(
                 OAuthErrors.InvalidScope, "The granted scope does not permit this operation."),
+            SsfRequestAuthorization.Unauthorized => await UnauthorizedWithChallengeAsync(
+                server, registration, context, cancellationToken).ConfigureAwait(false),
+
             _ => await UnauthorizedWithChallengeAsync(
                 server, registration, context, cancellationToken).ConfigureAwait(false)
         };

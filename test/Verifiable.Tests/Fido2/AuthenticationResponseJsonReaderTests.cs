@@ -1,5 +1,4 @@
 using System.Text;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Json;
 
@@ -43,7 +42,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
         Assert.IsTrue(envelope.AuthenticatorData.AsReadOnlySpan().SequenceEqual(expectedAuthenticatorData));
         Assert.IsTrue(envelope.Signature.AsReadOnlySpan().SequenceEqual(expectedSignature));
         Assert.IsNotNull(envelope.UserHandle);
-        Assert.IsTrue(envelope.UserHandle!.AsReadOnlySpan().SequenceEqual(expectedUserHandle));
+        Assert.IsTrue(envelope.UserHandle.AsReadOnlySpan().SequenceEqual(expectedUserHandle));
         Assert.AreEqual(WellKnownAuthenticatorAttachments.CrossPlatform, envelope.AuthenticatorAttachment);
     }
 
@@ -84,7 +83,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = """{"id":"AQIDBAUGBwg","rawId":"AQIDBAUGBwg","clientExtensionResults":{},"type":"public-key"}""";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -94,7 +93,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace(",\"signature\":\"Hh8gISIjJCUmJygpKg\"", string.Empty, System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -104,7 +103,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"type\":\"public-key\"", "\"type\":\"webauthn.get\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -116,7 +115,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
             .Replace("\"id\":\"AQIDBAUGBwg\"", "\"id\":\"AQIDBAUGBwg==\"", System.StringComparison.Ordinal)
             .Replace("\"rawId\":\"AQIDBAUGBwg\"", "\"rawId\":\"AQIDBAUGBwg==\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -126,7 +125,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"signature\":\"Hh8gISIjJCUmJygpKg\"", "\"signature\":\"not base64url!!\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -136,7 +135,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"rawId\":\"AQIDBAUGBwg\"", "\"rawId\":\"CQkJ\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -146,7 +145,7 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument.Replace("\"type\":\"public-key\"", "\"type\":\"public-key\",\"type\":\"public-key\"", System.StringComparison.Ordinal);
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 
 
@@ -156,6 +155,6 @@ internal sealed class AuthenticationResponseJsonReaderTests
     {
         string json = FullyPopulatedDocument + " garbage";
 
-        Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
+        _ = Assert.ThrowsExactly<Fido2FormatException>(() => AuthenticationResponseJsonReader.Read(Encoding.UTF8.GetBytes(json), BaseMemoryPool.Shared));
     }
 }

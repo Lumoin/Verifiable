@@ -138,7 +138,7 @@ namespace Verifiable.Tests.Did
 
         [TestMethod]
         public void EqualsWithNullObjectReturnsFalse()
-        {            
+        {
             Assert.IsFalse(Result1.Equals(null));
         }
 

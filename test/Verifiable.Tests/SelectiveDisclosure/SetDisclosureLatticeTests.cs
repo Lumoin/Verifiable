@@ -32,7 +32,7 @@ internal sealed class SetDisclosureLatticeTests
         var allClaims = new HashSet<int> { 1, 2, 3 };
         var mandatoryClaims = new HashSet<int> { 1, 4 };
 
-        Assert.Throws<ArgumentException>(() => new SetDisclosureLattice<int>(allClaims, mandatoryClaims));
+        _ = Assert.Throws<ArgumentException>(() => new SetDisclosureLattice<int>(allClaims, mandatoryClaims));
     }
 
 

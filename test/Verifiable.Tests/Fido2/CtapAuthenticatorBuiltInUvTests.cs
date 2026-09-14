@@ -1,18 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using Verifiable.Cbor.Ctap;
 using Verifiable.Cbor.Fido2;
-using Verifiable.Cryptography;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 using Verifiable.Fido2.Ctap.Authenticator.Automata;
 using Verifiable.Foundation.Automata;
 using Verifiable.Tests.TestInfrastructure;
-using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 using static Verifiable.Tests.TestInfrastructure.CtapBioEnrollmentFixtures;
+using static Verifiable.Tests.TestInfrastructure.CtapMakeCredentialGetAssertionFixtures;
 
 namespace Verifiable.Tests.Fido2;
 
@@ -66,7 +61,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task GetPinUvAuthTokenUsingUvWithPermissionsWithoutEnrollmentsReturnsNotAllowed()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("0x06-not-configured",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("0x06-not-configured", BaseMemoryPool.Shared);
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
 
         byte status = await SendUvTokenRequestExpectingErrorAsync(simulator, pool, WellKnownCtapPinUvAuthTokenPermissions.Be);
@@ -328,7 +323,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task MakeCredentialOptionsUvTrueWithoutEnrollmentReturnsInvalidOption()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-uv-unconfigured",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-uv-unconfigured", BaseMemoryPool.Shared);
         await CtapConfigFixtures.EstablishPinAsync(simulator, pool, DefaultProtocol, DefaultPin, TestContext.CancellationToken);
 
         CtapMakeCredentialRequest request = BuildMakeCredentialRequest(pool, options: new CtapCommandOptions(UserVerification: true));
@@ -412,7 +407,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task MakeCredentialAlwaysUvForcesBuiltInUvWhenNeitherParamNorUvRequested()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-alwaysuv-forced-uv",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("mc-alwaysuv-forced-uv", BaseMemoryPool.Shared);
 
         var enableRequest = new CtapAuthenticatorConfigRequest(SubCommand: WellKnownCtapAuthenticatorConfigSubCommands.ToggleAlwaysUv);
         using(PooledMemory enableResponse = await CtapConfigFixtures.SendAuthenticatorConfigAsync(simulator, enableRequest, pool, TestContext.CancellationToken))
@@ -449,7 +444,7 @@ internal sealed class CtapAuthenticatorBuiltInUvTests
     public async Task GetAssertionLevelThreeCredProtectInvisibleWithoutUvVisibleThroughBuiltInUv()
     {
         BaseMemoryPool pool = BaseMemoryPool.Shared;
-        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-level3-credprotect-uv",BaseMemoryPool.Shared);
+        using CtapAuthenticatorSimulator simulator = CreateSimulator("ga-level3-credprotect-uv", BaseMemoryPool.Shared);
 
         CtapRegisteredCredential registered = await RegisterCredentialAsync(
             simulator, pool, BuildFixedBytes(16, 0x60), TestContext.CancellationToken, credProtect: 3);

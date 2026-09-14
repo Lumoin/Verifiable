@@ -1,5 +1,3 @@
-using System;
-using Lumoin.Base;
 using Verifiable.Acdc;
 
 namespace Verifiable.Tests.Acdc;

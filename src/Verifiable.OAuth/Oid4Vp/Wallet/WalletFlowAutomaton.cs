@@ -1,7 +1,5 @@
 using Verifiable.Foundation.Automata;
-using Verifiable.OAuth.AuthCode.States;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
-using Verifiable.OAuth.Server;
 
 namespace Verifiable.OAuth.Oid4Vp.Wallet;
 

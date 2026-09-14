@@ -1,7 +1,5 @@
-using System.Buffers;
 using System.Diagnostics;
 using Verifiable.Core.Model.DataIntegrity;
-using Verifiable.Core.Model.Did;
 using Verifiable.Cryptography;
 
 namespace Verifiable.Core.Model.Credentials;

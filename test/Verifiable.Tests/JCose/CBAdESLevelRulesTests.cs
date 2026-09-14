@@ -1,15 +1,10 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cbor;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.JCose;
 
@@ -112,7 +107,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESSignatureTimestampTokenCountViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(2, violation!.TokenCount);
+        Assert.AreEqual(2, violation.TokenCount);
     }
 
 
@@ -136,7 +131,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESTimestampTokenNotBaselineViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESTimestampContainerKind.SignatureTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampContainerKind.SignatureTimestamp, violation.Kind);
     }
 
 
@@ -158,7 +153,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESTimestampTokenNotBaselineViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESTimestampContainerKind.ArchiveTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampContainerKind.ArchiveTimestamp, violation.Kind);
     }
 
 
@@ -184,7 +179,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESTimestampTokenNotBaselineViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESTimestampContainerKind.PayloadTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESTimestampContainerKind.PayloadTimestamp, violation.Kind);
     }
 
 
@@ -218,7 +213,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESRefsFamilyForbiddenViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESRefsFamilyKind.References, violation!.Kind);
+        Assert.AreEqual(CBAdESRefsFamilyKind.References, violation.Kind);
         Assert.AreEqual("CB-6.3-23", violation.RequirementId);
     }
 
@@ -241,7 +236,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESRefsFamilyForbiddenViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESRefsFamilyKind.SignatureAndReferencesTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESRefsFamilyKind.SignatureAndReferencesTimestamp, violation.Kind);
         Assert.AreEqual("CB-6.3-24", violation.RequirementId);
     }
 
@@ -264,7 +259,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESRefsFamilyForbiddenViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESRefsFamilyKind.ReferencesTimestamp, violation!.Kind);
+        Assert.AreEqual(CBAdESRefsFamilyKind.ReferencesTimestamp, violation.Kind);
         Assert.AreEqual("CB-6.3-25", violation.RequirementId);
     }
 
@@ -302,7 +297,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESReferencesTimestampGenerationGateViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESReferencesTimestampGenerationKind.SignatureAndReferences, violation!.Kind);
+        Assert.AreEqual(CBAdESReferencesTimestampGenerationKind.SignatureAndReferences, violation.Kind);
         Assert.AreEqual("CB-A.1.2.1-03", violation.RequirementId);
     }
 
@@ -348,7 +343,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESReferencesTimestampGenerationGateViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESReferencesTimestampGenerationKind.ReferencesOnly, violation!.Kind);
+        Assert.AreEqual(CBAdESReferencesTimestampGenerationKind.ReferencesOnly, violation.Kind);
         Assert.AreEqual("CB-A.1.2.2-03", violation.RequirementId);
     }
 
@@ -624,7 +619,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESRefsFamilyMd5DigestAlgorithmViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESRefsFamilyDigestSurface.CertificateReferenceThumbprint, violation!.Surface);
+        Assert.AreEqual(CBAdESRefsFamilyDigestSurface.CertificateReferenceThumbprint, violation.Surface);
     }
 
 
@@ -651,7 +646,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESRefsFamilyMd5DigestAlgorithmViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESRefsFamilyDigestSurface.CrlReferenceDigest, violation!.Surface);
+        Assert.AreEqual(CBAdESRefsFamilyDigestSurface.CrlReferenceDigest, violation.Surface);
     }
 
 
@@ -679,7 +674,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESRefsFamilyMd5DigestAlgorithmViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESRefsFamilyDigestSurface.OcspReferenceDigest, violation!.Surface);
+        Assert.AreEqual(CBAdESRefsFamilyDigestSurface.OcspReferenceDigest, violation.Surface);
     }
 
 
@@ -802,7 +797,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESReferencesValidationDataConsistencyViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESReferenceMaterialKind.Certificate, violation!.Kind);
+        Assert.AreEqual(CBAdESReferenceMaterialKind.Certificate, violation.Kind);
     }
 
 
@@ -836,7 +831,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESReferencesValidationDataConsistencyViolation>(violations);
         Assert.IsNotNull(violation);
-        Assert.AreEqual(CBAdESReferenceMaterialKind.Ocsp, violation!.Kind);
+        Assert.AreEqual(CBAdESReferenceMaterialKind.Ocsp, violation.Kind);
     }
 
 
@@ -869,7 +864,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var violation = FindViolation<CBAdESReferencesValidationDataConsistencyViolation>(violations);
         Assert.IsNotNull(violation, "An unrecognized digest algorithm must fail closed as unresolved, not silently pass.");
-        Assert.AreEqual(CBAdESReferenceMaterialKind.Crl, violation!.Kind);
+        Assert.AreEqual(CBAdESReferenceMaterialKind.Crl, violation.Kind);
     }
 
 
@@ -951,7 +946,7 @@ internal sealed class CBAdESLevelRulesTests
         {
             Assert.IsTrue(result.IsSuccess);
             Assert.IsNotNull(result.RawUnsignedHeaders);
-            Assert.IsTrue(uHeadersArrayBytes.AsSpan().SequenceEqual(result.RawUnsignedHeaders!.AsReadOnlySpan()),
+            Assert.IsTrue(uHeadersArrayBytes.AsSpan().SequenceEqual(result.RawUnsignedHeaders.AsReadOnlySpan()),
                 "RawUnsignedHeaders must reproduce the wire uHeaders array bytes exactly.");
         }
     }
@@ -1132,7 +1127,7 @@ internal sealed class CBAdESLevelRulesTests
         var docOrLocalUriWriter = new CborWriter(docOrLocalUriWriterBuffer, CborOptions.RfcCanonical);
         docOrLocalUriWriter.WriteStartMap(1);
         docOrLocalUriWriter.WriteInt32(2);
-        docOrLocalUriWriter.WriteTag(new CborTag((ulong)32));
+        docOrLocalUriWriter.WriteTag(new CborTag(32));
         docOrLocalUriWriter.WriteTextString("https://policy.example.org/sp");
         docOrLocalUriWriter.WriteEndMap();
         byte[] docOrLocalUriBytes = docOrLocalUriWriterBuffer.WrittenSpan.ToArray();
@@ -1186,7 +1181,7 @@ internal sealed class CBAdESLevelRulesTests
 
         var messageWriterBuffer = new ArrayBufferWriter<byte>();
         var messageWriter = new CborWriter(messageWriterBuffer, CborOptions.RfcCanonical);
-        messageWriter.WriteTag(new CborTag((ulong)18)); //COSE_Sign1_Tagged (RFC 9052 section 2, clause 4.3).
+        messageWriter.WriteTag(new CborTag(18)); //COSE_Sign1_Tagged (RFC 9052 section 2, clause 4.3).
         messageWriter.WriteStartArray(4);
         messageWriter.WriteByteString(protectedHeaderBytes);
 

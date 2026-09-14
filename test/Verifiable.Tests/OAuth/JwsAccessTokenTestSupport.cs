@@ -60,6 +60,7 @@ internal static class JwsAccessTokenTestSupport
         JsonValueKind.Null => null,
         JsonValueKind.Array => ConvertArray(element),
         JsonValueKind.Object => ConvertObject(element),
+        JsonValueKind.Undefined => null,
         _ => null,
     };
 

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Core;
 
 namespace Verifiable.OAuth;
 

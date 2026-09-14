@@ -1,7 +1,4 @@
-using System;
 using System.Buffers;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Apdu.Pace;
 using Verifiable.Apdu.SecureMessaging;
 using Verifiable.Cryptography;
@@ -189,7 +186,7 @@ public static class ChipAuthentication
     /// <summary>
     /// Resolves a registered delegate or throws.
     /// </summary>
-    private static TDelegate Resolve<TDelegate>() where TDelegate: Delegate =>
+    private static TDelegate Resolve<TDelegate>() where TDelegate : Delegate =>
         CryptographicKeyFactory.GetFunction<TDelegate>(typeof(TDelegate))
             ?? throw new InvalidOperationException($"No {typeof(TDelegate).Name} has been registered.");
 }

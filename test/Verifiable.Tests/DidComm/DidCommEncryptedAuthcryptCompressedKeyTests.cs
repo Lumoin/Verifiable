@@ -1,17 +1,12 @@
 using System.Buffers;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -35,7 +30,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //The protected-header serializer: the headers are a Dictionary<string, object> the JWE layer hands to
     //this delegate to produce the UTF-8 JSON bytes.
@@ -228,7 +223,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
 
         IMemoryOwner<byte> compressedOwner = Pool.Rent(compressedBytes.Length);
         compressedBytes.CopyTo(compressedOwner.Memory.Span);
-        using PublicKeyMemory compressedRecipient = new PublicKeyMemory(compressedOwner, compressedTag);
+        using PublicKeyMemory compressedRecipient = new(compressedOwner, compressedTag);
 
         DidCommMessage message = NewMessage([BobDid]);
 
@@ -302,7 +297,7 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
     private static void AssertRecoveredMessage(DidCommMessage? recovered, IList<string>? expectedTo)
     {
         Assert.IsNotNull(recovered);
-        Assert.AreEqual(MessageId, recovered!.Id);
+        Assert.AreEqual(MessageId, recovered.Id);
         Assert.AreEqual(MessageType, recovered.Type);
         Assert.AreEqual(AliceDid, recovered.From);
 
@@ -313,15 +308,15 @@ internal sealed class DidCommEncryptedAuthcryptCompressedKeyTests
         else
         {
             Assert.IsNotNull(recovered.To);
-            Assert.HasCount(expectedTo.Count, recovered.To!);
+            Assert.HasCount(expectedTo.Count, recovered.To);
             for(int i = 0; i < expectedTo.Count; ++i)
             {
-                Assert.AreEqual(expectedTo[i], recovered.To![i]);
+                Assert.AreEqual(expectedTo[i], recovered.To[i]);
             }
         }
 
         Assert.IsNotNull(recovered.Body);
-        Assert.IsTrue(recovered.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(recovered.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 

@@ -1,8 +1,4 @@
-using System;
 using System.Buffers;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Cryptography.Pki;
@@ -319,9 +315,9 @@ public static class JAdESSignatureFacts
                         CopyValidationData(GetDecodedValue(tstVD.Carriage), certificates, revocationLists, ocspResponses, pool);
                         break;
 
-                    //axVals/arVals (attribute-certificate material), xRefs/rRefs/axRefs/arRefs (digest-only
-                    //references), sigPSt, and cSig are the disclosed residue named in the type remarks -- not
-                    //decoded into these facts.
+                        //axVals/arVals (attribute-certificate material), xRefs/rRefs/axRefs/arRefs (digest-only
+                        //references), sigPSt, and cSig are the disclosed residue named in the type remarks -- not
+                        //decoded into these facts.
                 }
             }
         }

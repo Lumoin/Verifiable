@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Net;
-using System.Threading;
-using System.Threading.Tasks;
 using Verifiable.Core.OutboundFetch;
 
 namespace Verifiable.Tests.TestInfrastructure;
@@ -19,9 +15,9 @@ internal sealed class SsrfBlockedException: Exception
 {
     public SsrfBlockedException() { }
 
-    public SsrfBlockedException(string message): base(message) { }
+    public SsrfBlockedException(string message) : base(message) { }
 
-    public SsrfBlockedException(string message, Exception innerException): base(message, innerException) { }
+    public SsrfBlockedException(string message, Exception innerException) : base(message, innerException) { }
 }
 
 

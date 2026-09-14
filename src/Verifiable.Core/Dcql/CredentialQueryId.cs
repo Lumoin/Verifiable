@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
@@ -88,11 +87,7 @@ public sealed record CredentialQueryId
 
         foreach(char character in value)
         {
-            bool isAllowed = (character >= 'A' && character <= 'Z')
-                || (character >= 'a' && character <= 'z')
-                || (character >= '0' && character <= '9')
-                || character == '_'
-                || character == '-';
+            bool isAllowed = character is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_' or '-';
 
             if(!isAllowed)
             {

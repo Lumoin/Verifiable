@@ -1,9 +1,6 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
@@ -92,7 +89,7 @@ internal sealed class PAdESLifecycleMintDisciplineTests
                 [matchingReference], verification, facts, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
 
             Assert.IsNotNull(provenance);
-            Assert.AreEqual(ResolutionSource.CertificateDigest, provenance!.Source);
+            Assert.AreEqual(ResolutionSource.CertificateDigest, provenance.Source);
 
             PkiCertificateMemory differentFactsCertificate = ToCarrier(root.Certificate.RawData);
             using var differentFacts = new PAdESVerifiedSignatureFacts(PAdESReachedLevel.BT, differentFactsCertificate);
@@ -101,7 +98,7 @@ internal sealed class PAdESLifecycleMintDisciplineTests
 
             Verified<PAdESVerifiedSignatureFacts>? minted = Verified<PAdESVerifiedSignatureFacts>.TryCreateBound(facts, provenance);
             Assert.IsNotNull(minted);
-            Assert.IsTrue(minted!.Value.IsIdentityBound);
+            Assert.IsTrue(minted.Value.IsIdentityBound);
         }
         finally
         {

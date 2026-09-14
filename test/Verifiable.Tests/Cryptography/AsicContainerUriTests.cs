@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Cryptography.Pki;
 
 namespace Verifiable.Tests.Cryptography;
@@ -98,7 +97,7 @@ internal sealed class AsicContainerUriTests
     [DataRow("%FF%FE.txt", AsicContainerUriStatus.NotUtf8, DisplayName = "octets that are not UTF-8")]
     [DataRow("", AsicContainerUriStatus.Empty, DisplayName = "an empty reference")]
     [DataRow("/", AsicContainerUriStatus.Empty, DisplayName = "a reference naming nothing but the root")]
-    [DataRow((string?)null, AsicContainerUriStatus.Empty, DisplayName = "no reference at all")]
+    [DataRow(null, AsicContainerUriStatus.Empty, DisplayName = "no reference at all")]
     public void AReferenceNamingSomethingOutsideTheContainerIsRefused(string? reference, AsicContainerUriStatus expected)
     {
         AsicContainerUriResolution resolution = AsicContainerUri.Resolve(reference);

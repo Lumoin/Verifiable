@@ -79,7 +79,7 @@ internal sealed class AttestationObjectCborWriterTests
     [TestMethod]
     public void EmptyAttestationStatementThrowsArgumentException()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AttestationObjectCborWriter.Write(WellKnownWebAuthnAttestationFormats.None, ReadOnlyMemory<byte>.Empty, new byte[] { 0x01 }));
     }
 
@@ -88,7 +88,7 @@ internal sealed class AttestationObjectCborWriterTests
     [TestMethod]
     public void EmptyAuthenticatorDataThrowsArgumentException()
     {
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => AttestationObjectCborWriter.Write(WellKnownWebAuthnAttestationFormats.None, new byte[] { NoneAttestation.CanonicalEmptyMap }, ReadOnlyMemory<byte>.Empty));
     }
 
@@ -97,7 +97,7 @@ internal sealed class AttestationObjectCborWriterTests
     [TestMethod]
     public void NullFormatThrowsArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(
+        _ = Assert.ThrowsExactly<ArgumentNullException>(
             () => AttestationObjectCborWriter.Write(null!, new byte[] { NoneAttestation.CanonicalEmptyMap }, new byte[] { 0x01 }));
     }
 }

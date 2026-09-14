@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Apdu.Lds;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -68,6 +67,13 @@ public sealed class CardVerifiableCertificatePublicKey: IDisposable
         CvcSignatureScheme.RsaPssSha256 => CryptoAlgorithm.RsaSha256Pss,
         CvcSignatureScheme.RsaPkcs1Sha512 => CryptoAlgorithm.RsaSha512,
         CvcSignatureScheme.RsaPssSha512 => CryptoAlgorithm.RsaSha512Pss,
+        CvcSignatureScheme.EcdsaSha1 => null,
+        CvcSignatureScheme.EcdsaSha224 => null,
+        CvcSignatureScheme.EcdsaSha256 => null,
+        CvcSignatureScheme.EcdsaSha384 => null,
+        CvcSignatureScheme.EcdsaSha512 => null,
+        CvcSignatureScheme.RsaPkcs1Sha1 => null,
+        CvcSignatureScheme.RsaPssSha1 => null,
         _ => null
     };
 

@@ -1,6 +1,3 @@
-using System;
-using Verifiable.Tpm.Spec.Structures;
-
 namespace Verifiable.Tpm.Automata;
 
 /// <summary>

@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace Verifiable.Core.Model.Did.CryptographicSuites
 {
     public sealed class JwsVerificationKey2020VerificationMethodTypeInfo: VerificationMethodTypeInfo

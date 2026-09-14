@@ -1,5 +1,3 @@
-using System;
-using Lumoin.Base;
 using Verifiable.Apdu;
 using Verifiable.Apdu.Lds;
 

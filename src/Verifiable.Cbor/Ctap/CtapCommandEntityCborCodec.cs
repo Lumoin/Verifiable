@@ -1,8 +1,5 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Fido2;
 using Verifiable.Fido2.Ctap;
 
@@ -182,17 +179,17 @@ internal static class CtapCommandEntityCborCodec
 
             switch(key)
             {
-                case(IdKey):
+                case IdKey:
                 {
                     idBytes = reader.ReadByteString();
                     break;
                 }
-                case(NameKey):
+                case NameKey:
                 {
                     name = reader.ReadTextString();
                     break;
                 }
-                case(DisplayNameKey):
+                case DisplayNameKey:
                 {
                     displayName = reader.ReadTextString();
                     break;
@@ -269,17 +266,17 @@ internal static class CtapCommandEntityCborCodec
 
             switch(key)
             {
-                case(IdKey):
+                case IdKey:
                 {
                     idBytes = reader.ReadByteString();
                     break;
                 }
-                case(TypeKey):
+                case TypeKey:
                 {
                     type = reader.ReadTextString();
                     break;
                 }
-                case(TransportsKey):
+                case TransportsKey:
                 {
                     transports = ReadStringArray(reader);
                     break;
@@ -355,12 +352,12 @@ internal static class CtapCommandEntityCborCodec
 
             switch(key)
             {
-                case(AlgKey):
+                case AlgKey:
                 {
                     alg = checked((int)reader.ReadInt64());
                     break;
                 }
-                case(TypeKey):
+                case TypeKey:
                 {
                     type = reader.ReadTextString();
                     break;

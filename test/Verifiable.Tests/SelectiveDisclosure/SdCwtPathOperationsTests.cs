@@ -1,10 +1,9 @@
+using Lumoin.Veritas.Cbor;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using Lumoin.Veritas.Cbor;
 using System.Text;
 using Verifiable.Cbor;
 using Verifiable.Core.Model.SelectiveDisclosure;
-using Verifiable.Cryptography;
 using Verifiable.JCose;
 using Verifiable.Tests.TestInfrastructure;
 

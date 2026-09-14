@@ -1,5 +1,5 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core.Dcql;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Client;
@@ -9,7 +9,6 @@ using Verifiable.OAuth.Oid4Vp.States;
 using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Oid4Vp.Wallet.States;
 using Verifiable.OAuth.Server;
-using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
 
@@ -107,7 +106,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
         //verifier PDA advances to VerifierJarServed.
         using HttpResponseMessage jarResponse = await app.Host("default").SharedHttpClient!
             .GetAsync(requestUri, TestContext.CancellationToken).ConfigureAwait(false);
-        jarResponse.EnsureSuccessStatusCode();
+        _ = jarResponse.EnsureSuccessStatusCode();
         string compactJar = await jarResponse.Content
             .ReadAsStringAsync(TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -125,7 +124,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
             },
             TestContext.CancellationToken).ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
+        _ = Assert.IsInstanceOfType<ResponseSent>(result.TerminalState,
             "The cross-device SD-CWT presentation must reach the ResponseSent wallet terminal.");
 
         run.AssertClaims((PresentationVerifiedState)app.GetFlowState(parHandle).State);
@@ -153,16 +152,16 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
             SdCwtVpFixture.BuildSdCwtTrustedAuthoritiesPreparedQuery(SdCwtVpFixture.IssuerId))
             .ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
             "With no trust-evidence resolver wired, the credential carries no OID4VP 1.0 §6.1.1 evidence, so a trusted_authorities constraint fails closed even though iss textually matches.");
         var failed = (VerifierFlowFailedState)state;
         Assert.IsNotNull(failed.Refusal,
             "A refused presentation carries a typed refusal so the direct_post endpoint answers RFC 6749 §4.1.2.1, not 500.");
-        Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
+        Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal.Value.Kind,
             "An unmet trusted_authorities constraint is part of the DCQL query, so the presentation does not satisfy the Authorization Request — RFC 6749 §4.1.2.1 invalid_request.");
         Assert.IsTrue(refusalDetail is not null && refusalDetail.Contains("status 400", StringComparison.Ordinal),
             "The real-wire direct_post refusal answers HTTP 400 (RFC 6749 §4.1.2.1), never 500.");
-        Assert.IsTrue(refusalDetail!.Contains(OAuthErrors.InvalidRequest, StringComparison.Ordinal),
+        Assert.IsTrue(refusalDetail.Contains(OAuthErrors.InvalidRequest, StringComparison.Ordinal),
             "The real-wire refusal body carries the invalid_request error code.");
     }
 
@@ -185,7 +184,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
             SdCwtVpFixture.BuildSdCwtTrustedAuthoritiesPreparedQuery("https://stranger.example.com"))
             .ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
             "An SD-CWT whose issuer is not in trusted_authorities must NOT verify.");
         var failed = (VerifierFlowFailedState)state;
         Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,
@@ -214,7 +213,7 @@ internal sealed class Oid4VpSdCwtFlowIntegrationTests
             SdCwtVpFixture.BuildSdCwtTypeMismatchPreparedQuery())
             .ConfigureAwait(false);
 
-        Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
+        _ = Assert.IsInstanceOfType<VerifierFlowFailedState>(state,
             "A credential whose type is not among the typed query's vct_values does not satisfy the DCQL query, so the verifier refuses it.");
         var failed = (VerifierFlowFailedState)state;
         Assert.AreEqual(VerifierFlowRefusalKind.Unverifiable, failed.Refusal!.Value.Kind,

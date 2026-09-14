@@ -1,17 +1,14 @@
 using System.Buffers;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading.Tasks;
 using Verifiable.BouncyCastle;
 using Verifiable.Core;
-using Verifiable.Core.Model.Did;
 using Verifiable.Core.Did.Methods;
+using Verifiable.Core.Model.Did;
 using Verifiable.Core.Resolvers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Aead;
 using Verifiable.Cryptography.Context;
 using Verifiable.DidComm;
-using Verifiable.Foundation;
 using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.Microsoft;
@@ -37,7 +34,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
     private static BaseMemoryPool Pool { get; } = BaseMemoryPool.Shared;
 
     //A non-network resolution context; it only satisfies the SSRF-policy-carrying parameter.
-    private static ExchangeContext Context { get; } = new();
+    private static ExchangeContext Context { get; } = [];
 
     //The protected-header serializer, mirroring the anoncrypt round-trip tests: the headers are a
     //Dictionary<string, object> the JWE layer hands to this delegate to produce the UTF-8 JSON bytes.
@@ -284,7 +281,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
         //Read the escape-sensitive values through the JSON reader (which unescapes) rather than the raw string.
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(encrypted.AsReadOnlySpan(), "protected"u8);
         Assert.IsNotNull(protectedEncoded);
-        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded!, Pool);
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);
         ReadOnlySpan<byte> header = headerOwner.Memory.Span;
 
         Assert.AreEqual(DidCommMediaTypes.Encrypted, JwkJsonReader.ExtractStringValue(header, "typ"u8), "The authcrypt protected header typ MUST be the encrypted media type.");
@@ -340,7 +337,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
     [TestMethod]
     public async Task PackRejectsMissingFrom()
     {
-        DidCommMessage message = new DidCommMessage { Id = MessageId, Type = MessageType };
+        DidCommMessage message = new() { Id = MessageId, Type = MessageType };
 
         await AssertPackThrowsAsync(message, AliceX25519Skid, WellKnownJweEncryptionAlgorithms.A256CbcHs512, [new GeneralJweRecipientInputSpec(BobKid)]).ConfigureAwait(false);
     }
@@ -590,7 +587,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
 
         var recipients = new List<GeneralJweRecipientInput> { new(BobKid, recipientPublic) };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
             await message.PackAuthcryptAsync(
                 recipients,
                 AliceX25519Skid,
@@ -820,7 +817,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
                 recipients.Add(new GeneralJweRecipientInput(spec.KeyId, r.PublicKey));
             }
 
-            await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+            _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
                 await message.PackAuthcryptAsync(
                     recipients,
                     skid,
@@ -878,7 +875,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
         Assert.IsFalse(result.IsSignedInner, "A non-nested authcrypt message is not signed inner.");
 
         //W6: the proof is IDENTITY-BOUND via BoundProvenance.TryBindByKeyAgreement, not a bare asserted label.
-        Verified<DidCommMessage> verified = result.Verified!.Value;
+        Verified<DidCommMessage> verified = result.Verified.Value;
         Assert.IsTrue(verified.IsIdentityBound, "The authcrypt proof MUST be identity-bound.");
         BoundProvenance provenance = Assert.IsInstanceOfType<BoundProvenance>(verified.Provenance);
         Assert.AreEqual(ResolutionSource.KeyAgreement, provenance.Source);
@@ -892,7 +889,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
     private static void AssertRecoveredMessage(DidCommMessage? recovered, IList<string>? expectedTo)
     {
         Assert.IsNotNull(recovered);
-        Assert.AreEqual(MessageId, recovered!.Id);
+        Assert.AreEqual(MessageId, recovered.Id);
         Assert.AreEqual(MessageType, recovered.Type);
         Assert.AreEqual(AliceDid, recovered.From);
 
@@ -903,15 +900,15 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
         else
         {
             Assert.IsNotNull(recovered.To);
-            Assert.HasCount(expectedTo.Count, recovered.To!);
+            Assert.HasCount(expectedTo.Count, recovered.To);
             for(int i = 0; i < expectedTo.Count; ++i)
             {
-                Assert.AreEqual(expectedTo[i], recovered.To![i]);
+                Assert.AreEqual(expectedTo[i], recovered.To[i]);
             }
         }
 
         Assert.IsNotNull(recovered.Body);
-        Assert.IsTrue(recovered.Body!.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
+        Assert.IsTrue(recovered.Body.TryGetValue("messagespecificattribute", out object? value), "The recovered body MUST carry the attribute.");
         Assert.AreEqual("and its value", value as string);
     }
 
@@ -922,7 +919,7 @@ internal sealed class DidCommEncryptedAuthcryptRoundTripTests
         string? protectedEncoded = JwkJsonReader.ExtractStringValue(encrypted.AsReadOnlySpan(), "protected"u8);
         Assert.IsNotNull(protectedEncoded, "The encrypted envelope MUST carry a 'protected' member.");
 
-        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded!, Pool);
+        using IMemoryOwner<byte> headerOwner = TestSetup.Base64UrlDecoder(protectedEncoded, Pool);
 
         return Encoding.UTF8.GetString(headerOwner.Memory.Span);
     }

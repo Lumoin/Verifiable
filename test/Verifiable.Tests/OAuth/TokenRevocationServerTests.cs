@@ -1,6 +1,5 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
-using Verifiable.Core;
+using System.Collections.Immutable;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
 using Verifiable.Tests.TestInfrastructure;
@@ -63,7 +62,7 @@ internal sealed class TokenRevocationServerTests
                 [OAuthRequestParameterNames.Token] = "access-token-to-kill",
                 [OAuthRequestParameterNames.TokenTypeHint] = "access_token"
             },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         //RFC 7009 §2.2: 200 with an empty body.
@@ -104,7 +103,7 @@ internal sealed class TokenRevocationServerTests
             WellKnownEndpointNames.AuthCodeRevoke,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "some-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(401, response.StatusCode, response.Body);
@@ -138,10 +137,10 @@ internal sealed class TokenRevocationServerTests
 
         ServerHttpResponse first = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeRevoke,
-            "POST", fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            "POST", fields, [], TestContext.CancellationToken).ConfigureAwait(false);
         ServerHttpResponse second = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeRevoke,
-            "POST", fields, new ExchangeContext(), TestContext.CancellationToken).ConfigureAwait(false);
+            "POST", fields, [], TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, first.StatusCode, first.Body);
         Assert.AreEqual(200, second.StatusCode, second.Body);
@@ -171,7 +170,7 @@ internal sealed class TokenRevocationServerTests
             WellKnownEndpointNames.AuthCodeRevoke,
             "POST",
             new RequestFields { [OAuthRequestParameterNames.Token] = "some-token" },
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(404, response.StatusCode,

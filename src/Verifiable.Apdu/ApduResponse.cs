@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
 
@@ -37,7 +36,7 @@ namespace Verifiable.Apdu;
 /// </code>
 /// </remarks>
 [DebuggerDisplay("{DebuggerDisplay,nq}")]
-public sealed class ApduResponse : SensitiveMemory
+public sealed class ApduResponse: SensitiveMemory
 {
     /// <summary>
     /// Initializes a new APDU response with the specified storage.

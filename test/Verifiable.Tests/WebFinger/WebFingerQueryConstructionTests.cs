@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Verifiable.WebFinger;
 
 namespace Verifiable.Tests.WebFinger;
@@ -99,7 +97,7 @@ internal sealed class WebFingerQueryConstructionTests
     [TestMethod]
     public void WF6_NullResourceThrowsArgumentNullException()
     {
-        Assert.ThrowsExactly<ArgumentNullException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
             WebFingerClient.ComputeQueryUri("example.com", null!, []));
     }
 
@@ -113,7 +111,7 @@ internal sealed class WebFingerQueryConstructionTests
     [DataRow("   ")]
     public void WF6_EmptyOrWhitespaceResourceThrowsArgumentException(string resource)
     {
-        Assert.ThrowsExactly<ArgumentException>(() =>
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
             WebFingerClient.ComputeQueryUri("example.com", resource, []));
     }
 

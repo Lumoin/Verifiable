@@ -1,8 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Did.Methods.WebPlus;
 using Verifiable.Core.Model.Common;
@@ -116,7 +113,7 @@ public sealed class DidDocumentConverter: JsonConverter<DidDocument>
             {
                 //An unrecognized member is preserved verbatim as a detached JsonElement (cloned so it outlives
                 //the JsonDocument disposed at the end of this method), so it round-trips byte-faithfully.
-                additionalData ??= new Dictionary<string, object>(StringComparer.Ordinal);
+                additionalData ??= new(StringComparer.Ordinal);
                 additionalData[property.Name] = property.Value.Clone();
             }
         }
@@ -283,7 +280,7 @@ public sealed class DidDocumentConverter: JsonConverter<DidDocument>
     //fidelity is identical to the source-generated path and this converter is not re-entered.
     private static T? Deserialize<T>(JsonElement element, JsonSerializerOptions options)
     {
-        return element.Deserialize((JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+        return element.Deserialize(options.GetTypeInfo<T>());
     }
 
 
@@ -297,6 +294,6 @@ public sealed class DidDocumentConverter: JsonConverter<DidDocument>
         }
 
         writer.WritePropertyName(name);
-        JsonSerializer.Serialize(writer, value, (JsonTypeInfo<T>)options.GetTypeInfo(typeof(T)));
+        JsonSerializer.Serialize(writer, value, options.GetTypeInfo<T>());
     }
 }

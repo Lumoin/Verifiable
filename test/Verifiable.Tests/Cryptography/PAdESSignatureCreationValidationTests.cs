@@ -1,12 +1,8 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.BouncyCastle;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
@@ -252,7 +248,7 @@ internal sealed class PAdESSignatureCreationValidationTests
         using PdfByteSurfaceParseResult located = PdfByteSurfaceReader.Locate(document, BaseMemoryPool.Shared);
         PdfSignatureDictionary signature = located.SignatureDictionaries![0];
 
-        System.Formats.Asn1.AsnDecoder.ReadEncodedValue(
+        _ = System.Formats.Asn1.AsnDecoder.ReadEncodedValue(
             signature.Contents.AsReadOnlySpan(), System.Formats.Asn1.AsnEncodingRules.DER, out _, out _, out int consumed);
 
         int hexStart = signature.ByteRange.GapStart + 1;
@@ -396,7 +392,7 @@ internal sealed class PAdESSignatureCreationValidationTests
             }
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             _ = await PAdESSignatureCreation.SignAsync(request, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);
@@ -425,7 +421,7 @@ internal sealed class PAdESSignatureCreationValidationTests
             }
         };
 
-        await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
+        _ = await Assert.ThrowsExactlyAsync<ArgumentException>(async () =>
         {
             _ = await PAdESSignatureCreation.SignAsync(request, BaseMemoryPool.Shared, TestContext.CancellationToken).ConfigureAwait(false);
         }).ConfigureAwait(false);

@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using Verifiable.Core.Did.Methods;
 using Verifiable.Core.Model.Common;
@@ -203,7 +202,7 @@ internal sealed class DidResolutionResultSerializationTests
 
         DidDereferencingResult roundTripped = JsonSerializerExtensions.Deserialize<DidDereferencingResult>(json, Options)!;
 
-        Assert.IsInstanceOfType<DidDocument>(roundTripped.ContentStream,
+        _ = Assert.IsInstanceOfType<DidDocument>(roundTripped.ContentStream,
             "A DID-document content stream MUST round-trip back as a DidDocument.");
         Assert.AreEqual(SubjectDid, ((DidDocument)roundTripped.ContentStream!).Id?.Id,
             "The round-tripped contentStream document MUST carry the original DID id.");

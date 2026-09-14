@@ -1,12 +1,10 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
-using Verifiable.Microsoft;
 using Verifiable.OAuth.Dpop;
-using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Keys;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -88,7 +86,7 @@ internal sealed class DpopRotationTests
         await DefaultDpopNonceIssuance.IssueAsync(
             DefaultAudience,
             TestTenant,
-            new ExchangeContext(),
+            [],
             (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
             selectHmacKey: null,
             (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
@@ -105,7 +103,7 @@ internal sealed class DpopRotationTests
             nonce,
             DefaultAudience,
             TestTenant,
-            new ExchangeContext(),
+            [],
             (tenantId, ctx, ct) => ValueTask.FromResult(keySet.Snapshot()),
             (kid, tenantId, ctx, ct) => ValueTask.FromResult(keySet.ResolveMaterial(kid)),
             TimeProvider,

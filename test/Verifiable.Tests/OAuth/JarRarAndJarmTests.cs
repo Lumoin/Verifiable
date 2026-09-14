@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
 using System.Text.Json;
@@ -13,7 +12,6 @@ using Verifiable.OAuth.Jarm;
 using Verifiable.OAuth.Oid4Vci;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -76,7 +74,7 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarClient(host);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //OID4VCI 1.0 §13.10: "Long-lived Access Tokens giving access to Credentials MUST not be
         //issued unless sender-constrained." Keep this plain-bearer credential token within the
         //long-lived threshold (lifetimes longer than 5 minutes are considered long lived).
@@ -138,7 +136,7 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarClient(host);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
         //OID4VCI 1.0 §13.10: keep the plain-bearer credential token within the long-lived
         //threshold ("Long-lived Access Tokens giving access to Credentials MUST not be issued
         //unless sender-constrained"; lifetimes longer than 5 minutes are considered long lived).
@@ -168,15 +166,15 @@ internal sealed class JarRarAndJarmTests
                 [OAuthRequestParameterNames.Request] = compactJar,
                 [OAuthRequestParameterNames.ClientId] = ClientId
             },
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode, parResponse.Body);
 
         string marker = "\"request_uri\":\"";
         int start = parResponse.Body.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-        string requestUri = parResponse.Body[start..parResponse.Body.IndexOf('"', start)];
+        string requestUri = parResponse.Body[start..parResponse.Body.IndexOf('"', start, StringComparison.Ordinal)];
 
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId(SubjectId);
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value, WellKnownEndpointNames.AuthCodeAuthorize,
@@ -197,7 +195,7 @@ internal sealed class JarRarAndJarmTests
 
         string responseJwt = Uri.UnescapeDataString(
             ExtractQueryValue(authorizeResponse.Location, "response"));
-        ResolveJarmVerificationKeyDelegate resolver = (_, _, _) =>
+        ValueTask<PublicKeyMemory?> resolver(string _1, string? _2, CancellationToken _3) =>
             ValueTask.FromResult<PublicKeyMemory?>(material.SigningPublicKey);
         JarmResponseValidationResult jarmResult = await JarmResponseValidation.ValidateAsync(
             responseJwt, material.Registration.IssuerUri!.OriginalString, ClientId,
@@ -230,7 +228,7 @@ internal sealed class JarRarAndJarmTests
     {
         await using TestHostShell host = new(TimeProvider);
         using VerifierKeyMaterial material = RegisterJarClient(host);
-        host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
+        _ = host.Server.OAuth().UseDefaultAuthorizationDetailsJsonParsing();
 
         PkceParameters pkce = PkceGeneration.Generate(TestSetup.Base64UrlEncoder, Pool);
         Dictionary<string, object> claims = BuildJarClaims(material, pkce);
@@ -429,7 +427,7 @@ internal sealed class JarRarAndJarmTests
             [WellKnownJoseHeaderNames.Typ] = WellKnownMediaTypes.Jwt.OauthAuthzReqJwt
         };
 
-        JwtPayload payload = new();
+        JwtPayload payload = [];
         foreach(KeyValuePair<string, object> entry in claims)
         {
             payload[entry.Key] = entry.Value;
@@ -451,7 +449,7 @@ internal sealed class JarRarAndJarmTests
     private async ValueTask<ServerHttpResponse> DispatchJarByValueAsync(
         TestHostShell host, VerifierKeyMaterial material, string compactJar)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetSubjectId(SubjectId);
 
         return await host.DispatchAtEndpointAsync(
@@ -481,7 +479,7 @@ internal sealed class JarRarAndJarmTests
                 [OAuthRequestParameterNames.ClientId] = ClientId,
                 [OAuthRequestParameterNames.RedirectUri] = RedirectUri.OriginalString
             },
-            new ExchangeContext(),
+            [],
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
     }
 
@@ -492,7 +490,7 @@ internal sealed class JarRarAndJarmTests
         int start = location.IndexOf(marker, StringComparison.Ordinal);
         Assert.IsGreaterThanOrEqualTo(0, start, $"Location must carry '{name}'. Got: {location}");
         start += marker.Length;
-        int end = location.IndexOf('&', start);
+        int end = location.IndexOf('&', start, StringComparison.Ordinal);
 
         return Uri.UnescapeDataString(end < 0 ? location[start..] : location[start..end]);
     }

@@ -1,6 +1,5 @@
 using System.Text;
 using Verifiable.OAuth.Oid4Vp;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth.Siop;
 
@@ -126,7 +125,7 @@ public static class SiopRequestSerializer
         StringBuilder sb = JsonAppender.Rent();
         try
         {
-            sb.Append('{');
+            _ = sb.Append('{');
             bool first = true;
             JsonAppender.AppendStringArrayField(
                 sb, SiopClientMetadataParameterNames.SubjectSyntaxTypesSupported,
@@ -145,18 +144,18 @@ public static class SiopRequestSerializer
                 {
                     if(!first)
                     {
-                        sb.Append(',');
+                        _ = sb.Append(',');
                     }
 
-                    sb.Append('"');
+                    _ = sb.Append('"');
                     JsonAppender.AppendEscapedString(sb, parameter.Key);
-                    sb.Append("\":");
+                    _ = sb.Append("\":");
                     JsonAppender.AppendValue(sb, parameter.Value);
                     first = false;
                 }
             }
 
-            sb.Append('}');
+            _ = sb.Append('}');
 
             return sb.ToString();
         }
@@ -171,9 +170,9 @@ public static class SiopRequestSerializer
     {
         if(sb.Length > 0)
         {
-            sb.Append('&');
+            _ = sb.Append('&');
         }
 
-        sb.Append(name).Append('=').Append(Uri.EscapeDataString(value));
+        _ = sb.Append(name).Append('=').Append(Uri.EscapeDataString(value));
     }
 }

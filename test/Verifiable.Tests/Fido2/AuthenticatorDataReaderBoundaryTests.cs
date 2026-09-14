@@ -69,12 +69,12 @@ internal sealed class AuthenticatorDataReaderBoundaryTests
         byte[] attestedCredentialData = Concat(new byte[16], credentialIdLengthBytes, new byte[] { 0x01, 0x02 }, new byte[5]);
         byte[] authenticatorData = BuildAuthenticatorData(CreateRpIdHash(), flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit, signCount: 0, attestedCredentialData: attestedCredentialData);
 
-        ReadCredentialPublicKeyDelegate stubReader = source => new CredentialPublicKeyReadResult(new CoseKey(CoseKeyTypes.Symmetric), 1, []);
+        static CredentialPublicKeyReadResult stubReader(ReadOnlyMemory<byte> source) => new(new CoseKey(CoseKeyTypes.Symmetric), 1, []);
 
         Fido2FormatException exception = Assert.ThrowsExactly<Fido2FormatException>(
             () => AuthenticatorDataReader.Read(authenticatorData, stubReader, BaseMemoryPool.Shared));
 
         Assert.Contains("unsupported key type", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.IsInstanceOfType<ArgumentOutOfRangeException>(exception.InnerException);
+        _ = Assert.IsInstanceOfType<ArgumentOutOfRangeException>(exception.InnerException);
     }
 }

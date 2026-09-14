@@ -26,19 +26,19 @@ public static class CredentialAuthorizationDetailComposition
         ArgumentException.ThrowIfNullOrWhiteSpace(credentialConfigurationId);
 
         StringBuilder builder = new();
-        builder.Append("[{\"");
-        builder.Append(AuthorizationDetailsParameterNames.Type).Append("\":\"");
-        builder.Append(AuthorizationDetailsTypeValues.OpenIdCredential).Append("\",\"");
-        builder.Append(Oid4VciCredentialParameterNames.CredentialConfigurationId).Append("\":\"");
-        builder.Append(credentialConfigurationId).Append('"');
+        _ = builder.Append("[{\"");
+        _ = builder.Append(AuthorizationDetailsParameterNames.Type).Append("\":\"");
+        _ = builder.Append(AuthorizationDetailsTypeValues.OpenIdCredential).Append("\",\"");
+        _ = builder.Append(Oid4VciCredentialParameterNames.CredentialConfigurationId).Append("\":\"");
+        _ = builder.Append(credentialConfigurationId).Append('"');
 
         if(credentialIssuerLocation is not null)
         {
-            builder.Append(",\"").Append(AuthorizationDetailsParameterNames.Locations).Append("\":[\"");
-            builder.Append(credentialIssuerLocation.OriginalString).Append("\"]");
+            _ = builder.Append(",\"").Append(AuthorizationDetailsParameterNames.Locations).Append("\":[\"");
+            _ = builder.Append(credentialIssuerLocation.OriginalString).Append("\"]");
         }
 
-        builder.Append("}]");
+        _ = builder.Append("}]");
 
         return builder.ToString();
     }

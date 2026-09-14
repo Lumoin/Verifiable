@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Verifiable.Cryptography.Pki;
@@ -90,7 +88,7 @@ public abstract record AdESRowReference
 /// </summary>
 /// <param name="Clause">The clause identifier, exactly as the table's References column states it.</param>
 [DebuggerDisplay("AdESInternalClauseReference: {Clause}")]
-public sealed record AdESInternalClauseReference(string Clause) : AdESRowReference;
+public sealed record AdESInternalClauseReference(string Clause): AdESRowReference;
 
 
 /// <summary>
@@ -99,7 +97,7 @@ public sealed record AdESInternalClauseReference(string Clause) : AdESRowReferen
 /// <param name="Document">The external document's identifying name.</param>
 /// <param name="Clause">The clause identifier within <paramref name="Document"/>, or <see langword="null"/> when the row cites the whole document.</param>
 [DebuggerDisplay("AdESExternalReference: {Document} {Clause}")]
-public sealed record AdESExternalReference(string Document, string? Clause) : AdESRowReference;
+public sealed record AdESExternalReference(string Document, string? Clause): AdESRowReference;
 
 
 /// <summary>

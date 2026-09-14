@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Time.Testing;
 using System.Collections.Immutable;
 using System.Text.Json;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Core;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -30,11 +30,22 @@ namespace Verifiable.Tests.OAuth;
 [TestClass]
 internal sealed class JwksRotationTests
 {
-    private const string ClientId = "https://verifier.example.com/rotation";
+    /// <summary>
+    /// The shared rotation client identifier used by key-publication and live-alteration fixtures.
+    /// </summary>
+    internal const string ClientId = "https://verifier.example.com/rotation";
 
-    private static Uri BaseUri { get; } = new("https://verifier.example.com/rotation");
 
-    private static ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities { get; } =
+    /// <summary>
+    /// The shared rotation issuer URI used by key-publication and live-alteration fixtures.
+    /// </summary>
+    internal static Uri BaseUri { get; } = new("https://verifier.example.com/rotation");
+
+
+    /// <summary>
+    /// The immutable presentation and JWKS capabilities shared by key-publication and live-alteration fixtures.
+    /// </summary>
+    internal static ImmutableHashSet<CapabilityIdentifier> VerifierCapabilities { get; } =
         ImmutableHashSet.Create(
             WellKnownCapabilityIdentifiers.VcVerifiablePresentation,
             WellKnownCapabilityIdentifiers.OAuthJwksEndpoint);
@@ -140,88 +151,6 @@ internal sealed class JwksRotationTests
 
 
     [TestMethod]
-    public async Task RotationLifecycleEmitsClientUpdatedAtEveryTransition()
-    {
-        await using TestHostShell app = new(TimeProvider);
-
-        List<ClientRegistrationEvent> received = [];
-        using IDisposable subscription = app.Server.Events.Subscribe(
-            new CollectingObserver<ClientRegistrationEvent>(received));
-
-        using VerifierKeyMaterial keys = app.RegisterClient(ClientId, BaseUri, VerifierCapabilities);
-
-        string segment = keys.Registration.TenantId;
-        KeyId keyA = keys.SigningKeyId;
-        KeyId keyB = app.AllocateSigningKey();
-
-        //Stage 1 → Stage 2: Pre-publish. Current = [A], Incoming = [B].
-        app.UpdateSigningKeys(segment, new Dictionary<KeyUsageContext, SigningKeySet>
-        {
-            [KeyUsageContext.JarSigning] = new SigningKeySet
-            {
-                Current = [keyA],
-                Incoming = [keyB]
-            }
-        });
-
-        string[] stage2Kids = await FetchJwksKidsAsync(app, segment, TestContext.CancellationToken)
-            .ConfigureAwait(false);
-        Assert.HasCount(2, stage2Kids,
-            "Stage 2: JWKS must publish both Current (A) and Incoming (B).");
-
-        //Stage 2 → Stage 3: Activate. Current = [B], Retiring = [A].
-        app.UpdateSigningKeys(segment, new Dictionary<KeyUsageContext, SigningKeySet>
-        {
-            [KeyUsageContext.JarSigning] = new SigningKeySet
-            {
-                Current = [keyB],
-                Retiring = [keyA]
-            }
-        });
-
-        string[] stage3Kids = await FetchJwksKidsAsync(app, segment, TestContext.CancellationToken)
-            .ConfigureAwait(false);
-        Assert.HasCount(2, stage3Kids,
-            "Stage 3: JWKS must still publish both B (now Current) and A (now Retiring).");
-
-        //Stage 3 → Stage 4: Drop. Current = [B], Historical = [A].
-        app.UpdateSigningKeys(segment, new Dictionary<KeyUsageContext, SigningKeySet>
-        {
-            [KeyUsageContext.JarSigning] = new SigningKeySet
-            {
-                Current = [keyB],
-                Historical = [keyA]
-            }
-        });
-
-        string[] stage4Kids = await FetchJwksKidsAsync(app, segment, TestContext.CancellationToken)
-            .ConfigureAwait(false);
-        Assert.HasCount(1, stage4Kids,
-            "Stage 4: JWKS must publish only the Current key — Historical keys are not emitted.");
-        Assert.Contains(keyB.Value, stage4Kids,
-            "Stage 4: Current key B must remain in JWKS after A is dropped to Historical.");
-
-        //One ClientRegistered from RegisterClient plus three ClientUpdated from the
-        //three transitions, filtered to this segment. The static event subject is
-        //shared across tests so filter by segment.
-        ClientRegistrationEvent[] forThisSegment = received
-            .Where(e => string.Equals(e.TenantId, segment, StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.HasCount(4, forThisSegment,
-            "Each rotation transition must emit a ClientRegistrationEvent (one initial register, three updates).");
-        Assert.IsInstanceOfType<ClientRegistered>(forThisSegment[0],
-            "The first event for a segment must be ClientRegistered.");
-
-        for(int i = 1; i <= 3; i++)
-        {
-            Assert.IsInstanceOfType<ClientUpdated>(forThisSegment[i],
-                $"Transition {i} must emit ClientUpdated so cache subscribers can invalidate.");
-        }
-    }
-
-
-    [TestMethod]
     public void GetDefaultSigningKeyIdThrowsWhenUsageContextHasNoEntry()
     {
         ClientRecord registration = BuildRegistrationWithAccessTokenIssuanceKey(
@@ -258,12 +187,20 @@ internal sealed class JwksRotationTests
     }
 
 
-    private static async Task<string[]> FetchJwksKidsAsync(
+    /// <summary>
+    /// The in-process JWKS lookup shared by key-publication and live-alteration fixtures.
+    /// It dispatches to the tenant endpoint and extracts key identifiers from its successful response.
+    /// </summary>
+    /// <param name="app">The host serving the registration.</param>
+    /// <param name="segment">The registration tenant identifier.</param>
+    /// <param name="cancellationToken">Cancellation for the dispatch.</param>
+    /// <returns>The key identifiers published by the tenant JWKS endpoint.</returns>
+    internal static async Task<string[]> FetchJwksKidsAsync(
         TestHostShell app,
         string segment,
         CancellationToken cancellationToken)
     {
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetTenantId(segment);
         context.SetIssuer(BaseUri);
 
@@ -299,12 +236,4 @@ internal sealed class JwksRotationTests
                 .Add(KeyUsageContext.AccessTokenIssuance, new SigningKeySet { Current = [keyId] }),
             TokenLifetimes = ImmutableDictionary<string, TimeSpan>.Empty
         };
-
-
-    private sealed class CollectingObserver<T>(List<T> collected): IObserver<T>
-    {
-        public void OnNext(T value) => collected.Add(value);
-        public void OnError(Exception error) { }
-        public void OnCompleted() { }
-    }
 }

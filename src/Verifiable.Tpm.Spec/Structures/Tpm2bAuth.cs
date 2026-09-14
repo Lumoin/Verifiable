@@ -1,7 +1,5 @@
-using System;
 using System.Buffers;
 using System.Diagnostics;
-using Verifiable.Cryptography;
 
 namespace Verifiable.Tpm.Spec.Structures;
 
@@ -115,7 +113,7 @@ public sealed class Tpm2bAuth: SensitiveMemory, ITpmWireType
 
         //Copy auth bytes into owned storage.
         ReadOnlySpan<byte> sourceBytes = reader.ReadBytes(length);
-        sourceBytes.CopyTo(storage.Memory.Span.Slice(0, length));
+        sourceBytes.CopyTo(storage.Memory.Span[..length]);
 
         return new Tpm2bAuth(storage);
     }

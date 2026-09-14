@@ -1,11 +1,8 @@
 using Microsoft.Extensions.Time.Testing;
-using System.Buffers;
 using System.Collections.Immutable;
 using System.Net;
-using System.Net.Http;
 using System.Text;
 using System.Text.Json;
-using Verifiable.Core;
 using Verifiable.Core.Model.SelectiveDisclosure;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
@@ -16,7 +13,6 @@ using Verifiable.Json.Sd;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Dpop;
 using Verifiable.OAuth.Oid4Vp;
-using Verifiable.OAuth.Oid4Vp.Wallet;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Siop;
 using Verifiable.OAuth.Siop.Server.States;
@@ -143,17 +139,17 @@ internal sealed class SiopRealWireFlowTests
 
         Assert.IsTrue(requestUri.IsAbsoluteUri && requestUri.Authority == hosted.HttpBaseAddress!.Authority,
             "The request_uri must resolve against the Kestrel-aligned RP authority.");
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         using HttpResponseMessage requestObjectResponse = await hosted.SharedHttpClient!
             .GetAsync(requestUri, cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        requestObjectResponse.EnsureSuccessStatusCode();
+        _ = requestObjectResponse.EnsureSuccessStatusCode();
         string requestObjectJws = await requestObjectResponse.Content
             .ReadAsStringAsync(cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.HasCount(3, requestObjectJws.Split('.'),
             "The §9 Request Object served over the real GET must be a compact JWS.");
-        Assert.IsInstanceOfType<SiopRequestObjectServedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestObjectServedState>(host.GetFlowState(requestHandle).State);
 
         JwsVerificationResult verification = await Jws.VerifyAndDecodeAsync(
             requestObjectJws, TestSetup.Base64UrlDecoder, PartDecoder, Pool,
@@ -218,7 +214,7 @@ internal sealed class SiopRealWireFlowTests
         string requestHandle = await host.HandleSiopRequestPreparationAsync(
             rpKeys, nonce, RelyingPartyClientId, AllowedSiopAlgorithms,
             cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-        Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+        _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
         var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
         using PublicKeyMemory siopPublic = siopKeys.PublicKey;
@@ -286,7 +282,7 @@ internal sealed class SiopRealWireFlowTests
             string requestHandle = await host.HandleSiopRequestPreparationAsync(
                 rpKeys, nonce, RelyingPartyClientId, AllowedSiopAlgorithms,
                 cancellationToken: TestContext.CancellationToken).ConfigureAwait(false);
-            Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
+            _ = Assert.IsInstanceOfType<SiopRequestPreparedState>(host.GetFlowState(requestHandle).State);
 
             var siopKeys = TestKeyMaterialProvider.CreateFreshP256KeyMaterial();
             using PublicKeyMemory siopPublic = siopKeys.PublicKey;

@@ -1,4 +1,3 @@
-using System.Buffers;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Fido2;
@@ -44,7 +43,7 @@ internal sealed class NoneAttestationTests
 
         AttestationResult result = await verify(request, TestContext.CancellationToken);
 
-        Assert.IsInstanceOfType<NoneAttestationResult>(result);
+        _ = Assert.IsInstanceOfType<NoneAttestationResult>(result);
     }
 
 

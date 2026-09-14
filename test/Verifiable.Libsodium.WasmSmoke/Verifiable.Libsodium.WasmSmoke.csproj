@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <PropertyGroup>
+    <!-- Targets net11.0 like the whole repository (Directory.Build.props) and needs the wasm-tools
+         workload for the native relink (see the wasm-smoke workflow). -->
+    <TargetFramework>net11.0</TargetFramework>
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+
+    <!-- A smoke host, not a shippable library: trim/AOT analyzers and the resource-table rule for
+         console literals (CA1303) would only produce noise here, matching the test projects. -->
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>false</EnableAotAnalyzer>
+    <NoWarn>$(NoWarn);CA1303</NoWarn>
+
+    <!-- Not part of the locked-restore solution build (deliberately absent from Verifiable.slnx):
+         only the wasm-smoke workflow and a manual local run restore this project, on the
+         repository's SDK pin (global.json), whose implicit net11.0 package graph shifts per SDK
+         release, so a committed lock file would churn without adding integrity. Restoring it on
+         that pin leaves the referenced projects' committed packages.lock.json files unchanged. -->
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+  <!-- No NativeFileReference and no -p:LibsodiumStaticLibrary here: Lumoin.Base.Libsodium's own
+       buildTransitive targets already add the package's runtimes/browser-wasm/native/libsodium.a as
+       a NativeFileReference whenever $(RuntimeIdentifier) is browser-wasm, which the wasm SDK then
+       links into dotnet.wasm at publish. -->
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Verifiable.Libsodium/Verifiable.Libsodium.csproj" />
+  </ItemGroup>
+
+</Project>

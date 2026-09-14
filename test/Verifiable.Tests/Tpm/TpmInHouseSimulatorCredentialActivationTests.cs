@@ -1,7 +1,7 @@
-using System;
+using Microsoft.Extensions.Time.Testing;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Threading.Tasks;
+using System.Security.Cryptography;
 using Verifiable.Cryptography;
 using Verifiable.Tests.TestInfrastructure;
 using Verifiable.Tpm;
@@ -11,12 +11,6 @@ using Verifiable.Tpm.Extensions.Policy;
 using Verifiable.Tpm.Infrastructure;
 using Verifiable.Tpm.Infrastructure.Commands;
 using Verifiable.Tpm.Infrastructure.Sessions;
-using Verifiable.Tpm.Spec.Attributes;
-using Verifiable.Tpm.Spec.Constants;
-using Verifiable.Tpm.Spec.Handles;
-using Verifiable.Tpm.Spec.Structures;
-using System.Security.Cryptography;
-using Microsoft.Extensions.Time.Testing;
 
 namespace Verifiable.Tests.Tpm;
 
@@ -1426,8 +1420,8 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
         const int PasswordSlotSize = sizeof(uint) + sizeof(ushort) + sizeof(byte) + sizeof(ushort);
         length =
             TpmHeader.HeaderSize
-            + 2 * sizeof(uint)                             //Handle area: @activateHandle, @keyHandle.
-            + sizeof(uint) + 2 * PasswordSlotSize          //authorizationSize + two TPM_RS_PW slots.
+            + (2 * sizeof(uint))                             //Handle area: @activateHandle, @keyHandle.
+            + sizeof(uint) + (2 * PasswordSlotSize)          //authorizationSize + two TPM_RS_PW slots.
             + sizeof(ushort) + actualCredentialBlobBytesProvided
             + sizeof(ushort) + actualSecretBytesProvided;
 
@@ -1439,7 +1433,7 @@ internal sealed class TpmInHouseSimulatorCredentialActivationTests
             header.WriteTo(ref writer);
             writer.WriteUInt32(activateHandle);
             writer.WriteUInt32(keyHandle);
-            writer.WriteUInt32((uint)(2 * PasswordSlotSize));
+            writer.WriteUInt32(2 * PasswordSlotSize);
             writer.WriteUInt32((uint)TpmRh.TPM_RH_PW);
             writer.WriteTpm2b(ReadOnlySpan<byte>.Empty);
             writer.WriteByte((byte)TpmaSession.CONTINUE_SESSION);

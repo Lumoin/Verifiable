@@ -1,4 +1,3 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 
@@ -219,7 +218,7 @@ namespace Verifiable.Core.Model.Did
                 //SupportsSigning/SupportsKeyAgreement predicates over the key's Purpose.
                 if(publicKey.SupportsSigning())
                 {
-                    document.WithAuthentication(verificationMethodId)
+                    _ = document.WithAuthentication(verificationMethodId)
                             .WithAssertionMethod(verificationMethodId)
                             .WithCapabilityInvocation(verificationMethodId)
                             .WithCapabilityDelegation(verificationMethodId);
@@ -227,7 +226,7 @@ namespace Verifiable.Core.Model.Did
 
                 if(publicKey.SupportsKeyAgreement())
                 {
-                    document.WithKeyAgreement(verificationMethodId);
+                    _ = document.WithKeyAgreement(verificationMethodId);
                 }
 
                 return document;

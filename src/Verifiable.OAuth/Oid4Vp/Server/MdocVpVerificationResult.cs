@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Core.Model.Mdoc;
 
 namespace Verifiable.OAuth.Oid4Vp.Server;

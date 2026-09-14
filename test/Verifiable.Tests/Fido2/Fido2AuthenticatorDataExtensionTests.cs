@@ -59,7 +59,7 @@ internal sealed class Fido2AuthenticatorDataExtensionTests
         byte[] attestedCredentialData = BuildAttestedCredentialData(Guid.NewGuid(), credentialId, EncodeP256CoseKey());
         byte[] authenticatorData = BuildAuthenticatorData(
             CreateRpIdHash(),
-            flags: (byte)(AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit),
+            flags: AuthenticatorDataFlags.AttestedCredentialDataIncludedBit | AuthenticatorDataFlags.ExtensionDataIncludedBit,
             signCount: 1,
             attestedCredentialData: attestedCredentialData,
             extensions: RealisticExtensionsMap);

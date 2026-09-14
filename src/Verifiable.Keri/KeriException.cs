@@ -19,7 +19,7 @@ public sealed class KeriException: Exception
     /// Initializes a new instance of the <see cref="KeriException"/> class with a message.
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
-    public KeriException(string message): base(message)
+    public KeriException(string message) : base(message)
     {
     }
 
@@ -29,7 +29,7 @@ public sealed class KeriException: Exception
     /// </summary>
     /// <param name="message">The message that describes the error.</param>
     /// <param name="innerException">The exception that is the cause of this exception.</param>
-    public KeriException(string message, Exception innerException): base(message, innerException)
+    public KeriException(string message, Exception innerException) : base(message, innerException)
     {
     }
 }

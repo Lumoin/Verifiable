@@ -1,9 +1,5 @@
-using System.Collections.Generic;
 using System.Text;
-using Verifiable.Core;
 using Verifiable.Core.OutboundFetch;
-using Verifiable.Cryptography;
-using Verifiable.JCose;
 using Verifiable.Json;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Federation;
@@ -69,7 +65,7 @@ internal sealed class FederationHttpTransportTests
         FetchedEntityStatement? result = await fetch(
             subject.Identifier,
             new Uri("https://leaf.example.com/federation_fetch"),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNotNull(result, "A 2xx response carrying a signed statement must parse.");
@@ -96,7 +92,7 @@ internal sealed class FederationHttpTransportTests
         FetchedEntityStatement? result = await fetch(
             subject.Identifier,
             new Uri("https://leaf.example.com/federation_fetch"),
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.IsNull(result, "A non-2xx response must surface as a null fetch.");

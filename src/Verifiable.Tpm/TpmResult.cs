@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using Verifiable.Tpm.Infrastructure;
-using Verifiable.Tpm.Spec.Constants;
 
 namespace Verifiable.Tpm;
 

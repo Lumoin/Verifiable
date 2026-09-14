@@ -1,12 +1,10 @@
-using System.Collections.Immutable;
 using Microsoft.Extensions.Time.Testing;
+using System.Collections.Immutable;
 using Verifiable.Core;
-using Verifiable.Cryptography;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Pkce;
 using Verifiable.OAuth.Server;
 using Verifiable.OAuth.Server.Registration;
-using Verifiable.Server;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.OAuth;
@@ -74,7 +72,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
             WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(400, response.StatusCode,
@@ -111,7 +109,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
             WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode,
@@ -144,7 +142,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
             WellKnownEndpointNames.AuthCodePar,
             "POST",
             fields,
-            new ExchangeContext(),
+            [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(201, response.StatusCode);
@@ -181,7 +179,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
         ServerHttpResponse parResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodePar,
-            "POST", parFields, new ExchangeContext(),
+            "POST", parFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
         Assert.AreEqual(201, parResponse.StatusCode);
         string requestUri = ExtractRequestUri(parResponse.Body);
@@ -192,7 +190,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
             [OAuthRequestParameterNames.ClientId] = ClientId,
             [OAuthRequestParameterNames.RequestUri] = requestUri
         };
-        ExchangeContext authorizeContext = new();
+        ExchangeContext authorizeContext = [];
         authorizeContext.SetSubjectId("subject-1");
         ServerHttpResponse authorizeResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
@@ -214,7 +212,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
         ServerHttpResponse tokenResponse = await host.DispatchAtEndpointAsync(
             material.Registration.TenantId.Value,
             WellKnownEndpointNames.AuthCodeToken,
-            "POST", tokenFields, new ExchangeContext(),
+            "POST", tokenFields, [],
             TestContext.CancellationToken).ConfigureAwait(false);
 
         Assert.AreEqual(200, tokenResponse.StatusCode,
@@ -242,7 +240,7 @@ internal sealed class AuthorizationServerResponseHeaderTests
             {"redirect_uris":["https://client.example.com/callback"],"client_name":"response-header-tests"}
             """;
 
-        ExchangeContext context = new();
+        ExchangeContext context = [];
         context.SetIssuer(host.IssuerUri);
 
         ServerHttpResponse response = await RegistrationEndpoints.HandleCreateAsync(
@@ -278,8 +276,8 @@ internal sealed class AuthorizationServerResponseHeaderTests
         //directly. Find the request_uri value between quotes.
         const string marker = "\"request_uri\":\"";
         int start = body.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-        int end = body.IndexOf('"', start);
-        return body.Substring(start, end - start);
+        int end = body.IndexOf('"', start, StringComparison.Ordinal);
+        return body[start..end];
     }
 
 

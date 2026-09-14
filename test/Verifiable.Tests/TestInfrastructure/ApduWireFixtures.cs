@@ -1,5 +1,3 @@
-using System;
-
 namespace Verifiable.Tests.TestInfrastructure;
 
 /// <summary>

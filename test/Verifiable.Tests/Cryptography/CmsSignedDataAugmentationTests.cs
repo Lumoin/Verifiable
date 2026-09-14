@@ -1,10 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
-using System.Threading.Tasks;
-using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.Tests.TestInfrastructure;
 
@@ -312,13 +308,13 @@ internal sealed class CmsSignedDataAugmentationTests
         using CmsSignedData withTrailingOctet = CmsSignedData.FromBytes([.. octets, 0x00], BaseMemoryPool.Shared);
         using CmsSignedData notSignedData = CmsSignedData.FromBytes(signerCertificate.RawData, BaseMemoryPool.Shared);
 
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(truncated, signerIndex: 0, [attribute], BaseMemoryPool.Shared),
             "A truncated structure has no preserved encoding to append to.");
-        Assert.ThrowsExactly<AsnContentException>(
+        _ = Assert.ThrowsExactly<AsnContentException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(withTrailingOctet, signerIndex: 0, [attribute], BaseMemoryPool.Shared),
             "Octets after the ContentInfo are rejected rather than carried along.");
-        Assert.ThrowsExactly<CryptographicException>(
+        _ = Assert.ThrowsExactly<CryptographicException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(notSignedData, signerIndex: 0, [attribute], BaseMemoryPool.Shared),
             "RFC 5652 §5.1: only an id-signedData ContentInfo carries SignerInfo structures to augment.");
     }
@@ -342,16 +338,16 @@ internal sealed class CmsSignedDataAugmentationTests
             beyondTheSupportedCount.Add(attribute);
         }
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(original, signerIndex: -1, [attribute], BaseMemoryPool.Shared),
             "A signer index is a position in the signerInfos set, never negative.");
-        Assert.ThrowsExactly<CryptographicException>(
+        _ = Assert.ThrowsExactly<CryptographicException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(original, signerIndex: 1, [attribute], BaseMemoryPool.Shared),
             "A single-signer signature has no second SignerInfo to augment.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(original, signerIndex: 0, [], BaseMemoryPool.Shared),
             "An augmentation that appends nothing would rewrite length octets for no reason.");
-        Assert.ThrowsExactly<ArgumentException>(
+        _ = Assert.ThrowsExactly<ArgumentException>(
             () => CmsSignedDataAugmentation.AppendUnsignedAttributes(original, signerIndex: 0, beyondTheSupportedCount, BaseMemoryPool.Shared),
             "The number of attributes appended in one call is bounded.");
     }
@@ -374,7 +370,7 @@ internal sealed class CmsSignedDataAugmentationTests
 
         ReadOnlyMemory<byte>? contentType = CmsSignedDataAugmentation.ReadSignedAttributeValue(original, signerIndex: 0, CAdESSignatureFacts.ContentTypeAttributeOid);
         Assert.IsTrue(contentType.HasValue, "content-type is a mandatory signed attribute of a CAdES-B-B signature.");
-        Assert.IsGreaterThan(0, contentType!.Value.Length, "A present attribute's value is never reported as zero-length.");
+        Assert.IsGreaterThan(0, contentType.Value.Length, "A present attribute's value is never reported as zero-length.");
 
         ReadOnlyMemory<byte>? absent = CmsSignedDataAugmentation.ReadSignedAttributeValue(original, signerIndex: 0, CAdESSignatureFacts.SignaturePolicyIdentifierAttributeOid);
         Assert.IsFalse(absent.HasValue, "signature-policy-identifier was never added, so it must be reported absent, not a zero-length value.");

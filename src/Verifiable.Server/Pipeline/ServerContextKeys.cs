@@ -40,6 +40,13 @@ internal static class ServerContextKeys
     /// <summary>Key for the flow identifier. Value type: <see cref="string"/>.</summary>
     public const string FlowIdKey = "server.flowId";
 
+    /// <summary>
+    /// Key for the step count the current flow state was loaded at (or <c>0</c> for a
+    /// freshly-created flow), stamped before <c>BuildInputAsync</c> runs so a handler can pass
+    /// it to <see cref="ClaimServerFlowStateDelegate"/>. Value type: <see cref="int"/>.
+    /// </summary>
+    public const string FlowStepCountKey = "server.flowStepCount";
+
     /// <summary>Output key for the correlation key generated on new-flow endpoints. Value type: <see cref="string"/>.</summary>
     public const string CorrelationKeyOutputKey = "server.correlationKey";
 

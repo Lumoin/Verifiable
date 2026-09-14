@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
@@ -206,7 +204,7 @@ public static class PdfByteSurfaceReader
         ReadOnlySpan<byte> s, long startOffset, out Dictionary<long, long> objectOffsets,
         out (long ObjectNumber, long Generation)? rootReference, [NotNullWhen(false)] out string? error)
     {
-        objectOffsets = new Dictionary<long, long>();
+        objectOffsets = [];
         var decidedObjectNumbers = new HashSet<long>();
         var visitedSectionOffsets = new HashSet<long>();
         long? next = startOffset;
@@ -504,7 +502,7 @@ public static class PdfByteSurfaceReader
                 return false;
             }
 
-            if(subsectionCount < 0 || subsectionCount > MaxXrefEntriesPerSubsection)
+            if(subsectionCount is < 0 or > MaxXrefEntriesPerSubsection)
             {
                 error = "A cross-reference subsection declares an unsupported number of entries.";
 

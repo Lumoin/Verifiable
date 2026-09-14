@@ -1,4 +1,3 @@
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Verifiable.Core.Did.Methods;
@@ -27,12 +26,12 @@ namespace Verifiable.Json.Converters
             DidFactory = didFactory;
         }
 
-        
+
         public override GenericDidMethod Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             string? did = reader.GetString();
             if(did == null)
-            {                
+            {
                 JsonThrowHelper.ThrowJsonException("Did identifier must be a valid identifier string.");
             }
 

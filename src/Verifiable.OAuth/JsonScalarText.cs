@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using Verifiable.Server;
 
 namespace Verifiable.OAuth;
 
@@ -43,7 +42,7 @@ public static class JsonScalarText
             char c = trimmed[i];
             if(c != '\\')
             {
-                sb.Append(c);
+                _ = sb.Append(c);
                 i++;
 
                 continue;
@@ -59,56 +58,56 @@ public static class JsonScalarText
             {
                 case '"':
                 {
-                    sb.Append('"');
+                    _ = sb.Append('"');
                     i += 2;
                     break;
                 }
 
                 case '\\':
                 {
-                    sb.Append('\\');
+                    _ = sb.Append('\\');
                     i += 2;
                     break;
                 }
 
                 case '/':
                 {
-                    sb.Append('/');
+                    _ = sb.Append('/');
                     i += 2;
                     break;
                 }
 
                 case 'b':
                 {
-                    sb.Append('\b');
+                    _ = sb.Append('\b');
                     i += 2;
                     break;
                 }
 
                 case 'f':
                 {
-                    sb.Append('\f');
+                    _ = sb.Append('\f');
                     i += 2;
                     break;
                 }
 
                 case 'n':
                 {
-                    sb.Append('\n');
+                    _ = sb.Append('\n');
                     i += 2;
                     break;
                 }
 
                 case 'r':
                 {
-                    sb.Append('\r');
+                    _ = sb.Append('\r');
                     i += 2;
                     break;
                 }
 
                 case 't':
                 {
-                    sb.Append('\t');
+                    _ = sb.Append('\t');
                     i += 2;
                     break;
                 }
@@ -125,7 +124,7 @@ public static class JsonScalarText
                         return null;
                     }
 
-                    sb.Append((char)code);
+                    _ = sb.Append((char)code);
                     i += 6;
                     break;
                 }

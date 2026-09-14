@@ -1,4 +1,3 @@
-using System;
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
@@ -323,6 +322,11 @@ public sealed class DataGroup15: IDisposable
         EllipticCurveTypes.BrainpoolP320r1 => CryptoTags.BrainpoolP320r1ExchangePublicKey,
         EllipticCurveTypes.BrainpoolP384r1 => CryptoTags.BrainpoolP384r1ExchangePublicKey,
         EllipticCurveTypes.BrainpoolP512r1 => CryptoTags.BrainpoolP512r1ExchangePublicKey,
+        EllipticCurveTypes.None => throw new InvalidOperationException("DG15 uses an elliptic curve not supported for Active Authentication."),
+        EllipticCurveTypes.Secp256k1 => throw new InvalidOperationException("DG15 uses an elliptic curve not supported for Active Authentication."),
+        EllipticCurveTypes.NistCurves => throw new InvalidOperationException("DG15 uses an elliptic curve not supported for Active Authentication."),
+        EllipticCurveTypes.Curve25519 => throw new InvalidOperationException("DG15 uses an elliptic curve not supported for Active Authentication."),
+        EllipticCurveTypes.BrainpoolCurves => throw new InvalidOperationException("DG15 uses an elliptic curve not supported for Active Authentication."),
         _ => throw new InvalidOperationException("DG15 uses an elliptic curve not supported for Active Authentication.")
     };
 

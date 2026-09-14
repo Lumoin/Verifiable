@@ -1,14 +1,11 @@
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using Microsoft.AspNetCore.Http;
-using StringValues = Microsoft.Extensions.Primitives.StringValues;
+using System.Diagnostics;
 using Verifiable.Core;
 using Verifiable.JCose;
 using Verifiable.OAuth;
 using Verifiable.OAuth.Server;
-using Verifiable.Server;
 using Verifiable.Server.Routing;
+using StringValues = Microsoft.Extensions.Primitives.StringValues;
 
 namespace Verifiable.Tests.Vcalm;
 
@@ -90,7 +87,7 @@ internal sealed class VcalmConformanceHttpApplication
         IncomingRequest incomingRequest = await BuildIncomingRequestAsync(
             context.Request, context.RequestAborted).ConfigureAwait(false);
 
-        ExchangeContext exchangeContext = new();
+        ExchangeContext exchangeContext = [];
         exchangeContext.SetTenantId(new TenantId(TenantSegment));
 
         //Map the inbound flat path the suite uses onto the tenant-scoped path the dispatcher matches.
@@ -246,7 +243,7 @@ internal sealed class VcalmConformanceHttpApplication
         RequestHeaders headers = MapHeaders(request.Headers);
 
         return new IncomingRequest(
-            Path: request.Path.HasValue ? request.Path.Value! : string.Empty,
+            Path: request.Path.HasValue ? request.Path.Value : string.Empty,
             Method: request.Method,
             Fields: fields,
             Headers: headers,

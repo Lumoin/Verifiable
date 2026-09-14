@@ -1,12 +1,10 @@
-using System.Collections.Generic;
+using Microsoft.Extensions.Time.Testing;
 using System.Text;
-using Lumoin.Base;
 using Verifiable.BouncyCastle;
 using Verifiable.Cesr;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Context;
 using Verifiable.Microsoft;
-using Microsoft.Extensions.Time.Testing;
 using Verifiable.Tests.TestInfrastructure;
 
 namespace Verifiable.Tests.Cesr;
@@ -147,9 +145,9 @@ internal sealed class CesrSaidTests
     public async Task RejectsNonDigestDerivationCode()
     {
         //'D' is the Ed25519 verification-key code, not a digest code, so it cannot derive a SAID.
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await CesrSaid.ComputeAsync("data"u8.ToArray(), "D", AgileDigest, BaseMemoryPool.Shared, TestContext.CancellationToken));
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrSaid.PlaceholderLength("D"));
-        Assert.ThrowsExactly<CesrFormatException>(() => CesrSaid.DigestCodeOf("DA_52v7lAkIJVUuruh40GvMsY3_K7J4-ZdVo7NoD2xzm"));
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(async () => await CesrSaid.ComputeAsync("data"u8.ToArray(), "D", AgileDigest, BaseMemoryPool.Shared, TestContext.CancellationToken));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrSaid.PlaceholderLength("D"));
+        _ = Assert.ThrowsExactly<CesrFormatException>(() => CesrSaid.DigestCodeOf("DA_52v7lAkIJVUuruh40GvMsY3_K7J4-ZdVo7NoD2xzm"));
     }
 
 
@@ -207,7 +205,7 @@ internal sealed class CesrSaidTests
         string offSize = "E" + new string('A', claimedLength - 1);
         byte[] serialization = Encoding.UTF8.GetBytes(JsonDummied);
 
-        await Assert.ThrowsExactlyAsync<CesrFormatException>(
+        _ = await Assert.ThrowsExactlyAsync<CesrFormatException>(
             async () => await CesrSaid.VerifyEmbeddedAsync(serialization, offSize, AgileDigest, BaseMemoryPool.Shared, TestContext.CancellationToken),
             "A claimed SAID whose length is not its code's full size must be rejected as malformed.");
     }

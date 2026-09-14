@@ -1,4 +1,3 @@
-using System;
 using Verifiable.Apdu.Lds;
 
 namespace Verifiable.Tests.Apdu;
@@ -55,7 +54,7 @@ internal sealed class DataGroupIdentifierTests
     [TestMethod]
     public void RejectsAnOutOfRangeNumber()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DataGroupIdentifier.FileIdentifierFromNumber(0));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DataGroupIdentifier.TagFromNumber(17));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DataGroupIdentifier.FileIdentifierFromNumber(0));
+        _ = Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DataGroupIdentifier.TagFromNumber(17));
     }
 }

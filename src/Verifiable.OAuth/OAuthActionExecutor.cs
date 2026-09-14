@@ -35,7 +35,7 @@ public sealed class OAuthActionExecutor
 {
     //Keyed by the concrete OAuthAction subtype. Each value is a delegate
     //that accepts the action as OAuthAction and downcasts internally.
-    private Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> Handlers { get; } = new();
+    private Dictionary<Type, Func<OAuthAction, ExchangeContext, CancellationToken, ValueTask<FlowInput>>> Handlers { get; } = [];
 
 
     /// <summary>

@@ -1,8 +1,6 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using Lumoin.Veritas.Cbor;
+using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using Verifiable.Cryptography;
 using Verifiable.Cryptography.Pki;
 using Verifiable.JCose;
@@ -171,9 +169,10 @@ public static class CBAdESSignatureSerialization
         ArgumentNullException.ThrowIfNull(headers);
         ArgumentNullException.ThrowIfNull(pool);
 
-        var entries = new List<(CoseHeaderLabel Label, ReadOnlyMemory<byte> Value)>();
-
-        entries.Add((new CoseHeaderIntegerLabel(CoseHeaderParameters.Alg), EncodeAlgorithm(headers.Algorithm)));
+        var entries = new List<(CoseHeaderLabel Label, ReadOnlyMemory<byte> Value)>
+        {
+            (new CoseHeaderIntegerLabel(CoseHeaderParameters.Alg), EncodeAlgorithm(headers.Algorithm))
+        };
 
         if(headers.CriticalLabels is not null)
         {
@@ -265,9 +264,9 @@ public static class CBAdESSignatureSerialization
         var buffer = new ArrayBufferWriter<byte>();
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
         writer.WriteStartMap(entries.Count);
-        foreach((CoseHeaderLabel Label, ReadOnlyMemory<byte> Value) entry in entries)
+        foreach((CoseHeaderLabel Label, ReadOnlyMemory<byte> Value) in entries)
         {
-            switch(entry.Label)
+            switch(Label)
             {
                 case CoseHeaderIntegerLabel integerLabel:
                     writer.WriteInt32(integerLabel.Value);
@@ -278,7 +277,7 @@ public static class CBAdESSignatureSerialization
                     break;
             }
 
-            writer.WriteEncodedValue(entry.Value.Span);
+            writer.WriteEncodedValue(Value.Span);
         }
 
         writer.WriteEndMap();
@@ -417,8 +416,8 @@ public static class CBAdESSignatureSerialization
     /// </para>
     /// </remarks>
     public static TrySpliceCBAdESUnprotectedHeaderDelegate TrySpliceCBAdESUnprotectedHeader { get; } =
-        static (EncodedCBAdESUnsignedHeaders? rawUnsignedHeaders, int decodedElementCount, IReadOnlySet<int>? skipDecodedIndexes,
-            CBAdESUnsignedHeaderElement? newElement, BaseMemoryPool pool, out IReadOnlyDictionary<int, object>? result) =>
+        static (rawUnsignedHeaders, decodedElementCount, skipDecodedIndexes,
+            newElement, pool, out result) =>
     {
         ArgumentNullException.ThrowIfNull(pool);
 
@@ -1282,7 +1281,7 @@ public static class CBAdESSignatureSerialization
 
         using var buffer = new SlabBufferWriter(pool);
         var writer = new CborWriter(buffer, CborOptions.RfcCanonical);
-        writer.WriteTag(new CborTag((ulong)CoseTags.Sign1));
+        writer.WriteTag(new CborTag(CoseTags.Sign1));
         writer.WriteStartArray(4);
 
         writer.WriteByteString(message.ProtectedHeader.AsReadOnlySpan());
